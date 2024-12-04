@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LEVEL-UP Personal Training</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Add Font Awesome CDN for Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+</head>
+<body>
+  <!-- Header Section -->
+  <header class="hero">
+    <div class="header-container">
+      <!-- Left Image -->
+      <img src="img/logo.JPG" alt="Left Image" class="header-image left-image">
+      <!-- Center Title -->
+      <div class="title-container">
+        <h1 class="title">LEVEL-UP</h1>
+        <p class="subtitle"> crossfit</p>
+        <p class="tagline">Push Beyond Limits. Train Like Never Before.</p>
+        <a href="#contact" class="cta-button">Start Your Journey Today!</a>
+      </div>
+      <!-- Right Image -->
+      <img src="img/logo.JPG" alt="Right Image" class="header-image right-image">
+    </div>
+  </header>
+
+<!-- About Section -->
+<section id="about" class="section about">
+  <h2>About the Trainer</h2>
+  <div class="about-content">
+    <img src="images/your-image.jpg" alt="Trainer Image" class="trainer-image">
+    <p>
+      Hi, I'm Pieter, a dedicated personal trainer committed to helping you achieve
+      your fitness goals. Whether it's building strength, improving endurance, or creating
+      a healthier lifestyle, I'm here to guide you every step of the way.
+    </p>
+  </div>
+  <button id="read-more-button" class="read-more-button">Read More</button>
+  <div id ="extra-text" class="hidden">
+    <p class="extrtxt">
+      I believe in not just physical workouts but also mental conditioning, flexibility, and proper nutrition!
+      No matter where you start, we can work together to unlock your full potential and achieve long-term success.
+      My goal is to empower you and make fitness a fun and sustainable part of your lifestyle! 
+        </p>
+   <img src="img/logo.JPG" alt="trainer coaching" class="extra-image"> 
+</div>
+  </section>
+
+
+  <!-- Programs Section -->
+  <section id="programs" class="section programs">
+  <h2>Programs</h2>
+  <div class="programs-grid">
+    <div class="program" data-image="images/personal-training.jpg">
+      <h3>Personal Training</h3>
+      <p>One-on-one coaching tailored to your fitness goals.</p>
+    </div>
+    <div class="program" data-image="images/online-coaching.jpg">
+      <h3>Online Coaching</h3>
+      <p>Flexible training plans you can follow anywhere.</p>
+    </div>
+    <div class="program" data-image="images/meal-plans.jpg">
+      <h3>Customized Meal Plans</h3>
+      <p>Nutrition strategies designed just for you.</p>
+    </div>
+  </div>
+  <!-- Image Display Section -->
+  <div id="program-image-container" class="program-image-container">
+    <img id="program-image" src="" alt="Program Image" class="program-image">
+  </div>
+</section>
+
+<!-- Contact Section -->
+<section id="contact" class="section contact">
+  <h2>LET'S CONNECT!</h2>
+  <form class="contact-form">
+    <input type="text" placeholder="Name" required>
+    <input type="email" placeholder="Email" required>
+    <select id="subject" required>
+      <option value="" disabled selected>Select a Category</option>
+      <option value="Personal Training">Personal Training</option>
+      <option value="Group Training">Group Training</option>
+      <option value="Nutrition">Nutrition</option>
+      <option value="Others">Others</option>
+    </select>
+    <textarea placeholder="Your Message" required></textarea>
+    <button type="submit">Level Up Now!</button>
+  </form>
+</section>
+
+
+  <!-- Contact Info-->
+<section id="contact info" class="section contact info">
+  <div class="contact-info">
+    <a href="https://www.instagram.com/levelupcrossfitpvds" target="_blank" class="contact-link">
+      <i class="fas fa-instagram"></i> Instagram
+    </a>
+    <a href="tel:+32471955489" class="contact-link">
+      <i class="fas fa-phone-alt"></i> +32 (471) 955-489
+    </a>
+  </div>
+</section>
+
+  
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© 2024 LEVEL-UP Personal Training. All Rights Reserved.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
