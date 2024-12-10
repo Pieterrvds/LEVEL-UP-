@@ -105,6 +105,13 @@ h1, h2, h3 {
   font-family:Arial, Helvetica, sans-serif;
 }
 
+.extra-image {
+  display: flex;
+  justify-content: space-between; /* Adjusts spacing between images */
+  align-items: center; /* Aligns images vertically */
+
+}
+
 /* Read More Button */
 .read-more-button {
   background: #fff;
@@ -153,20 +160,105 @@ h1, h2, h3 {
 }
 
 .program-image {
-  max-width: 100%;
-  height: auto;
+  max-width: 20%;
+  max-height: 20%;
   border: 2px solid #fff;
   border-radius: 10px;
 }
 
 
-/* Testimonials Section */
-.testimonial {
-  border: 1px solid #fff;
-  padding: 20px;
-  margin: 10px auto;
-  max-width: 600px;
+/* The Team Section */
+.team {
+  background-color: #000;
+  color: #fff;
+  padding: 50px 20px;
 }
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.team-member {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border: 2px solid #fff;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+.team-photo {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.team-info {
+  text-align: left;
+}
+
+.team-info h3 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+
+.team-info p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Join the Action Section */
+.gallery {
+  background-color: #000;
+  color: #fff;
+  padding: 50px 20px;
+  overflow: hidden; /* Prevent content overflow */
+}
+
+.gallery h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.gallery-container {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto; /* Enable horizontal scrolling */
+  padding-bottom: 10px; /* Add space below for smooth scrolling */
+  scroll-behavior: smooth; /* Smooth scrolling effect */
+}
+
+.gallery-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.gallery-container::-webkit-scrollbar-thumb {
+  background-color: #fff;
+  border-radius: 4px;
+}
+
+.gallery-container::-webkit-scrollbar-track {
+  background-color: #333;
+}
+
+.gallery-item {
+  flex: 0 0 auto; /* Prevent items from shrinking */
+  width: 300px; /* Set consistent item width */
+  border: 2px solid #fff;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.gallery-item img,
+.gallery-item video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 
 
 /* Contact Section */
@@ -243,4 +335,124 @@ a:hover, button:hover {
   color: #fff;
   background: #000;
   border-color: #000;
+}
+
+/* General Styles for Mobile (Max Width: 768px) */
+@media (max-width: 768px) {
+  /* Adjust sections' padding for smaller screens */
+  .section {
+    padding: 20px 10px;
+  }
+
+  /* Responsive Header */
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: center;
+  }
+
+  header nav ul {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  header nav ul li {
+    margin: 0;
+  }
+
+  /* Hero Section */
+  .hero h1 {
+    font-size: 2rem;
+  }
+
+  .hero p {
+    font-size: 1rem;
+  }
+
+  .hero button {
+    font-size: 1rem;
+    padding: 10px 20px;
+  }
+
+  /* Programs Section */
+  .program {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+
+  /* Team Section */
+  .team-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .team-member {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .team-photo {
+    width: 150px;
+    height: 150px;
+  }
+
+  /* Gallery Section */
+  .gallery-container {
+    flex-direction: row;
+    gap: 10px;
+    padding-bottom: 5px;
+  }
+
+  .gallery-item {
+    width: 250px;
+  }
+
+  /* Contact Section */
+  .contact-form {
+    flex-direction: column;
+  }
+
+  .contact-form input,
+  .contact-form select,
+  .contact-form textarea {
+    width: 100%;
+  }
+
+  .contact-form button {
+    width: 100%;
+  }
+}
+
+/* Extra Small Screens (Max Width: 480px) */
+@media (max-width: 480px) {
+  /* Hero Section */
+  .hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .hero p {
+    font-size: 0.9rem;
+  }
+
+  .hero button {
+    font-size: 0.9rem;
+  }
+
+  /* Team Photos */
+  .team-photo {
+    width: 120px;
+    height: 120px;
+  }
+
+  /* Gallery Section */
+  .gallery-item {
+    width: 200px;
+  }
+
+  /* Footer */
+  footer {
+    font-size: 0.8rem;
+  }
 }
