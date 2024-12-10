@@ -20,7 +20,7 @@ const programImage = document.getElementById('program-image');
 programs.forEach(program => {
   program.addEventListener('click', () => {
     // Get the image URL from the data-image attribute
-    const imageUrl = program.getAttribute('data-image');
+    const imageUrl = program.getAttribute('src');
     
     // Set the image src and display the image container
     programImage.src = imageUrl;
