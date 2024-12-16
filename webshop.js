@@ -92,9 +92,17 @@ function renderPayPalButton(total) {
   const paypalContainer = document.querySelector("#paypal-button-container");
   paypalContainer.innerHTML = ""; // Clear the PayPal container
 
+
+  // Ensure the PayPal SDK script is loaded
+  if (!window.paypal) {
+     alert("PayPal SDK not loaded. Please check your client ID and connection.");
+     return;
+   }
+
   paypal.Buttons({
-    createOrder: function () {
-      return {
+    // Creaye an order
+    createOrder: function (data, actions) {
+      return actions.order.create({
         purchase_units: [
           {
             amount: {
@@ -102,8 +110,9 @@ function renderPayPalButton(total) {
             },
           },
         ],
-      };
+      });
     },
+    // On Successful aproval
     onApprove: function (data, actions) {
       return actions.order.capture().then(function (details) {
         // Extract buyer information
@@ -121,11 +130,16 @@ function renderPayPalButton(total) {
         // Send confirmation email to you
         sendConfirmationEmail("Admin", "PieterV-D-S@hotmail.com", purchaseDetails);
 
-        // Notify the user
+        // Notify the user and clear the cart
         alert("Payment successful! Confirmation email sent.");
         cart = []; // Clear cart after purchase
         updateCart();
       });
+    },
+    // Handle errors
+    onError: function (err) {
+      console.error("PayPal error:", err);
+      alert("An error occurred during the payment process. Please try again.");
     },
   }).render("#paypal-button-container");
 }
