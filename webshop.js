@@ -42,6 +42,15 @@ document.querySelectorAll(".add-to-cart").forEach(button => {
 
     // Show notification
     showNotification(`${product} added to cart!`);
+
+        // Add vibration effect to the cart icon
+        cartIcon.classList.add("vibrate");
+
+        // Remove the vibration effect after animation ends
+    setTimeout(() => {
+      cartIcon.classList.remove("vibrate");
+    }, 400); // Match the duration of the CSS animation
+
   });
 });
 
