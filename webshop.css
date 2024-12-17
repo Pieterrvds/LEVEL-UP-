@@ -1,6 +1,6 @@
 /* General Styles */
 body {
-  font-family: 'Press Start 2P';
+  font-family: 'Press Start 2P', sans-serif;
   color: white;
   background-color: black;
   margin: 0;
@@ -17,24 +17,13 @@ header {
 }
 
 header h1 {
-  font-size: 1.5rem;
-}
-
-header nav ul {
-  display: flex;
-  gap: 20px;
-  list-style: none;
-  margin-right: 10px;
-}
-
-header nav ul li a {
+  font-size: 2rem;
   color: white;
-  text-decoration: none;
 }
 
 .hero {
   text-align: center;
-  padding: 40px;
+  padding: 10px;
   background: linear-gradient(black, #333);
 }
 
@@ -58,10 +47,48 @@ header nav ul li a {
   text-align: center;
 }
 
+.product-card:hover {
+  scale:1.02;
+  transition: ease 0.2s;
+
+}
+
 .product-card img {
   width: auto;
   height: 200px;
 }
+
+
+
+  /* Product Cart with Multiple Background Images */
+  .product-cart {
+    position: relative;
+    background-image: url('image1.jpg'), url('image2.jpg'), url('image3.jpg'); /* Add your image URLs */
+    background-size: cover, cover, cover; /* Ensure all images cover the space */
+    background-position: center, center, center; /* Center all background images */
+    background-blend-mode: overlay; /* Blend images nicely together */
+    border: 2px solid white;
+    color: white;
+    padding: 20px;
+    text-align: center;
+    height: 300px; /* Set fixed height for the product cart */
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  
+  .product-cart:hover {
+    scale:1.2rem;
+    transition: ease 0.5;
+    border-color: #ffcc00; /* Add hover effect for border */
+  }
+  
+  .product-cart h3, .product-cart p, .add-to-cart {
+    z-index: 1; /* Ensure text and button appear above the background images */
+    position: relative;
+  }
+
 
 button {
   background-color: white;
@@ -73,6 +100,11 @@ button {
   margin-top: 10px;
 }
 
+a {
+  color: white;
+}
+
+
 button:hover {
   background-color: black;
   color: white;
@@ -83,7 +115,7 @@ button:hover {
   background: none;
   border: none;
   color: white;
-  font-size: 1.2rem;
+  font-size: 3rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -99,7 +131,26 @@ button:hover {
   display: inline-block;
 }
 
-
+  /* Cart Icon Vibration Animation */
+  @keyframes vibrate {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-3px);
+    }
+    50% {
+      transform: translateX(3px);
+    }
+    75% {
+      transform: translateX(-3px);
+    }
+  }
+  
+  .vibrate {
+    animation: vibrate 0.4s ease;
+  }
+ 
 /* Cart Overlay */
 .cart-overlay {
   position: fixed;
@@ -151,8 +202,8 @@ button:hover {
 /* Notification Styles */
 #notification {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 100px;
+  right: 100px;
   background-color: #222;
   color: white;
   border: 2px solid white;
@@ -172,4 +223,31 @@ button:hover {
 
 .hidden {
   display: none;
+}
+
+
+@media (max-width: 400px) {
+  body {
+    font-family: 'Press Start 2P', sans-serif;
+    color: white;
+    background-color: black;
+    margin: 0;
+    padding: 0;
+  }
+
+  header h1 {
+    font-size: 2rem;
+  }
+
+  header {
+    align-items: center;
+    padding: 10px 10px;
+    background-color: black;
+    border-bottom: 2px solid white;
+  }
+
+  #cart-icon {
+    font-size: 1.5rem;
+  }
+
 }
