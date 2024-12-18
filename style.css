@@ -89,7 +89,7 @@ h1, h2, h3 {
 }
 
 .linktext {
- color: white;
+ color: rgb(92, 180, 101);
  text-decoration: none;
  background: #000;
  padding: 0px 0px;
@@ -118,7 +118,7 @@ display:none;
   border-radius: 5px;
   cursor: pointer;
   transition: 0.3s;
-  margin-top: 20px;
+  margin: 10px;
   max-width: 200px;
 }
 
@@ -150,7 +150,7 @@ display:none;
   }
 
   .team-member:hover::after {
-    content: "Double-click to get to know this trainer!";
+    content: "Double-click for info";
     position: absolute;
     bottom: -20px;
     left: 50%;
@@ -158,7 +158,8 @@ display:none;
     background: #fff;
     color: #000;
     padding: 5px 10px;
-    border-radius: 5px;
+    border-radius: 50px;
+    width: 300px;
     font-size: 0.8rem;
     white-space: nowrap;
   }
@@ -175,7 +176,7 @@ display:none;
   }
 
 .team-photo {
-  width: 150px;
+  width: auto;
   height: 150px;
   border-radius: 50%;
   object-fit: cover;
@@ -254,16 +255,36 @@ display:none;
 }
 
 #card-front1{
-  background: url('img/pulluptraining.jpg');
+  background: url('img/personaltraining.jpg');
   background-size: cover;
   background-position: center; /* Center the image within the container */
   background-repeat: no-repeat; /* Prevent the image from repeating */
 }
 
-#overtext{
-  z-index:1;
+
+#card-front2{
+  background: url('img/grouptraining.png');
+  background-size: cover;
+  background-position: center; /* Center the image within the container */
+  background-repeat: no-repeat; /* Prevent the image from repeating */
 }
 
+#card-front3{
+  background: url('img/nutrition.png');
+  background-size: cover;
+  background-position: center; /* Center the image within the container */
+  background-repeat: no-repeat; /* Prevent the image from repeating */
+}
+
+
+#card-front4{
+  background: url('img/logo.JPG');
+  background-size: cover;
+  background-position: center; /* Center the image within the container */
+  background-repeat: no-repeat; /* Prevent the image from repeating */
+}
+
+/*
 #card-front1::before {
   content: '';
   position: absolute;
@@ -271,9 +292,10 @@ display:none;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5); /* Black overlay at 50% transparency */
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 5px;
 }
+*/
 
 .card-back {
   transform: rotateY(180deg);
@@ -281,11 +303,6 @@ display:none;
   Text-align: center;
 }
 
-.card-front img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 
 /* Flip Effect on Click */
 .program-card.flipped .card-inner {
@@ -373,22 +390,20 @@ textarea {
   height: 100px;
 }
 
-.social-icons  {
-  padding:10px;
+.icoon{
+  margin-top: 20px;
 }
 
-#social-ions {
-  border-radius: 20px;
+.icoon img{
+  width: 100px;
+  height: auto;
 }
 
-/* Footer */
-.footer {
-  text-align: center;
-  padding: 10px 0;
-  background: #000;
-  border-top: 2px solid #fff;
+#icon {
+  color:none;
+  background:none;
+  border: none;
 }
-
 
 a, button {
   text-decoration: none;
@@ -408,7 +423,13 @@ a:hover, button:hover {
   border-color: #000;
 }
 
-
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 10px 0;
+  background: #000;
+  border-top: 2px solid #fff;
+}
 
 /* Mobile-Friendly Adjustments */
 @media (max-width: 768px) {
@@ -453,11 +474,11 @@ display:none;
     margin: 0 auto;
   }
 
+
   /* Program Section */
   .program-card {
     flex-direction: column;
     text-align: center;
-    margin: 20px 0;
   }
 
   /* Calendar Section */
@@ -474,24 +495,19 @@ display:none;
     width: 80%;
   }
 
-  .team-member img {
-    width: 80%; /* Reduce image size */
-    margin-bottom: 10px;
-  }
-
   /* Contact Section */
   #contact-form input, #contact-form textarea, #contact-form select, #contact-form button {
     width: 100%; /* Full-width form elements */
     margin-bottom: 15px;
   }
 
-  /* Navigation (Optional for Mobile Navigation Menu) */
-  nav ul {
-    flex-direction: column;
-    gap: 10px;
+  .icoon {
+    display:flex;
   }
 
-  nav ul li {
-    text-align: center;
+  .icoon img  {
+   width:80px;
   }
+
+
 }
