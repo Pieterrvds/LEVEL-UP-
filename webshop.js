@@ -160,7 +160,13 @@ function sendConfirmationEmail(name, email, purchaseDetails) {
   formData.append("email", email);
   formData.append(
     "message",
-    `Thank you for your purchase!\n\n${purchaseDetails}\n\nBest regards,\nLEVEL-UP Team`
+    `Thank you for your purchase! 
+    If you bought a grouptraining or personal training session read this:
+    Show this mail to you're trainer in the beginning of you're crossfit session.
+    As long as you have sessions left you will be added to our whatsappgroup soon!
+    The date of the upcomming sessions will be seen on our schedule on WWW.level-upcrossfit.com!
+    See you at our training session! 
+    \n\n${purchaseDetails}\n\nBest regards,\nLEVEL-UP Team`
   );
 
   // Send email using FormSubmit
