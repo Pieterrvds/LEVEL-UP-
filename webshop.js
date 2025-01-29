@@ -137,7 +137,7 @@ function renderPayPalButton(total) {
         sendConfirmationEmail(buyerName, buyerEmail, purchaseDetails);
 
         // Send confirmation email to you
-        sendConfirmationEmail("Admin", "PieterV-D-S@hotmail.com", purchaseDetails);
+        sendConfirmationEmail("Pieter", "PieterV-D-S@hotmail.com", purchaseDetails);
 
         // Notify the user and clear the cart
         alert("Payment successful! Confirmation email sent.");
@@ -153,37 +153,43 @@ function renderPayPalButton(total) {
   }).render("#paypal-button-container");
 }
 
-// Function to send confirmation email
+// Function to send confirmation email to client and to me the CEO ;)
 function sendConfirmationEmail(name, email, purchaseDetails) {
-  const formData = new FormData();
-  formData.append("name", name);
-  formData.append("email", email);
-  formData.append(
-    "message",
-    `Thank you for your purchase! 
+  const formDataClient = new FormData();
+  formDataClient.append("name", name);
+  formDataClient.append("email", email);
+  formDataClient.append("message", `Dear ${name},\n\nThank you for your purchase!\n\nHere are your purchased items:\n${purchaseDetails}\n\nKEEP THIS EMAIL AS A TICKET TO SHOW TO ONE OF OUR TRAINERS!\n\nBest regards,\nLEVEL-UP Team`);
 
-    If you bought a grouptraining or personal training session read this:
-    Show this mail to you're trainer in the beginning of you're crossfit session.
-    As long as you have sessions left you will be added to our whatsapp-group soon!
-    The date of the upcomming sessions will be seen on our schedule on WWW.level-upcrossfit.com!
-    See you at our training session! 
-    
-    If you bought a tshirt or hoodie, get in touch with us so we can deliver the merch to you ;)!
-
-    \n\n${purchaseDetails}\n\nBest regards,\nLEVEL-UP Team`
-  );
-
-  // Send email using FormSubmit
-  fetch("https://formsubmit.co/ajax/PieterV-D-S@hotmail.com", {
+  // Send email to the client
+  fetch("https://formsubmit.co/ajax/" + email, { // Dynamically send to buyer
     method: "POST",
-    body: formData,
+    body: formDataClient,
   })
     .then((response) => response.json())
     .then((data) => {
-      console.log("Email sent:", data);
+      console.log("Email sent to client:", data);
     })
     .catch((error) => {
-      console.error("Error sending email:", error);
+      console.error("Error sending email to client:", error);
+    });
+
+  // Form data for CEO (Your email)
+  const formDataAdmin = new FormData();
+  formDataAdmin.append("name", "CEO of the biggest Grouptraining Business of planet earth PIETER VAN DEN SPIEGEL");
+  formDataAdmin.append("email", "PieterV-D-S@hotmail.com");
+  formDataAdmin.append("message", `New purchase received LESGOOOO!\n\nCustomer: ${name}\nEmail: ${email}\n\nPurchased items:\n${purchaseDetails}`);
+
+  // Send email to admin
+  fetch("https://formsubmit.co/ajax/PieterV-D-S@hotmail.com", {
+    method: "POST",
+    body: formDataAdmin,
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("Email sent to CEO:", data);
+    })
+    .catch((error) => {
+      console.error("Error sending email to CEO:", error);
     });
 }
 
