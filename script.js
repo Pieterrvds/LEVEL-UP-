@@ -1,4 +1,16 @@
- // Add hover effect to the header images
+
+// toggle hamburger menu 
+function toggleMenu() {
+  const menu = document.getElementById("mobileMenu");
+  menu.classList.toggle("open");
+}
+
+function closeMenu() {
+  const menu = document.getElementById("mobileMenu");
+  menu.classList.remove("open"); // Slide out to right
+}
+
+// Add hover effect to the header images
 const headerImages = document.querySelectorAll('.header-image');
 
 headerImages.forEach(image => {
