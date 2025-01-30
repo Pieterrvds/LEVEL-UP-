@@ -77,6 +77,27 @@ h1, h2, h3 {
   border-color: #000;
 }
 
+/* Floating WhatsApp Button */
+.whatsapp-float {
+  position: fixed;
+  bottom: 20px;  /* Distance from bottom */
+  right: 20px;  /* Distance from right */
+  z-index: 1000; /* Ensures it stays on top */
+  transition: transform 0.2s ease-in-out;
+}
+
+.whatsapp-icon {
+  width: 60px;  /* Adjust size */
+  height: 60px;
+  border-radius: 50%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Hover Effect */
+.whatsapp-float:hover {
+  transform: scale(1.1); /* Slightly enlarges on hover */
+}
+
 /* About Section */
 .about-content {
   display: flex;
@@ -137,8 +158,8 @@ display:none;
 
 .team-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap:20px;
 }
 
 .team-member:hover {
@@ -168,7 +189,7 @@ display:none;
 .team-member {
   display: flex;
   align-items: center;
-  gap: 20px;
+  /*gap: 20px;*/
   border: 2px solid #fff;
   padding: 20px;
   border-radius: 10px;
@@ -187,7 +208,7 @@ display:none;
 }
 
 .team-info h3 {
-  margin: 0 0 10px;
+  /*margin: 0 0 10px;*/
   font-size: 1.2rem;
 }
 
@@ -405,6 +426,12 @@ textarea {
   border: none;
 }
 
+.whatsapp-float{
+  color:none;
+  background:none;
+  border: none;
+}
+
 a, button {
   text-decoration: none;
   color: #000;
@@ -431,6 +458,104 @@ a:hover, button:hover {
   border-top: 2px solid #fff;
 }
 
+/* Hide Top Bar on Desktop */
+@media (min-width: 768px) {
+  .mobile-top-bar {
+    display: none !important;
+  }
+}
+
+/* Mobile Top Bar */
+.mobile-top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50px;
+  background-color: black;
+  color: rgb(0, 0, 0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+/* Ensure items take equal space */
+.mobile-top-bar > * {
+  flex: 1; /* Makes all items take equal space */
+  text-align: center; /* Centers text/icons */
+}
+
+/* Adjustments for specific elements */
+.hamburger-menu, .shopping-cart {
+  font-size: 20px;
+}
+
+/* Logo Styling - Does not stretch */
+.mobile-logo {
+  height: 40px;  /* Keeps proportion */
+  width: auto;   /* Maintains aspect ratio */
+  flex: 0;       /* Prevents logo from resizing like other elements */
+  margin-left: 10px;
+}
+
+/* Shopping Cart Icon */
+.shopping-cart {
+  font-size: 24px;
+  text-decoration: none;
+  color: rgb(255, 255, 255);
+  background-color: #000;
+  border: 0px;
+}
+
+/* Hamburger Menu */
+.hamburger-menu {
+  font-size: 24px;
+  cursor: pointer;
+  color: white;
+}
+
+/* Animated Sliding Mobile Menu */
+.mobile-menu {
+  position: fixed;
+  top: 0;
+  right: -100%; /* Initially hidden outside the screen */
+  width: 50%;
+  height: 100vh;
+  color: #fff;
+  background-color: black;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  box-shadow: -4px 0px 10px rgba(255, 255, 255, 0.3);
+  transition: right 1s ease-in-out;
+  z-index: 999;
+}
+
+/* Show Menu */
+.mobile-menu.open {
+  right: 0; /* Slide in from right */
+}
+
+/* Menu Links */
+.mobile-menu a {
+  color: rgb(0, 0, 0);
+  padding: 15px;
+  text-decoration: none;
+  display: block;
+  border-bottom: 1px solid #333;
+  font-size: 18px;
+}
+
+/* Close Menu (Slide Out to Right) */
+.mobile-menu.close {
+  right: -100%; /* Slides out */
+}
+
+
+
 /* Mobile-Friendly Adjustments */
 @media (max-width: 768px) {
   
@@ -440,6 +565,7 @@ a:hover, button:hover {
 
   .title {
     font-size: 2.5rem;
+    margin-top: 60px;
   }
   
   .tagline {
@@ -493,6 +619,7 @@ display:none;
     align-items: center;
     text-align: center;
     width: 80%;
+
   }
 
   /* Contact Section */
