@@ -9,9 +9,27 @@
   <!-- Add Font Awesome CDN for Icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
-<body>
+ <body>
+
+  <!-- Mobile Top Bar -->
+  <div class="mobile-top-bar">
+    <img src="img/logo.JPG" alt="LEVEL-UP Logo" class="mobile-logo">
+    <a href="webshop.html" class="shopping-cart"> 🛒 </a>
+    <div class="hamburger-menu" onclick="toggleMenu()">☰</div>
+  </div>
+
+  <!-- Hidden Mobile Menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#heroo" onclick="closeMenu()">Home</a>
+    <a href="#team" onclick="closeMenu()">Team</a>
+    <a href="#programs" onclick="closeMenu()">Programs</a>
+    <a href="#calendar-section" onclick="closeMenu()">Schedule</a>
+    <a href="#contact" onclick="closeMenu()">Contact</a>
+  </div>
+
+
   <!-- Header Section -->
-  <header class="hero">
+  <header id="heroo" class="hero">
     <div class="header-container">
       <!-- Left Image -->
       <img src="img/logo.JPG" alt="Left Image" class="header-image left-image">
@@ -26,6 +44,11 @@
       <img src="img/logo.JPG" alt="Right Image" class="header-image right-image">
     </div>
   </header>
+
+  <a href="https://wa.me/+32471955489" target="_blank" class="whatsapp-float">
+    <img src="img/whatsapp.png" alt="WhatsApp" class="whatsapp-icon">
+  </a>
+  
 
 <!-- About Section -->
 <section id="about" class="section about">
