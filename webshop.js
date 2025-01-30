@@ -133,11 +133,11 @@ function renderPayPalButton(total) {
           .map((item) => `Product: ${item.product}`)
           .join("\n");
 
-        // Send confirmation email to buyer
+        // Send confirmation email to buyer and CEO
         sendConfirmationEmail(buyerName, buyerEmail, purchaseDetails);
 
         // Send confirmation email to you
-        sendConfirmationEmail("Pieter", "PieterV-D-S@hotmail.com", purchaseDetails);
+        // sendConfirmationEmail("Pieter", "PieterV-D-S@hotmail.com", purchaseDetails);
 
         // Notify the user and clear the cart
         alert("Payment successful! Confirmation email sent.");
@@ -179,7 +179,7 @@ function sendConfirmationEmail(name, email, purchaseDetails) {
   formDataAdmin.append("email", "PieterV-D-S@hotmail.com");
   formDataAdmin.append("message", `New purchase received LESGOOOO!\n\nCustomer: ${name}\nEmail: ${email}\n\nPurchased items:\n${purchaseDetails}`);
 
-  // Send email to admin
+  // Send email to CEO
   fetch("https://formsubmit.co/ajax/PieterV-D-S@hotmail.com", {
     method: "POST",
     body: formDataAdmin,
