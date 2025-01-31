@@ -1,303 +1,329 @@
 /* General Styles */
 body {
-  font-family: 'Press Start 2P', sans-serif;
-  color: white;
-  background-color: black;
-  margin: 0;
-  padding: 0;
-}
-
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 20px;
-  background-color: black;
-  border-bottom: 2px solid white;
-}
-
-header h1 {
-  font-size: 2rem;
-  color: white;
-}
-
-.hero {
-  text-align: center;
-  padding: 10px;
-  background: linear-gradient(black, #333);
-}
-
-#textcenter{
-  text-align: center;
-}
-
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  padding: 20px;
-
-}
-
-.product-card {
-  background-color: #222;
-  border: 2px solid white;
-  border-radius: 50px;
-  padding: 20px;
-  text-align: center;
-  align-items: center;
-}
-
-.product-card:hover {
-  scale:1.02;
-  transition: ease 0.2s;
-
-}
-
-.product-card img {
-  width: auto;
-  height: 200px;
-}
-
-
-
-  /* Product Cart with Multiple Background Images */
-  #product-card1 {
-    position: relative;
-    background-image: url('img/grouptrainingsessie.png'); /*url('img/groenklimop.png'); /* Add your image URLs */
-    background-size: cover;                               /* cover; /* Ensure all images cover the space */
-    background-position: center;                          /* center; /* Center all background images */ /*background-blend-mode: overlay; /* Blend images nicely together */
-    border: 2px solid white;
-    color: white;
-    padding: 20px;
-    text-align: center;
-    height: 300px;                                        /* Set fixed height for the product cart */
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  #product-card1::before, #product-card2::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 5px;
-  }
-
-  #product-card2 {
-    position: relative;
-    background-image: url('img/personaltraining.jpg');
-    background-size: cover;                               
-    background-position: center;                         
-    border: 2px solid white;
-    color: white;
-    padding: 20px;
-    text-align: center;
-    height: 300px;                                        
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  #product-card3 {
-    position: relative;
-    background-image: url('img/groenklimop.png');
-    background-size: cover;                               
-    background-position: center;                         
-    border: 2px solid white;
-    color: white;
-    padding: 20px;
-    text-align: center;                                       
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-
-  .product-cart:hover {
-    scale:1.2rem;
-    transition: ease 0.5;
-    border-color: #ffcc00; /* Add hover effect for border */
-  }
-  
-  #textfront, .add-to-cart {
-    z-index: 1; /* Ensure text and button appear above the background images */
-    position: relative;
-  }
-
-
-button {
-  background-color: white;
-  border-radius: 50px;
-  color: black;
-  padding: 10px 20px;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  margin-top: 10px;
-  width: 40%;
-}
-
-a {
-  color: white;
-}
-
-
-button:hover {
-  background-color: black;
-  color: white;
-  border: 2px solid white;
-}
-
-#cart-icon {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 3rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-#cart-count {
-  background-color: red;
-  color: white;
-  font-size: 0.8rem;
-  border-radius: 50%;
-  padding: 2px 6px;
-  margin-left: 5px;
-  display: inline-block;
-}
-
-  /* Cart Icon Vibration Animation */
-  @keyframes vibrate {
-    0%, 100% {
-      transform: translateX(0);
-    }
-    25% {
-      transform: translateX(-3px);
-    }
-    50% {
-      transform: translateX(3px);
-    }
-    75% {
-      transform: translateX(-3px);
-    }
-  }
-  
-  .vibrate {
-    animation: vibrate 0.4s ease;
-  }
- 
-/* Cart Overlay */
-.cart-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
-  color: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.cart-content {
-  background-color: black;
-  border: 2px solid white;
-  padding: 20px;
-  width: 90%;
-  max-width: 400px;
-}
-
-.cart-content ul {
-  list-style: none;
-  padding: 0;
-}
-
-.hidden {
-  display: none;
-}
-
-/* Remove Item Button */
-.remove-item {
-  background-color: red;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  margin-left: 10px;
-  border-radius: 5px;
-}
-
-.remove-item:hover {
-  background-color: darkred;
-}
-
-/* Notification Styles */
-#notification {
-  position: fixed;
-  top: 100px;
-  right: 100px;
-  background-color: #222;
-  color: white;
-  border: 2px solid white;
-  border-radius: 5px;
-  padding: 10px 20px;
-  font-size: 0.9rem;
-  z-index: 1000;
-  opacity: 0;
-  transform: translateY(-20px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-#notification.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.hidden {
-  display: none;
-}
-
-
-/* Mobile-Friendly Adjustments */
-@media (max-width: 768px) {
-  
-  body {
-    font-family: 'Press Start 2P', sans-serif; /* Ensure same font for mobile */
-  }
-
-  body {
+    font-family: 'Press Start 2P', sans-serif;
     color: white;
     background-color: black;
     margin: 0;
     padding: 0;
   }
-
-  header h1 {
-    font-size: 2rem;
-  }
-
+  
   header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    padding: 10px 10px;
+    padding: 10px 20px;
     background-color: black;
     border-bottom: 2px solid white;
   }
-
-  #cart-icon {
-    font-size: 1.5rem;
+  
+  header h1 {
+    font-size: 2rem;
+    color: white;
+  }
+  
+  .hero {
+    text-align: center;
+    padding: 10px;
+    background: linear-gradient(black, #333);
+  }
+  
+  #textcenter{
+    text-align: center;
+  }
+  
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    padding: 20px;
+  
+  }
+  
+  .product-card {
+    background-color: #222;
+    border: 2px solid white;
+    border-radius: 50px;
+    padding: 20px;
+    text-align: center;
+    align-items: center;
+  }
+  
+  .product-card:hover {
+    scale:1.02;
+    transition: ease 0.2s;
+  
+  }
+  
+  .product-card img {
+    width: auto;
+    height: 200px;
+  }
+  
+  
+  
+    /* Product Cart with Multiple Background Images */
+    #product-card1 {
+      position: relative;
+      background-image: url('img/grouptrainingsessie.png'); /*url('img/groenklimop.png'); /* Add your image URLs */
+      background-size: cover;                               /* cover; /* Ensure all images cover the space */
+      background-position: center;                          /* center; /* Center all background images */ /*background-blend-mode: overlay; /* Blend images nicely together */
+      border: 2px solid white;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      height: 300px;                                        /* Set fixed height for the product cart */
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+  
+    #product-card1::before, #product-card2::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 5px;
+    }
+  
+    #product-card2 {
+      position: relative;
+      background-image: url('img/personaltraining.jpg');
+      background-size: cover;                               
+      background-position: center;                         
+      border: 2px solid white;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      height: 300px;                                        
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+  
+    #product-card3 {
+      position: relative;
+      background-image: url('img/groenklimop.png');
+      background-size: cover;                               
+      background-position: center;                         
+      border: 2px solid white;
+      color: white;
+      padding: 20px;
+      text-align: center;                                       
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+  
+  
+    .product-cart:hover {
+      scale:1.2rem;
+      transition: ease 0.5;
+      border-color: #ffcc00; /* Add hover effect for border */
+    }
+    
+    #textfront, .add-to-cart {
+      z-index: 1; /* Ensure text and button appear above the background images */
+      position: relative;
+    }
+  
+  
+  button {
+    background-color: white;
+    border-radius: 50px;
+    color: black;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    margin-top: 10px;
+    width: 40%;
+  }
+  
+  a {
+    color: white;
+  }
+  
+  
+  button:hover {
+    background-color: black;
+    color: white;
+    border: 2px solid white;
   }
 
-}
+  .product-card {
+    position: relative;
+    overflow: visible !important; /* Ensure dropdowns are not cut off */
+  }
+  
+  .subscription-type {
+    position: relative;
+    z-index: 10; /* Makes sure it is above other elements */
+    cursor: pointer;
+  }
+  
+  .subscription-type, .product-size {
+    width: 20%;
+    padding: 5px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background: white;
+    cursor: pointer;
+  }
+  
+  .subscription-type:focus, .product-size:focus {
+    outline: 2px solid #007BFF;
+  }
+  
+  
+  #cart-icon {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 3rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+  
+  #cart-count {
+    background-color: red;
+    color: white;
+    font-size: 0.8rem;
+    border-radius: 50%;
+    padding: 2px 6px;
+    margin-left: 5px;
+    display: inline-block;
+  }
+  
+    /* Cart Icon Vibration Animation */
+    @keyframes vibrate {
+      0%, 100% {
+        transform: translateX(0);
+      }
+      25% {
+        transform: translateX(-3px);
+      }
+      50% {
+        transform: translateX(3px);
+      }
+      75% {
+        transform: translateX(-3px);
+      }
+    }
+    
+    .vibrate {
+      animation: vibrate 0.4s ease;
+    }
+   
+  /* Cart Overlay */
+  .cart-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .cart-content {
+    background-color: black;
+    border: 2px solid white;
+    padding: 20px;
+    width: 90%;
+    max-width: 400px;
+  }
+  
+  .cart-content ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .hidden {
+    display: none;
+  }
+  
+  /* Remove Item Button */
+  .remove-item {
+    background-color: red;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    margin-left: 10px;
+    border-radius: 5px;
+  }
+  
+  .remove-item:hover {
+    background-color: darkred;
+  }
+  
+  /* Notification Styles */
+  #notification {
+    position: fixed;
+    top: 100px;
+    right: 100px;
+    background-color: #222;
+    color: white;
+    border: 2px solid white;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  
+  #notification.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .hidden {
+    display: none;
+  }
+  
+  
+  /* Mobile-Friendly Adjustments */
+  @media (max-width: 768px) {
+    
+    body {
+      font-family: 'Press Start 2P', sans-serif; /* Ensure same font for mobile */
+    }
+  
+    body {
+      color: white;
+      background-color: black;
+      margin: 0;
+      padding: 0;
+    }
+  
+    header h1 {
+      font-size: 2rem;
+    }
+  
+    header {
+      align-items: center;
+      padding: 10px 10px;
+      background-color: black;
+      border-bottom: 2px solid white;
+    }
+  
+    #cart-icon {
+      font-size: 1.5rem;
+    }
+  
+  }
