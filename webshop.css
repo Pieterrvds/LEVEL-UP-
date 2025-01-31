@@ -168,7 +168,7 @@ body {
   }
   
   .subscription-type, .product-size {
-    width: 20%;
+    width: 50%;
     padding: 5px;
     font-size: 16px;
     border: 1px solid #ccc;
