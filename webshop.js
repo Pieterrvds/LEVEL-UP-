@@ -32,62 +32,57 @@ cartIcon.addEventListener("click", () => {
 
 // Update the Add to Cart button logic
 document.querySelectorAll(".add-to-cart").forEach(button => {
-  button.addEventListener("click", () => {
-    const product = button.getAttribute("data-product");
-    const price = parseFloat(button.getAttribute("data-price"));
-
-    // Add product to the cart
-    cart.push({ product, price });
-    updateCart();
-
-    // Show notification
-    showNotification(`${product} added to cart!`);
-
-        // Add vibration effect to the cart icon
-        cartIcon.classList.add("vibrate");
-
-        // Remove the vibration effect after animation ends
-    setTimeout(() => {
-      cartIcon.classList.remove("vibrate");
-    }, 400); // Match the duration of the CSS animation
-
-  });
-});
-
-// Update the updateCart function to call updateCartCount
-function updateCart() {
-  cartItems.innerHTML = ""; // Clear current cart display
-  let total = 0;
-
-  // Populate cart items
-  cart.forEach((item, index) => {
-    total += item.price;
-
-    // Create cart item element
-    const li = document.createElement("li");
-    li.textContent = `${item.product} - $${item.price}`;
-
-    // Add Remove Button
-    const removeBtn = document.createElement("button");
-    removeBtn.textContent = "Remove";
-    removeBtn.classList.add("remove-item");
-    removeBtn.addEventListener("click", () => {
-      removeCartItem(index); // Remove item on button click
+    button.addEventListener("click", () => {
+      const product = button.getAttribute("data-product");
+      const price = parseFloat(button.getAttribute("data-price"));
+  
+      // Get selected category (HIIT, CrossFit, Running)
+      const subscriptionSelect = button.previousElementSibling;
+      let selectedCategory = subscriptionSelect ? subscriptionSelect.value : "HIIT"; // Default to HIIT if none selected
+  
+      // Add product with selected category to the cart
+      cart.push({ product, price, category: selectedCategory });
+      updateCart();
+  
+      // Show notification
+      showNotification(`${product} (${selectedCategory}) added to cart!`);
+  
+      // Add vibration effect to the cart icon
+      cartIcon.classList.add("vibrate");
+      setTimeout(() => cartIcon.classList.remove("vibrate"), 400);
     });
-
-    li.appendChild(removeBtn);
-    cartItems.appendChild(li);
-  });
-
-  // Update total
-  cartTotal.textContent = `Total: $${total.toFixed(2)}`;
-
-    // Update cart count in the header
+});
+  
+  // Update the updateCart function
+  function updateCart() {
+    cartItems.innerHTML = ""; // Clear current cart display
+    let total = 0;
+  
+    // Populate cart items
+    cart.forEach((item, index) => {
+      total += item.price;
+  
+      // Create cart item element
+      const li = document.createElement("li");
+      li.textContent = `${item.product} (${item.category}) - $${item.price.toFixed(2)}`;
+  
+      // Add Remove Button
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remove";
+      removeBtn.classList.add("remove-item");
+      removeBtn.addEventListener("click", () => removeCartItem(index));
+  
+      li.appendChild(removeBtn);
+      cartItems.appendChild(li);
+    });
+  
+    // Update total price
+    cartTotal.textContent = `Total: $${total.toFixed(2)}`;
     updateCartCount();
-
-  // PayPal Button
-  renderPayPalButton(total);
-}
+    renderPayPalButton(total);
+  }
+  
+  
 
 // Remove item from cart
 function removeCartItem(index) {
@@ -130,8 +125,9 @@ function renderPayPalButton(total) {
 
         // Prepare purchase details excluding total price
         const purchaseDetails = cart
-          .map((item) => `Product: ${item.product}`)
-          .join("\n");
+        .map((item) => `Product: ${item.product} (Category: ${item.category})`)
+        .join("\n");
+      
 
         // Send confirmation email to buyer and CEO
         sendConfirmationEmail(buyerName, buyerEmail, purchaseDetails);
