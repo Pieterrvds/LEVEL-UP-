@@ -52,15 +52,6 @@ h1, h2, h3 {
   margin-bottom: 30px;
 }
 
-/* Keyframes for bounce animation */
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0); /* Start and end at the same position */
-  }
-  50% {
-    transform: translateY(-10px); /* Move up slightly */
-  }
-}
 
 /* Add the animation to the CTA button */
 .cta-button {
@@ -80,22 +71,46 @@ h1, h2, h3 {
 /* Floating WhatsApp Button */
 .whatsapp-float {
   position: fixed;
-  bottom: 20px;  /* Distance from bottom */
-  right: 20px;  /* Distance from right */
-  z-index: 1000; /* Ensures it stays on top */
-  transition: transform 0.2s ease-in-out;
-}
-
-.whatsapp-icon {
-  width: 60px;  /* Adjust size */
+  bottom: 20px;
+  right: 20px;
+  width: 60px;
   height: 60px;
+  background-color: #25D366; /* WhatsApp Green */
   border-radius: 50%;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  animation: vibrate 1.5s infinite ease-in-out; /* Add the vibration animation */
 }
 
-/* Hover Effect */
-.whatsapp-float:hover {
-  transform: scale(1.1); /* Slightly enlarges on hover */
+/* WhatsApp Icon Image */
+.whatsapp-float img {
+  width: 40px;
+  height: 40px;
+}
+
+/* Vibration Animation */
+@keyframes vibrate {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(-5deg); }
+  20% { transform: rotate(5deg); }
+  30% { transform: rotate(-5deg); }
+  40% { transform: rotate(5deg); }
+  50% { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+
+
+/* Keyframes for bounce animation */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0); /* Start and end at the same position */
+  }
+  50% {
+    transform: translateY(-10px); /* Move up slightly */
+  }
 }
 
 /* About Section */
@@ -479,7 +494,23 @@ a:hover, button:hover {
   justify-content: space-between;
   padding: 0 15px;
   box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
+  z-index: 9999;
+  will-change: transform; /* Optimizes performance */
+  backface-visibility: hidden; /* Prevents flickering */
+}
+
+/* Prevent Page from Shifting */
+body {
+  margin: 0;
+  overflow-x: hidden; /* Stops horizontal scrolling issues */
+  position: relative; /* Ensures stability */
+}
+
+/* Prevent Scroll Jitter */
+html {
+  scroll-behavior: smooth; /* Smooth scrolling */
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* Improves touch performance */
 }
 
 /* Ensure items take equal space */
@@ -530,7 +561,7 @@ a:hover, button:hover {
   flex-direction: column;
   text-align: center;
   box-shadow: -4px 0px 10px rgba(255, 255, 255, 0.3);
-  transition: right 1s ease-in-out;
+  transition: right 0.66s ease-in-out;
   z-index: 999;
 }
 
@@ -546,7 +577,7 @@ a:hover, button:hover {
   text-decoration: none;
   display: block;
   border-bottom: 1px solid #333;
-  font-size: 18px;
+  font-size: 10px;
 }
 
 /* Close Menu (Slide Out to Right) */
