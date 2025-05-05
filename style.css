@@ -300,7 +300,7 @@ display:none;
 }
 
 #card-front1{
-  background: url('img/personaltraining.jpg');
+  background: url('img/calipersonal.jpg');
   background-size: cover;
   background-position: center; /* Center the image within the container */
   background-repeat: no-repeat; /* Prevent the image from repeating */
@@ -308,7 +308,7 @@ display:none;
 
 
 #card-front2{
-  background: url('img/grouptraining.png');
+  background: url('img/jimsgroepstraining.jpg');
   background-size: cover;
   background-position: center; /* Center the image within the container */
   background-repeat: no-repeat; /* Prevent the image from repeating */
