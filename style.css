@@ -92,13 +92,23 @@ a { color: inherit; }
   align-items: center;
   gap: 24px;
   padding: 0 clamp(16px, 4vw, 40px);
+  border-bottom: 2px solid transparent;
+  transition: border-color 0.3s;
+}
+/* The blur sits on its own layer: backdrop-filter on the header itself would
+   trap the fixed mobile menu inside the header's box */
+.hud::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: rgba(5, 8, 7, 0.82);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-bottom: 2px solid transparent;
-  transition: border-color 0.3s, background 0.3s;
+  transition: background 0.3s;
 }
-.hud.scrolled { border-bottom-color: var(--line); background: rgba(5, 8, 7, 0.95); }
+.hud.scrolled { border-bottom-color: var(--line); }
+.hud.scrolled::before { background: rgba(5, 8, 7, 0.95); }
 
 .brand {
   display: flex;
