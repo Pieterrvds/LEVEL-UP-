@@ -4,7 +4,7 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 // ===== Rotating class name in the hero =====
 const classRotator = document.getElementById("classRotator");
-const classes = ["CROSSFIT", "THERAPEUTIC BOXING", "CALISTHENICS", "MUAY THAI", "RUNNING", "HIIT"];
+const classes = ["CROSSFIT", "CALISTHENICS", "HIIT", "MUAY THAI", "TRIATHLON", "CYCLING"];
 let classIndex = 0;
 
 setInterval(() => {

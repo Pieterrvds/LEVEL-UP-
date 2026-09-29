@@ -7,6 +7,7 @@ Personal training platform with a retro game theme: players and personal trainer
 - `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, workout log, achievements, inventory and orders. New players set their character stats as step 2 of sign-up.
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details
 - `archive/webshop-v1/`: the old webshop, kept for reference
+- `archive/img/`: photos no longer used on the site
 
 ## Code
 - `game.js`: shared core on every page: Supabase login, player data, XP and levels, bookings, the Google Calendar schedule, the header player chip, login dialog and toasts. The shop catalog (`ITEMS`) and trainers (`TRAINERS`) live here too.

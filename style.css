@@ -706,7 +706,7 @@ a { color: inherit; }
 }
 .class-media {
   aspect-ratio: 16 / 10;
-  background: var(--img) center / cover no-repeat, var(--panel-2);
+  background: var(--img) center var(--pos, 50%) / cover no-repeat, var(--panel-2);
   border-bottom: 3px solid #000;
   position: relative;
   filter: grayscale(0.25);
@@ -743,6 +743,26 @@ a { color: inherit; }
   padding: 3px 8px;
 }
 .class-body .btn { align-self: flex-start; }
+.class-stats { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.class-stats li { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 10px; font-family: var(--pixel); font-size: 0.5rem; color: var(--muted); }
+.pips {
+  --v: 0;
+  display: block;
+  height: 10px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(20% - 3px), var(--panel) calc(20% - 3px) 20%),
+    linear-gradient(90deg, var(--green-bright) calc(var(--v) * 20%), #000 0);
+  border: 1px solid var(--line);
+}
+.class-coach { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--muted); }
+.class-coach strong { color: var(--text); }
+.coach-faces { display: flex; flex-shrink: 0; }
+.coach-faces img { width: 30px; height: 30px; object-fit: cover; object-position: center 20%; border: 2px solid var(--text); margin-left: -8px; box-shadow: 2px 2px 0 #000; }
+.coach-faces img:first-child { margin-left: 0; }
+.class-card-group { border-style: dashed; grid-column: 1 / -1; flex-direction: row; }
+.class-card-group .class-media { aspect-ratio: auto; flex: 0 0 42%; min-height: 280px; border-bottom: 0; border-right: 3px solid #000; }
+.class-card-group .class-stats { max-width: 420px; }
+.gallery-cta { justify-content: center; margin-top: 28px; }
 
 /* Stats calculator */
 .stats-grid {
@@ -1360,6 +1380,8 @@ textarea { resize: vertical; min-height: 130px; }
   .press-start { display: none; }
 
   .class-grid, .team-grid, .xp-sources, .xp-rules { grid-template-columns: 1fr; }
+  .class-card-group { flex-direction: column; }
+  .class-card-group .class-media { aspect-ratio: 16 / 10; min-height: 0; border-right: 0; border-bottom: 3px solid #000; }
   .rank-strip { grid-template-columns: repeat(3, 1fr); }
   .hs-row { grid-template-columns: 40px 30px 1fr auto; gap: 10px; }
   .hs-row .hs-rank { display: none; }
