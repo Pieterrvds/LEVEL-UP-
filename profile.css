@@ -47,21 +47,6 @@
 .player-header-level span { font-family: var(--pixel); font-size: 0.6rem; color: var(--muted); }
 .player-header-level strong { font-family: var(--pixel); font-size: 2.2rem; font-weight: 400; color: var(--gold); line-height: 1; }
 
-.rank-badge {
-  --tier-color: var(--green-bright);
-  font-family: var(--pixel);
-  font-size: 0.5rem;
-  text-transform: uppercase;
-  color: #000;
-  background: var(--tier-color);
-  padding: 6px 8px;
-}
-.rank-badge[data-tier="1"] { --tier-color: #4fc3f7; }
-.rank-badge[data-tier="2"] { --tier-color: #c77dff; }
-.rank-badge[data-tier="3"] { --tier-color: #ff8a3d; }
-.rank-badge[data-tier="4"] { --tier-color: var(--red); }
-.rank-badge[data-tier="5"] { --tier-color: var(--gold); }
-
 /* Summary tiles */
 .summary-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
 .summary-tiles .tile { background: var(--panel); }
@@ -140,7 +125,20 @@
 .settings h2 { font-family: var(--pixel); font-size: 0.7rem; text-transform: uppercase; margin-bottom: 10px; }
 .settings p { margin: 0; }
 .settings .btn-row { margin: 0; }
-.btn-danger { --btn-bg: var(--red); --btn-fg: #000; }
+
+.session-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.session-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #000;
+  border-left: 6px solid var(--c);
+}
+.session-row img { width: 48px; height: 48px; object-fit: cover; object-position: center 20%; }
+.session-row p { margin: 0; }
+.session-trainer { font-weight: 700; margin-bottom: 2px !important; }
 
 /* Responsive */
 @media (max-width: 960px) {

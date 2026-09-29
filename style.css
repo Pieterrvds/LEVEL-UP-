@@ -804,6 +804,163 @@ textarea { resize: vertical; min-height: 130px; }
 }
 .save-stats p { margin: 0; color: var(--muted); font-size: 0.92rem; }
 
+/* Shared: filter tabs & rank badges */
+.filter-tabs { display: flex; border: 2px solid var(--line); }
+.filter-tabs button {
+  font-family: var(--pixel);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.filter-tabs button + button { border-left: 2px solid var(--line); }
+.filter-tabs button[aria-selected="true"] { color: #000; background: var(--green-bright); }
+
+.rank-badge {
+  --tier-color: var(--green-bright);
+  font-family: var(--pixel);
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  color: #000;
+  background: var(--tier-color);
+  padding: 6px 8px;
+}
+.rank-badge[data-tier="1"] { --tier-color: #4fc3f7; }
+.rank-badge[data-tier="2"] { --tier-color: #c77dff; }
+.rank-badge[data-tier="3"] { --tier-color: #ff8a3d; }
+.rank-badge[data-tier="4"] { --tier-color: var(--red); }
+.rank-badge[data-tier="5"] { --tier-color: var(--gold); }
+
+
+/* Trainer stats on team cards */
+.trainer-stats { display: grid; gap: 8px; padding: 12px; background: #000; border: 2px solid var(--line); }
+.trainer-level { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82rem; }
+.mini-xp.wide { width: 100%; height: 8px; }
+.trainer-availability { margin: 0; font-size: 0.85rem !important; color: var(--text) !important; flex: none !important; }
+.team-actions { margin-top: 4px; gap: 10px; }
+.team-actions .btn { margin-top: 0 !important; }
+
+/* Weekly booking board */
+.schedule-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.week-nav { display: flex; align-items: center; gap: 12px; }
+.week-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 2px solid var(--text);
+  box-shadow: 3px 3px 0 #000;
+  cursor: pointer;
+}
+.week-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+.week-label { margin: 0; min-width: 190px; display: grid; gap: 6px; font-weight: 600; }
+.week-label span { font-family: var(--pixel); font-size: 0.55rem; color: var(--green-bright); text-transform: uppercase; font-weight: 400; }
+.filter-tabs .dot { display: inline-block; width: 10px; height: 10px; margin-right: 8px; background: var(--c); vertical-align: -1px; }
+
+.week-board {
+  display: grid;
+  grid-template-columns: 64px repeat(7, minmax(0, 1fr));
+  background: var(--panel);
+  border: 3px solid var(--text);
+  box-shadow: 6px 6px 0 #000, 0 0 0 3px #000;
+}
+.board-col { display: grid; grid-auto-rows: 64px; grid-template-rows: 60px; border-left: 2px solid var(--line); min-width: 0; }
+.board-hours { border-left: 0; }
+.board-head {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  background: #000;
+  border-bottom: 2px solid var(--line);
+}
+.board-day { font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--muted); }
+.board-date { font-family: var(--pixel); font-size: 0.8rem; }
+.board-col.today .board-head { background: var(--green-dark); }
+.board-col.today .board-day { color: var(--text); }
+.board-col.today .board-date::after { content: " ●"; color: var(--green-bright); font-size: 0.5rem; vertical-align: middle; }
+.board-hour {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6px;
+  font-family: var(--pixel);
+  font-size: 0.5rem;
+  color: var(--muted);
+  border-bottom: 1px dashed var(--line);
+}
+.board-cell {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px dashed var(--line);
+  min-width: 0;
+}
+.board-cell.empty {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255, 255, 255, 0.025) 6px 8px);
+}
+.board-closed-note { display: none; }
+
+.slot {
+  --c: var(--green-bright);
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: color-mix(in srgb, var(--c) 14%, #000);
+  border: 2px solid var(--c);
+  border-left-width: 6px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s, box-shadow 0.1s;
+}
+.slot-time { display: none; font-family: var(--pixel); font-size: 0.5rem; }
+.slot-name { font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-state { font-family: var(--pixel); font-size: 0.45rem; color: var(--c); white-space: nowrap; }
+.slot.free:hover { background: var(--c); color: #000; transform: translate(-2px, -2px); box-shadow: 3px 3px 0 #000; }
+.slot.free:hover .slot-state { color: #000; }
+.slot.mine { background: var(--green-bright); border-color: #000; color: #000; }
+.slot.mine .slot-state { color: #000; }
+.slot.taken { background: #000; border-color: var(--line); border-left-color: var(--c); color: var(--muted); cursor: not-allowed; }
+.slot.taken .slot-state { color: var(--muted); }
+.slot.past { opacity: 0.3; cursor: not-allowed; }
+
+.board-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 20px; padding: 0; margin: 20px 0 0; font-size: 0.85rem; color: var(--muted); }
+.board-legend li { display: flex; align-items: center; gap: 8px; }
+.legend-swatch { width: 16px; height: 16px; border: 2px solid var(--green-bright); background: rgba(126, 224, 106, 0.15); }
+.legend-swatch.mine { background: var(--green-bright); border-color: #000; }
+.legend-swatch.taken { background: #000; border-color: var(--line); }
+
+/* Booking dialog */
+.booking-trainer { display: flex; align-items: center; gap: 14px; padding: 12px; margin-bottom: 14px; background: #000; border-left: 6px solid var(--c); }
+.booking-trainer img { width: 56px; height: 56px; object-fit: cover; object-position: center 20%; }
+.booking-trainer p { margin: 0; }
+.booking-trainer-name { font-family: var(--pixel); font-size: 0.65rem; margin-bottom: 8px !important; }
+.booking-when { font-weight: 700; font-size: 1.05rem; margin-bottom: 18px; }
+.booking-reward { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); }
+.booking-login { display: grid; gap: 12px; padding: 16px; border: 2px dashed var(--gold); }
+.booking-login p { margin: 0; }
+.booking-login .btn-row, .booking-dialog .btn-row { margin-top: 8px; }
+.booking-note-view { font-style: italic; color: var(--muted); }
+.btn-danger { --btn-bg: var(--red); --btn-fg: #000; }
+.muted { color: var(--muted); }
+
 /* Team */
 .team-grid {
   display: grid;
@@ -1017,6 +1174,22 @@ textarea { resize: vertical; min-height: 130px; }
   .gallery-item:nth-child(2) { grid-column: span 2; aspect-ratio: 16 / 10; order: 3; }
 
   .field-row { grid-template-columns: 1fr; }
+
+  .week-board { grid-template-columns: 1fr; }
+  .board-hours { display: none; }
+  .board-col { grid-template-rows: none; grid-auto-rows: auto; border-left: 0; border-bottom: 2px solid var(--line); }
+  .board-head { display: flex; justify-content: flex-start; align-items: baseline; gap: 10px; padding: 12px 14px; }
+  .board-cell.empty { display: none; }
+  .board-cell { border-bottom: 0; padding: 4px 10px; }
+  .board-col .board-cell:last-of-type { padding-bottom: 12px; }
+  .board-col.closed .board-closed-note { display: block; margin: 0; padding: 10px 14px 14px; font-size: 0.85rem; color: var(--muted); }
+  .slot { flex-direction: row; align-items: center; gap: 12px; padding: 10px 12px; }
+  .slot-time { display: inline; }
+  .slot-state { margin-left: auto; }
+  .week-nav { width: 100%; justify-content: space-between; }
+  .week-label { min-width: 0; text-align: center; }
+  .schedule-toolbar .filter-tabs { width: 100%; }
+  .schedule-toolbar .filter-tabs button { flex: 1; }
   .goal-picker span { font-size: 0.85rem; }
   .calendar iframe { height: 460px; }
   .result-tiles { grid-template-columns: 1fr 1fr; }

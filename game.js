@@ -13,8 +13,15 @@ const LevelUp = (() => {
   const KEYS = {
     accounts: "levelup.accounts.v1",
     session: "levelup.session.v1",
-    guestOrders: "levelup.guestOrders.v1"
+    guestOrders: "levelup.guestOrders.v1",
+    bookings: "levelup.bookings.v1"
   };
+
+  const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
+  const SESSION_XP = 75;          // client XP per booked session
+  const TRAINER_SESSION_XP = 100; // trainer XP per session
+  const TRAINER_CLIENT_XP = 50;   // trainer XP per unique client
+  const BOOKING_WEEKS_AHEAD = 4;
 
   const XP_PER_EURO = 10;
   const WORKOUT_XP_DAILY_LIMIT = 3;
@@ -26,6 +33,32 @@ const LevelUp = (() => {
     { level: 8, title: "Warrior" },
     { level: 12, title: "Champion" },
     { level: 16, title: "Legend" }
+  ];
+
+  // Personal trainers and the hours they are open for 1-hour sessions.
+  // availability: { weekday: [startHour, endHour] }, weekday 0 = Sunday … 6 = Saturday.
+  // stats: sessions/clients from before the online schedule, added to their level.
+  const TRAINERS = [
+    {
+      id: "filip",
+      name: "Filip De Meyst",
+      short: "Filip",
+      role: "Triathlon coach",
+      img: "img/filipironmancoach.jpg",
+      color: "#4fc3f7",
+      availability: { 3: [13, 18] }, // Wednesday afternoon
+      stats: { sessions: 0, clients: 0 }
+    },
+    {
+      id: "maxim",
+      name: "Maxim Buyl",
+      short: "Maxim",
+      role: "Cycling coach",
+      img: "img/teammembermaximtshirt.jpg",
+      color: "#ffd23f",
+      availability: { 0: [9, 18] }, // all day Sunday
+      stats: { sessions: 0, clients: 0 }
+    }
   ];
 
   const ITEMS = [
@@ -83,6 +116,8 @@ const LevelUp = (() => {
     { id: "first_rep", icon: "▲", title: "First rep", desc: "Log your first workout.", xp: 50 },
     { id: "workouts_10", icon: "⚡", title: "Consistency", desc: "Log 10 workouts.", xp: 150 },
     { id: "workouts_50", icon: "♛", title: "Grinder", desc: "Log 50 workouts.", xp: 500 },
+    { id: "first_session", icon: "⚔", title: "Party up", desc: "Book your first session with a trainer.", xp: 100 },
+    { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Book 5 sessions with a trainer.", xp: 250 },
     { id: "first_loot", icon: "◆", title: "First loot", desc: "Buy your first item.", xp: 100, shop: true },
     { id: "full_drip", icon: "▣", title: "Full drip", desc: "Own the T-shirt and the hoodie.", xp: 150, shop: true },
     { id: "home_gym", icon: "⚒", title: "Home gym", desc: "Own the parallettes and the resistance bands.", xp: 150, shop: true },
@@ -257,6 +292,14 @@ const LevelUp = (() => {
         player.xpLog = player.xpLog.slice(0, 50);
         events.push({ type: "xp", amount, reason });
       },
+      revoke(amount, reason) {
+        amount = Math.min(Math.round(amount), player.xp);
+        if (amount <= 0) return;
+        player.xp -= amount;
+        player.xpLog.unshift({ date: new Date().toISOString(), amount: -amount, reason });
+        player.xpLog = player.xpLog.slice(0, 50);
+        events.push({ type: "xp", amount: -amount, reason });
+      },
       unlock(id) {
         if (player.achievements[id]) return;
         const achievement = ACHIEVEMENTS.find((a) => a.id === id);
@@ -285,6 +328,8 @@ const LevelUp = (() => {
     if (workouts >= 1) game.unlock("first_rep");
     if (workouts >= 10) game.unlock("workouts_10");
     if (workouts >= 50) game.unlock("workouts_50");
+    if ((player.sessionsBooked || 0) >= 1) game.unlock("first_session");
+    if ((player.sessionsBooked || 0) >= 5) game.unlock("sessions_5");
     if (player.purchases.length) game.unlock("first_loot");
     if (owns("tshirt") && owns("hoodie")) game.unlock("full_drip");
     if (owns("parallettes") && owns("bands")) game.unlock("home_gym");
@@ -349,6 +394,130 @@ const LevelUp = (() => {
     guestOrders.forEach(recordPurchase);
   }
 
+  // ---------- Trainers & bookings ----------
+  const trainerById = (id) => TRAINERS.find((t) => t.id === id);
+  const getBookings = () => read(KEYS.bookings, []);
+
+  function parseDate(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Hours a trainer is open on a given date (YYYY-MM-DD)
+  function trainerHours(trainerId, dateKey) {
+    const range = trainerById(trainerId)?.availability[parseDate(dateKey).getDay()];
+    if (!range) return [];
+    const hours = [];
+    for (let h = range[0]; h < range[1]; h++) hours.push(h);
+    return hours;
+  }
+
+  const findBooking = (trainerId, dateKey, hour) =>
+    getBookings().find((b) => b.trainerId === trainerId && b.date === dateKey && b.hour === hour);
+
+  const slotStart = (dateKey, hour) => {
+    const d = parseDate(dateKey);
+    d.setHours(hour, 0, 0, 0);
+    return d;
+  };
+
+  function bookSession({ trainerId, date, hour, note = "" }) {
+    const player = getPlayer();
+    if (!player) throw new Error("Log in to book a session.");
+    const trainer = trainerById(trainerId);
+    if (!trainer || !trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
+    if (slotStart(date, hour) <= new Date()) throw new Error("This time slot has already passed.");
+    const bookings = getBookings();
+    if (bookings.some((b) => b.trainerId === trainerId && b.date === date && b.hour === hour)) {
+      throw new Error("Someone just booked this slot. Pick another hour.");
+    }
+    if (bookings.some((b) => b.email === player.email && b.date === date && b.hour === hour)) {
+      throw new Error("You already have a session at this time.");
+    }
+
+    const booking = {
+      id: `bk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      trainerId,
+      date,
+      hour,
+      note: String(note).slice(0, 300),
+      email: player.email,
+      name: player.name,
+      xp: SESSION_XP,
+      createdAt: new Date().toISOString()
+    };
+    bookings.push(booking);
+    write(KEYS.bookings, bookings);
+
+    mutate((p, game) => {
+      p.sessionsBooked = (p.sessionsBooked || 0) + 1;
+      game.grant(SESSION_XP, `Session with ${trainer.short}`);
+    });
+    notifyBooking(booking, "booked");
+    return booking;
+  }
+
+  function cancelBooking(id) {
+    const player = getPlayer();
+    const bookings = getBookings();
+    const booking = bookings.find((b) => b.id === id);
+    if (!player || !booking || booking.email !== player.email) throw new Error("Booking not found.");
+    if (slotStart(booking.date, booking.hour) <= new Date()) throw new Error("This session has already started.");
+
+    write(KEYS.bookings, bookings.filter((b) => b.id !== id));
+    mutate((p, game) => {
+      p.sessionsBooked = Math.max(0, (p.sessionsBooked || 0) - 1);
+      game.revoke(booking.xp || SESSION_XP, `Cancelled session with ${trainerById(booking.trainerId).short}`);
+    });
+    notifyBooking(booking, "cancelled");
+  }
+
+  const playerBookings = () => {
+    const player = getPlayer();
+    if (!player) return [];
+    return getBookings()
+      .filter((b) => b.email === player.email)
+      .sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour));
+  };
+
+  // Trainers level up with every session and every unique client
+  function trainerStats(trainerId) {
+    const trainer = trainerById(trainerId);
+    const bookings = getBookings().filter((b) => b.trainerId === trainerId);
+    const sessions = trainer.stats.sessions + bookings.length;
+    const clients = trainer.stats.clients + new Set(bookings.map((b) => b.email)).size;
+    const xp = sessions * TRAINER_SESSION_XP + clients * TRAINER_CLIENT_XP;
+    return { sessions, clients, ...progress(xp) };
+  }
+
+  const formatSlot = (dateKey, hour) =>
+    `${parseDate(dateKey).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}, ${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`;
+
+  // Emails the booking to the LEVEL-UP inbox; the client gets an automatic confirmation.
+  function notifyBooking(booking, action) {
+    const trainer = trainerById(booking.trainerId);
+    const when = formatSlot(booking.date, booking.hour);
+    const booked = action === "booked";
+    fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: `${booked ? "New booking" : "Cancelled"}: ${trainer.short} · ${when}`,
+        _template: "table",
+        _autoresponse: booked
+          ? `Hi ${booking.name}, your session with ${trainer.name} is booked for ${when}. Your trainer will contact you about the location and payment. See you there!\n\nThe LEVEL-UP team`
+          : `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled.\n\nThe LEVEL-UP team`,
+        status: booked ? "Booked" : "Cancelled",
+        trainer: trainer.name,
+        when,
+        name: booking.name,
+        email: booking.email,
+        note: booking.note || "-",
+        booking_id: booking.id
+      })
+    }).catch((error) => console.error("Booking email failed:", error));
+  }
+
   // ---------- Events ----------
   function emit() {
     renderHud();
@@ -399,7 +568,9 @@ const LevelUp = (() => {
         const a = event.achievement;
         toast({ title: "Achievement unlocked", text: `${a.title} · +${a.xp} XP`, icon: a.icon });
       } else {
-        toast({ title: `+${event.amount} XP`, text: event.reason, icon: "▲", tone: "green" });
+        toast(event.amount > 0
+          ? { title: `+${event.amount} XP`, text: event.reason, icon: "▲", tone: "green" }
+          : { title: `${event.amount} XP`, text: event.reason, icon: "▼", tone: "gold" });
       }
     });
     if (endLevel > startLevel) {
@@ -572,10 +743,12 @@ const LevelUp = (() => {
   initChrome();
 
   return {
-    ITEMS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT,
+    ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD,
     esc, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
     getPlayer, signUp, logIn, logOut, deleteProfile,
     logWorkout, saveBodyStats, recordPurchase,
+    trainerById, trainerHours, findBooking, slotStart, parseDate, formatSlot,
+    bookSession, cancelBooking, playerBookings, trainerStats,
     openAuth, toast
   };
 })();

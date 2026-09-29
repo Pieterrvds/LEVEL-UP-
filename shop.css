@@ -74,20 +74,6 @@ body.no-scroll { overflow: hidden; }
   margin-bottom: 36px;
 }
 .shop-toolbar .section-title { margin-bottom: 0; }
-.filter-tabs { display: flex; border: 2px solid var(--line); }
-.filter-tabs button {
-  font-family: var(--pixel);
-  font-size: 0.55rem;
-  text-transform: uppercase;
-  padding: 12px 16px;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-.filter-tabs button + button { border-left: 2px solid var(--line); }
-.filter-tabs button[aria-selected="true"] { color: #000; background: var(--green-bright); }
-
 /* ---------- Item cards ---------- */
 .item-grid {
   display: grid;
@@ -301,7 +287,6 @@ body.no-scroll { overflow: hidden; }
 .bag-remove:hover { color: var(--red); border-color: var(--red); }
 .bag-empty { text-align: center; padding: 48px 0; }
 .bag-empty p:first-child { font-family: var(--pixel); font-size: 0.7rem; }
-.muted { color: var(--muted); }
 
 .bag-foot { padding: 20px 24px 24px; border-top: 2px solid var(--line); display: grid; gap: 14px; }
 .bag-total { display: flex; justify-content: space-between; align-items: center; font-family: var(--pixel); font-size: 0.7rem; }

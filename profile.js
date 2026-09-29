@@ -50,15 +50,48 @@ function renderHeader(player, p) {
 }
 
 function renderSummary(player) {
-  const itemsOwned = Object.values(player.inventory).reduce((a, b) => a + b, 0);
   const unlocked = Object.keys(player.achievements).length;
   const minutes = player.workouts.reduce((sum, w) => sum + w.minutes, 0);
   return `
     <section class="summary-tiles">
       <div class="tile"><span class="tile-label">Total XP</span><span class="tile-value">${player.xp.toLocaleString("en-US")}</span></div>
       <div class="tile"><span class="tile-label">Workouts</span><span class="tile-value">${player.workouts.length}</span><span class="tile-note">${Math.round(minutes / 60)} h trained</span></div>
-      <div class="tile"><span class="tile-label">Items owned</span><span class="tile-value">${itemsOwned}</span></div>
+      <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${LevelUp.playerBookings().length}</span><span class="tile-note">with a trainer</span></div>
       <div class="tile"><span class="tile-label">Achievements</span><span class="tile-value">${unlocked}/${ACHIEVEMENTS.length}</span></div>
+    </section>`;
+}
+
+function renderSessions() {
+  const now = new Date();
+  const bookings = LevelUp.playerBookings();
+  const upcoming = bookings.filter((b) => LevelUp.slotStart(b.date, b.hour) > now);
+  const done = bookings.filter((b) => LevelUp.slotStart(b.date, b.hour) <= now).reverse().slice(0, 5);
+
+  const row = (b, canCancel) => {
+    const trainer = LevelUp.trainerById(b.trainerId);
+    return `
+      <li class="session-row" style="--c:${trainer.color}">
+        <img src="${trainer.img}" alt="">
+        <div>
+          <p class="session-trainer">${esc(trainer.name)}</p>
+          <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}</p>
+        </div>
+        ${canCancel
+          ? `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">Cancel</button>`
+          : `<span class="log-xp">+${b.xp} XP</span>`}
+      </li>`;
+  };
+
+  return `
+    <section class="panel panel-wide">
+      <div class="panel-head">
+        <h2>My sessions</h2>
+        <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
+      </div>
+      ${upcoming.length
+        ? `<ul class="session-list">${upcoming.map((b) => row(b, true)).join("")}</ul>`
+        : `<p class="muted">No upcoming sessions. Book an hour with Filip or Maxim and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>`}
+      ${done.length ? `<h3 class="panel-sub">Completed</h3><ul class="session-list">${done.map((b) => row(b, false)).join("")}</ul>` : ""}
     </section>`;
 }
 
@@ -241,6 +274,7 @@ function render() {
     ${renderHeader(player, p)}
     ${renderSummary(player)}
     <div class="panel-grid">
+      ${renderSessions()}
       ${renderWorkouts(player)}
       ${renderBodyStats(player)}
       ${renderAchievements(player)}
@@ -269,6 +303,17 @@ function bindEvents(player) {
       ? "Workout logged. You've reached today's XP limit, so this one earns no XP. Rest up and come back tomorrow!"
       : `Workout logged: +${result.xp} XP. Keep grinding!`;
     render();
+  });
+
+  root.querySelectorAll("[data-cancel-booking]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!confirm("Cancel this session? The XP you earned for it will be removed.")) return;
+      try {
+        LevelUp.cancelBooking(button.dataset.cancelBooking);
+      } catch (err) {
+        alert(err.message);
+      }
+    });
   });
 
   document.getElementById("deleteProfile").addEventListener("click", () => {
