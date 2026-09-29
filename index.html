@@ -31,18 +31,16 @@
       <a href="#about">Coach</a>
       <a href="#programs">Classes</a>
       <a href="#stats">Stats</a>
+      <a href="#levels">Levels</a>
       <a href="#team">Party</a>
       <a href="#schedule">Schedule</a>
       <a href="#contact">Contact</a>
-      <a href="webshop.html" class="nav-shop">
+      <a href="shop.html" class="nav-shop">
         <span class="coin" aria-hidden="true"></span> Shop
       </a>
     </nav>
 
-    <div class="hud-level" aria-live="polite">
-      <span class="hud-label">LVL</span>
-      <span class="hud-value" id="hudLevel">1</span>
-    </div>
+    <div class="hud-account" id="hudAccount"></div>
 
     <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
       <span></span><span></span><span></span>
@@ -51,7 +49,7 @@
 
   <main>
     <!-- HERO / TITLE SCREEN -->
-    <section id="home" class="hero" data-level="1" data-achievement="Game started">
+    <section id="home" class="hero">
       <div class="hero-bg" aria-hidden="true"></div>
       <div class="container hero-grid">
         <div class="hero-copy">
@@ -96,7 +94,7 @@
     <div class="vine-divider" aria-hidden="true"></div>
 
     <!-- ABOUT -->
-    <section id="about" class="section" data-level="2" data-achievement="Met the coach">
+    <section id="about" class="section">
       <div class="container about-grid">
         <div>
           <p class="section-kicker">Level 01 · The Movement</p>
@@ -105,11 +103,11 @@
             <strong>Welcome to the LEVEL-UP movement.</strong> We organise workout sessions that help you get fit, get strong and have fun doing it, one level at a time.
           </p>
           <p>
-            Check the <a href="#schedule" class="text-link">schedule</a> to see when and where we train, grab your gear in the <a href="webshop.html" class="text-link">webshop</a>, or <a href="#contact" class="text-link">contact us</a> to book a session or ask anything.
+            Check the <a href="#schedule" class="text-link">schedule</a> to see when and where we train, grab your gear in the <a href="shop.html" class="text-link">webshop</a>, or <a href="#contact" class="text-link">contact us</a> to book a session or ask anything.
           </p>
           <div class="btn-row">
             <a href="#schedule" class="btn btn-primary">Schedule</a>
-            <a href="webshop.html" class="btn btn-ghost">Webshop</a>
+            <a href="shop.html" class="btn btn-ghost">Webshop</a>
             <a href="#stats" class="btn btn-ghost">Meal plan</a>
           </div>
         </div>
@@ -136,7 +134,7 @@
     </section>
 
     <!-- PROGRAMS -->
-    <section id="programs" class="section section-alt" data-level="3" data-achievement="Classes discovered">
+    <section id="programs" class="section section-alt">
       <div class="container">
         <p class="section-kicker">Level 02 · Character select</p>
         <h2 class="section-title">Choose your class</h2>
@@ -207,7 +205,7 @@
     </section>
 
     <!-- STATS CALCULATOR -->
-    <section id="stats" class="section" data-level="4" data-achievement="Stats checked">
+    <section id="stats" class="section">
       <div class="container stats-grid">
         <div>
           <p class="section-kicker">Level 03 · Character stats</p>
@@ -258,8 +256,31 @@
       </div>
     </section>
 
+    <!-- LEVEL SYSTEM -->
+    <section id="levels" class="section">
+      <div class="container levels-grid">
+        <div>
+          <p class="section-kicker">Bonus level · Save file</p>
+          <h2 class="section-title">Level up for real</h2>
+          <p class="section-intro left">
+            Create your player profile and turn your training into a game. Every workout, every stat check and every piece of gear earns XP. Climb from <strong>Rookie</strong> to <strong>Legend</strong>.
+          </p>
+          <div class="btn-row" id="levelsCta">
+            <button type="button" class="btn btn-primary" data-auth-open="signup">Create your player</button>
+            <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>
+          </div>
+        </div>
+        <ul class="xp-sources">
+          <li><span class="xp-chip">+30–60 XP</span><div><h3>Log a workout</h3><p>Every session you train counts toward your next level.</p></div></li>
+          <li><span class="xp-chip">+25 XP</span><div><h3>Save your stats</h3><p>Track your BMI, BMR and daily calories over time.</p></div></li>
+          <li><span class="xp-chip">10 XP / €</span><div><h3>Gear up in the shop</h3><p>Merch and tools earn XP, and complete sets unlock bonus achievements.</p></div></li>
+          <li><span class="xp-chip gold">Achievements</span><div><h3>Unlock badges</h3><p>First rep, Consistency, Full drip, Collector and more.</p></div></li>
+        </ul>
+      </div>
+    </section>
+
     <!-- TEAM -->
-    <section id="team" class="section section-alt" data-level="5" data-achievement="Party assembled">
+    <section id="team" class="section section-alt">
       <div class="container">
         <p class="section-kicker">Level 04 · Your party</p>
         <h2 class="section-title">Meet the team</h2>
@@ -298,7 +319,7 @@
     </section>
 
     <!-- GALLERY -->
-    <section id="gallery" class="section" data-level="6" data-achievement="Highlights unlocked">
+    <section id="gallery" class="section">
       <div class="container">
         <p class="section-kicker">Level 05 · Replays</p>
         <h2 class="section-title">In action</h2>
@@ -311,7 +332,7 @@
     </section>
 
     <!-- SCHEDULE -->
-    <section id="schedule" class="section section-alt" data-level="7" data-achievement="Quest log opened">
+    <section id="schedule" class="section section-alt">
       <div class="container">
         <p class="section-kicker">Level 06 · Quest log</p>
         <h2 class="section-title">Schedule</h2>
@@ -329,7 +350,7 @@
     </section>
 
     <!-- CONTACT -->
-    <section id="contact" class="section contact" data-level="8" data-achievement="Ready to level up">
+    <section id="contact" class="section contact">
       <div class="container contact-grid">
         <div>
           <p class="section-kicker">Final level · Join the party</p>
@@ -410,12 +431,7 @@
     <img src="img/whatsapp.png" alt="">
   </a>
 
-  <!-- Achievement toast -->
-  <div class="toast" id="toast" role="status" aria-live="polite">
-    <span class="toast-icon" aria-hidden="true">★</span>
-    <div><p class="toast-title">Level up!</p><p class="toast-text" id="toastText"></p></div>
-  </div>
-
+  <script src="game.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

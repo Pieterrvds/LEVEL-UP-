@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Item Shop | LEVEL-UP</title>
+  <meta name="description" content="LEVEL-UP merch and training tools. Every euro you spend earns XP, so gear up and level up.">
+  <meta name="theme-color" content="#050807">
+  <link rel="icon" href="img/logo.JPG">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="shop.css">
+  <script src="https://www.paypal.com/sdk/js?client-id=AcJLXipsreQDWPNqUNKBknNhohnvhY3QtkXKNNSk0zMkYhvPgxcF-kFYKxaTadXAAbiyW4ZOO1Fummpb&currency=EUR" defer></script>
+</head>
+<body>
+
+  <div class="xp-track" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
+
+  <header class="hud" id="hud">
+    <a href="index.html" class="brand" aria-label="LEVEL-UP home">
+      <img src="img/logo.JPG" alt="" class="brand-logo">
+      <span class="brand-name">LEVEL-UP</span>
+    </a>
+
+    <nav class="nav" id="nav" aria-label="Main">
+      <a href="index.html#about">Coach</a>
+      <a href="index.html#programs">Classes</a>
+      <a href="index.html#stats">Stats</a>
+      <a href="index.html#levels">Levels</a>
+      <a href="index.html#schedule">Schedule</a>
+      <a href="index.html#contact">Contact</a>
+      <a href="shop.html" class="nav-shop" aria-current="page">
+        <span class="coin" aria-hidden="true"></span> Shop
+      </a>
+    </nav>
+
+    <div class="hud-account" id="hudAccount"></div>
+
+    <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <main>
+    <!-- Shop hero -->
+    <section class="shop-hero">
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="container shop-hero-grid">
+        <div>
+          <p class="eyebrow">▸ Item shop open</p>
+          <h1 class="shop-title">Gear up.<br><span>Level up.</span></h1>
+          <p class="lead">Official LEVEL-UP merch and training tools. Every euro you spend earns <strong>10 XP</strong>, and complete sets unlock bonus achievements.</p>
+        </div>
+        <aside class="player-panel" id="playerPanel" aria-live="polite"></aside>
+      </div>
+    </section>
+
+    <div class="vine-divider" aria-hidden="true"></div>
+
+    <!-- Items -->
+    <section class="section shop-section" id="items">
+      <div class="container">
+        <div class="shop-toolbar">
+          <div>
+            <p class="section-kicker">Inventory for sale</p>
+            <h2 class="section-title">Choose your loot</h2>
+          </div>
+          <div class="filter-tabs" role="tablist" aria-label="Filter items">
+            <button type="button" role="tab" aria-selected="true" data-filter="all">All</button>
+            <button type="button" role="tab" aria-selected="false" data-filter="merch">Merch</button>
+            <button type="button" role="tab" aria-selected="false" data-filter="tools">Tools</button>
+          </div>
+        </div>
+        <div class="item-grid" id="itemGrid"></div>
+      </div>
+    </section>
+
+    <!-- Set bonuses -->
+    <section class="section section-alt">
+      <div class="container">
+        <p class="section-kicker">Set bonuses</p>
+        <h2 class="section-title">Unlock achievements</h2>
+        <p class="section-intro">Collect gear to unlock achievements. Each one gives you bonus XP on top of the XP from your order.</p>
+        <div class="bonus-grid" id="bonusGrid"></div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section">
+      <div class="container">
+        <p class="section-kicker">How it works</p>
+        <h2 class="section-title">From loot to level</h2>
+        <ol class="loot-steps">
+          <li><span class="step-no">1</span><h3>Log in</h3><p>Create your player profile so your XP gets saved.</p></li>
+          <li><span class="step-no">2</span><h3>Fill your bag</h3><p>Pick your items and sizes. The bag shows how much XP you'll earn.</p></li>
+          <li><span class="step-no">3</span><h3>Check out</h3><p>Pay safely with PayPal or card. We contact you by email about delivery or pickup.</p></li>
+          <li><span class="step-no">★</span><h3>Level up</h3><p>Your XP and items land on your profile right away.</p></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="vine-divider" aria-hidden="true"></div>
+    <div class="container footer-inner">
+      <a href="index.html" class="brand">
+        <img src="img/logo.JPG" alt="" class="brand-logo">
+        <span class="brand-name">LEVEL-UP</span>
+      </a>
+      <p>© <span id="year">2026</span> LEVEL-UP Personal Training. All rights reserved.</p>
+      <p class="footer-hint">Questions? <a href="index.html#contact" class="text-link">Contact us</a></p>
+    </div>
+  </footer>
+
+  <!-- Bag button -->
+  <button type="button" class="bag-button" id="bagButton" aria-controls="bag" aria-expanded="false">
+    <span class="bag-icon" aria-hidden="true">🎒</span>
+    <span class="bag-button-label">Bag</span>
+    <span class="bag-count" id="bagCount">0</span>
+  </button>
+
+  <!-- Bag drawer -->
+  <div class="bag-backdrop" id="bagBackdrop" hidden></div>
+  <aside class="bag" id="bag" aria-labelledby="bagTitle" aria-hidden="true">
+    <div class="bag-head">
+      <h2 id="bagTitle">Loot bag</h2>
+      <button type="button" class="dialog-close" id="bagClose" aria-label="Close bag">✕</button>
+    </div>
+    <div class="bag-body">
+      <ul class="bag-items" id="bagItems"></ul>
+      <div class="bag-empty" id="bagEmpty">
+        <p>Your bag is empty.</p>
+        <p class="muted">Pick some gear to start earning XP.</p>
+      </div>
+    </div>
+    <div class="bag-foot" id="bagFoot">
+      <div class="bag-total"><span>Total</span><strong id="bagTotal">€0.00</strong></div>
+      <div class="bag-xp" id="bagXp"></div>
+      <div class="bag-login" id="bagLogin"></div>
+      <div id="paypal-button-container"></div>
+      <p class="bag-status" id="bagStatus" role="alert"></p>
+      <p class="bag-note">Secure payment with PayPal. After checkout we contact you by email to arrange delivery or pickup.</p>
+    </div>
+  </aside>
+
+  <!-- Loot acquired -->
+  <dialog class="auth-dialog loot-dialog" id="lootDialog" aria-labelledby="lootTitle">
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <div id="lootContent"></div>
+  </dialog>
+
+  <script src="game.js"></script>
+  <script src="shop.js"></script>
+</body>
+</html>

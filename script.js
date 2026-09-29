@@ -1,45 +1,11 @@
-// ===== Navigation =====
-const hud = document.getElementById("hud");
-const nav = document.getElementById("nav");
-const menuToggle = document.getElementById("menuToggle");
+// Home page behaviour. Shared HUD, login and XP logic lives in game.js.
 
-function setMenu(open) {
-  nav.classList.toggle("open", open);
-  menuToggle.setAttribute("aria-expanded", String(open));
-  menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
-}
-
-menuToggle.addEventListener("click", (event) => {
-  event.stopPropagation();
-  setMenu(!nav.classList.contains("open"));
-});
-
-// Close menu when clicking a link, clicking outside or pressing Escape
-nav.querySelectorAll("a").forEach(link => link.addEventListener("click", () => setMenu(false)));
-document.addEventListener("click", (event) => {
-  if (nav.classList.contains("open") && !nav.contains(event.target)) setMenu(false);
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMenu(false);
-});
-
-// ===== XP bar (scroll progress) + HUD background =====
-const xpFill = document.getElementById("xpFill");
-
-function onScroll() {
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  const progress = max > 0 ? (window.scrollY / max) * 100 : 0;
-  xpFill.style.width = `${progress}%`;
-  hud.classList.toggle("scrolled", window.scrollY > 10);
-}
-window.addEventListener("scroll", onScroll, { passive: true });
-onScroll();
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ===== Rotating class name in the hero =====
 const classRotator = document.getElementById("classRotator");
 const classes = ["CROSSFIT", "THERAPEUTIC BOXING", "CALISTHENICS", "MUAY THAI", "RUNNING", "HIIT"];
 let classIndex = 0;
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 setInterval(() => {
   classRotator.classList.add("swap");
@@ -55,49 +21,22 @@ window.addEventListener("load", () => {
   document.querySelector(".player-card")?.classList.add("ready");
 });
 
-// ===== Levels, active nav link and achievement toasts =====
-const sections = document.querySelectorAll("section[data-level]");
-const navLinks = nav.querySelectorAll('a[href^="#"]');
-const hudLevel = document.getElementById("hudLevel");
-const hudLevelBox = hudLevel.parentElement;
-const toast = document.getElementById("toast");
-const toastText = document.getElementById("toastText");
-let currentLevel = 1;
-let toastTimer;
-
-function showToast(message) {
-  toastText.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
-}
-
+// ===== Active nav link =====
+const navLinks = document.querySelectorAll('#nav a[href^="#"]');
 const sectionObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (!entry.isIntersecting) return;
-    const section = entry.target;
-
     navLinks.forEach(link => {
-      link.classList.toggle("active", link.getAttribute("href") === `#${section.id}`);
+      link.classList.toggle("active", link.getAttribute("href") === `#${entry.target.id}`);
     });
-
-    const level = Number(section.dataset.level);
-    if (level > currentLevel) {
-      currentLevel = level;
-      hudLevel.textContent = level;
-      hudLevelBox.classList.remove("bump");
-      void hudLevelBox.offsetWidth; // restart animation
-      hudLevelBox.classList.add("bump");
-      showToast(`LVL ${level}: ${section.dataset.achievement}`);
-    }
   });
 }, { rootMargin: "-45% 0px -50% 0px" });
 
-sections.forEach(section => sectionObserver.observe(section));
+document.querySelectorAll("main section[id]").forEach(section => sectionObserver.observe(section));
 
 // ===== Reveal on scroll =====
 const revealTargets = document.querySelectorAll(
-  ".section-title, .section-intro, .quest-steps li, .class-card, .team-card, .gallery-item, .calendar, .contact-form, .stats-form, .results"
+  ".section-title, .section-intro, .quest-steps li, .class-card, .team-card, .gallery-item, .calendar, .contact-form, .stats-form, .results, .xp-sources li"
 );
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
@@ -124,16 +63,33 @@ if (galleryVideo && !prefersReducedMotion) {
 
 // ===== "Select class" buttons pre-fill the contact form =====
 const subjectSelect = document.getElementById("subject");
-document.querySelectorAll("[data-subject]").forEach(button => {
-  button.addEventListener("click", () => {
-    subjectSelect.value = button.dataset.subject;
-  });
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-subject]");
+  if (button) subjectSelect.value = button.dataset.subject;
 });
+
+// ===== Level system section: swap the call to action when logged in =====
+const levelsCta = document.getElementById("levelsCta");
+
+function renderLevelsCta() {
+  const player = LevelUp.getPlayer();
+  if (!player) {
+    levelsCta.innerHTML = `
+      <button type="button" class="btn btn-primary" data-auth-open="signup">Create your player</button>
+      <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>`;
+    return;
+  }
+  const p = LevelUp.progress(player.xp);
+  levelsCta.innerHTML = `
+    <a href="profile.html" class="btn btn-primary">Open your profile ▶</a>
+    <span class="levels-status">${LevelUp.esc(player.name)} · LVL ${p.level} ${p.rank.title}</span>`;
+}
 
 // ===== Stats calculator: BMI, BMR, calories & meal plan =====
 const statsForm = document.getElementById("statsForm");
 const statsError = document.getElementById("statsError");
 const results = document.getElementById("results");
+let lastStats = null;
 
 function bmiCategory(bmi) {
   if (bmi < 18.5) return { label: "Underweight", warn: true };
@@ -149,6 +105,30 @@ const mealPlans = {
 };
 
 const goalLabels = { lose: "Lose fat", maintain: "Maintain", gain: "Build muscle" };
+
+// Save-to-profile block under the results
+function renderSaveBlock() {
+  const slot = document.getElementById("saveStats");
+  if (!slot) return;
+  const player = LevelUp.getPlayer();
+  if (!player) {
+    slot.innerHTML = `
+      <p>Log in to save these stats to your profile and earn XP.</p>
+      <button type="button" class="btn btn-small" data-auth-open="login">Log in to save</button>`;
+  } else if (slot.dataset.saved === "true") {
+    slot.innerHTML = `<p>✓ Saved to your profile. <a href="profile.html" class="text-link">View your stats</a></p>`;
+  } else {
+    const firstTime = !player.achievements.stats_saved;
+    slot.innerHTML = `
+      <p>Track your progress over time on your profile.</p>
+      <button type="button" class="btn btn-small btn-primary" id="saveStatsBtn">Save to profile${firstTime ? " · +25 XP" : ""}</button>`;
+    document.getElementById("saveStatsBtn").addEventListener("click", () => {
+      LevelUp.saveBodyStats(lastStats);
+      slot.dataset.saved = "true";
+      renderSaveBlock();
+    });
+  }
+}
 
 statsForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -181,6 +161,15 @@ statsForm.addEventListener("submit", (event) => {
   const proteinPerKg = { lose: 2.0, maintain: 1.6, gain: 1.8 }[goal];
   const protein = weight * proteinPerKg;
 
+  lastStats = {
+    weight, height, age, sex: gender, goal,
+    bmi: Math.round(bmi * 10) / 10,
+    bmr: Math.round(bmr),
+    maintenance: Math.round(maintenance),
+    target: Math.round(target),
+    protein: Math.round(protein)
+  };
+
   const meals = mealPlans[goal];
   const round = (n) => Math.round(n).toLocaleString("en-US");
 
@@ -208,6 +197,7 @@ statsForm.addEventListener("submit", (event) => {
         <span class="tile-note">~${round(protein)} g protein</span>
       </div>
     </div>
+    <div class="save-stats" id="saveStats"></div>
     <h3>Starter meal plan 🍽️</h3>
     <ul class="meal-list">
       <li><b>Breakfast</b><span>${meals[0]}</span></li>
@@ -217,13 +207,13 @@ statsForm.addEventListener("submit", (event) => {
     </ul>
     <p class="results-note">These are estimates. Want a plan built for you? <a href="#contact" class="text-link" data-subject="Customized Meal Plans">Ask for a custom meal plan</a>.</p>
   `;
-
-  results.querySelector("[data-subject]").addEventListener("click", () => {
-    subjectSelect.value = "Customized Meal Plans";
-  });
+  renderSaveBlock();
 
   if (window.innerWidth < 960) results.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-// ===== Footer year =====
-document.getElementById("year").textContent = new Date().getFullYear();
+document.addEventListener("levelup:change", () => {
+  renderLevelsCta();
+  renderSaveBlock();
+});
+renderLevelsCta();
