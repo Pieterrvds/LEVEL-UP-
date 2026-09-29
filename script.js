@@ -16,11 +16,6 @@ setInterval(() => {
   }, prefersReducedMotion ? 0 : 250);
 }, 2200);
 
-// ===== Player card stat bars =====
-window.addEventListener("load", () => {
-  document.querySelector(".player-card")?.classList.add("ready");
-});
-
 // ===== Active nav link =====
 const navLinks = document.querySelectorAll('#nav a[href^="#"]');
 const sectionObserver = new IntersectionObserver((entries) => {
@@ -122,10 +117,19 @@ function renderSaveBlock() {
     slot.innerHTML = `
       <p>Track your progress over time on your profile.</p>
       <button type="button" class="btn btn-small btn-primary" id="saveStatsBtn">Save to profile${firstTime ? " · +25 XP" : ""}</button>`;
-    document.getElementById("saveStatsBtn").addEventListener("click", () => {
-      LevelUp.saveBodyStats(lastStats);
-      slot.dataset.saved = "true";
-      renderSaveBlock();
+    const button = document.getElementById("saveStatsBtn");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Saving…";
+      try {
+        await LevelUp.saveBodyStats(lastStats);
+        slot.dataset.saved = "true";
+        renderSaveBlock();
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = "Try again";
+        LevelUp.toast({ title: "Not saved", text: err.message, icon: "!", tone: "gold" });
+      }
     });
   }
 }

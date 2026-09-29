@@ -30,8 +30,8 @@ const slotLabel = (b) => {
 };
 
 // ---------- Data ----------
-function loadData() {
-  const { players, bookings } = LevelUp.adminData();
+async function loadData() {
+  const { players, bookings } = await LevelUp.adminData();
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -68,12 +68,28 @@ function renderGate(kind) {
 }
 
 // ---------- Layout ----------
-function render() {
+let loading = null;
+
+async function render() {
+  if (!LevelUp.isReady()) {
+    root.innerHTML = `<p class="board-message">Loading the console…</p>`;
+    return;
+  }
   const player = LevelUp.getPlayer();
   if (!player) return renderGate("login");
   if (!LevelUp.isAdmin()) return renderGate("denied");
 
-  data = loadData();
+  if (!data) root.innerHTML = `<p class="board-message">Loading members and bookings…</p>`;
+  // Only one load at a time; the latest change wins
+  const current = (loading = loadData());
+  try {
+    const fresh = await current;
+    if (current !== loading) return;
+    data = fresh;
+  } catch (err) {
+    root.innerHTML = `<section class="no-save pixel-frame"><p class="section-kicker">Server error</p><h1 class="section-title">Can't load data</h1><p>${esc(err.message)}</p></section>`;
+    return;
+  }
   root.innerHTML = `
     <header class="admin-head">
       <div>
@@ -81,7 +97,7 @@ function render() {
         <h1 class="section-title">Admin dashboard</h1>
         <p class="muted">Members, bookings and trainers at a glance.</p>
       </div>
-      <p class="data-note"><strong>Data source: this browser.</strong> Until the site is connected to an online database, this dashboard only shows profiles and bookings made on this device. Bookings from other devices reach you by email.</p>
+      <p class="data-note"><strong>Live data</strong> from the LEVEL-UP server. Schedule: ${LevelUp.calendarStatus() === "ok" ? "open hours come from the Google Calendar." : "the Google Calendar couldn't be read, so the fallback hours are used."}</p>
     </header>
 
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
@@ -613,7 +629,7 @@ function renderBookings() {
     return;
   }
   el.innerHTML = tableView(
-    ["When", "Trainer", "Player", "Note", "Booked on"],
+    ["When", "Trainer", "Player", "Note", "Booked on", ""],
     list.map((b) => {
       const t = LevelUp.trainerById(b.trainerId);
       return [
@@ -621,7 +637,8 @@ function renderBookings() {
         `<span class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.short)}</span>`,
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
-        `<span class="nowrap">${fmtDate(b.createdAt)}</span>`
+        `<span class="nowrap">${fmtDate(b.createdAt)}</span>`,
+        isUpcoming(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-cancel="${b.id}">Cancel</button>` : ""
       ];
     })
   );
@@ -733,6 +750,17 @@ root.addEventListener("click", (event) => {
     state.bookingTrainer = trainer.dataset.bookingTrainer;
     root.querySelectorAll("[data-booking-trainer]").forEach((b) => b.setAttribute("aria-selected", String(b === trainer)));
     renderBookings();
+    return;
+  }
+  const cancel = event.target.closest("[data-admin-cancel]");
+  if (cancel) {
+    const b = data.bookings.find((x) => x.id === cancel.dataset.adminCancel);
+    if (!b || !confirm(`Cancel ${b.name}'s session with ${LevelUp.trainerById(b.trainerId).short} on ${slotLabel(b)}? Their XP for it is removed and they get an email.`)) return;
+    cancel.disabled = true;
+    LevelUp.cancelBooking(b.id).catch((err) => {
+      cancel.disabled = false;
+      alert(err.message);
+    });
     return;
   }
   const member = event.target.closest("[data-member]");

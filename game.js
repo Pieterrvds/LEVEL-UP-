@@ -1,50 +1,47 @@
 /* =========================================================
    LEVEL-UP game core
-   Player profiles, XP, levels, achievements, the shared HUD,
-   the login dialog and toasts. Loaded on every page.
+   Player accounts (Supabase), XP, levels, achievements, bookings,
+   the Google Calendar schedule, the shared HUD, login dialog and
+   toasts. Loaded on every page, after the Supabase client.
 
-   Save files are stored in this browser (localStorage), so a
-   profile lives on the device where it was created. All access
-   goes through this module, so it can later be swapped for a
-   real backend (e.g. Firebase) without touching the pages.
+   The database rules live in supabase/schema.sql: XP is awarded
+   on the server, players only read their own data and only admins
+   can see everything.
    ========================================================= */
 
 const LevelUp = (() => {
-  const KEYS = {
-    accounts: "levelup.accounts.v1",
-    session: "levelup.session.v1",
-    guestOrders: "levelup.guestOrders.v1",
-    bookings: "levelup.bookings.v1"
-  };
+  const SUPABASE_URL = "https://zdwlihbsmqiggpyensxc.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_sG2smuMtYS_T5Xz1HAPOMA_p70i8nJX"; // public key, safe in the browser
 
   const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
-  const SESSION_XP = 75;          // client XP per booked session
+  const GUEST_ORDERS_KEY = "levelup.guestOrders.v2";
+
+  // Keep these in sync with app_config in supabase/schema.sql
+  const SESSION_XP = 75;
+  const BOOKING_WEEKS_AHEAD = 4;
+  const BOOKING_NOTICE_HOURS = 12;
   const TRAINER_SESSION_XP = 100; // trainer XP per session
   const TRAINER_CLIENT_XP = 50;   // trainer XP per unique client
-  const BOOKING_WEEKS_AHEAD = 4;
-  const BOOKING_NOTICE_HOURS = 12; // how long before a session it must be booked
-
-  // Accounts with access to the admin dashboard
-  const ADMIN_EMAILS = ["pieterv-d-s@hotmail.com"];
-
   const XP_PER_EURO = 10;
   const WORKOUT_XP_DAILY_LIMIT = 3;
 
-  const RANKS = [
-    { level: 1, title: "Rookie" },
-    { level: 3, title: "Trainee" },
-    { level: 5, title: "Athlete" },
-    { level: 8, title: "Warrior" },
-    { level: 12, title: "Champion" },
-    { level: 16, title: "Legend" }
-  ];
-
-  // Personal trainers and the hours they are open for 1-hour sessions.
-  // availability: { weekday: [startHour, endHour] }, weekday 0 = Sunday … 6 = Saturday.
-  // stats: sessions/clients from before the online schedule, added to their level.
-  // color: identity on the site; chartColor: the same hue stepped for charts on the
-  // dark surface (validated for colour-blind separation). Next slots: #d95926, #199e70.
+  // Personal trainers. Open hours come from the Google Calendar (events such
+  // as "Filip available"); `availability` is only used while a trainer has no
+  // such events. { weekday: [startHour, endHour] }, weekday 0 = Sunday.
+  // color: identity on the site; chartColor: the same hue for charts on the
+  // dark surface (the three are validated together for colour-blind readers).
   const TRAINERS = [
+    {
+      id: "pieter",
+      name: "Pieter Van den Spiegel",
+      short: "Pieter",
+      role: "Head coach",
+      img: "img/pf.jpg",
+      color: "#ff7eb6",
+      chartColor: "#d55181",
+      availability: {},
+      stats: { sessions: 0, clients: 0 }
+    },
     {
       id: "filip",
       name: "Filip De Meyst",
@@ -67,6 +64,15 @@ const LevelUp = (() => {
       availability: { 0: [9, 18] }, // all day Sunday
       stats: { sessions: 0, clients: 0 }
     }
+  ];
+
+  const RANKS = [
+    { level: 1, title: "Rookie" },
+    { level: 3, title: "Trainee" },
+    { level: 5, title: "Athlete" },
+    { level: 8, title: "Warrior" },
+    { level: 12, title: "Champion" },
+    { level: 16, title: "Legend" }
   ];
 
   const ITEMS = [
@@ -133,7 +139,7 @@ const LevelUp = (() => {
   ];
 
   // ---------- Helpers ----------
-  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => (
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
 
@@ -147,16 +153,7 @@ const LevelUp = (() => {
   }
 
   function write(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function remove(key) {
-    try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
   }
 
   const pad = (n) => String(n).padStart(2, "0");
@@ -167,8 +164,28 @@ const LevelUp = (() => {
   function startOfWeek(offset = 0, from = new Date()) {
     return new Date(from.getFullYear(), from.getMonth(), from.getDate() - ((from.getDay() + 6) % 7) + offset * 7);
   }
-  const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const normaliseEmail = (email) => String(email || "").trim().toLowerCase();
+
+  function parseDate(key) {
+    const [y, m, d] = String(key).slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  const slotStart = (key, hour) => {
+    const d = parseDate(key);
+    d.setHours(hour, 0, 0, 0);
+    return d;
+  };
+
+  const formatSlot = (key, hour) =>
+    `${parseDate(key).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}, ${pad(hour)}:00–${pad(hour + 1)}:00`;
+
+  // Turns database errors into messages a player can act on
+  function friendly(error, fallback = "Something went wrong. Please try again.") {
+    const msg = error?.message || String(error || "");
+    if (/failed to fetch|network/i.test(msg)) return "Can't reach the server. Check your connection and try again.";
+    if (/could not find the function|schema cache/i.test(msg)) return "The LEVEL-UP server isn't set up yet. Please try again later.";
+    return msg || fallback;
+  }
 
   // ---------- Levels ----------
   // Total XP needed to reach a level: L2 = 100, L3 = 300, L4 = 600, L5 = 1000 …
@@ -199,342 +216,252 @@ const LevelUp = (() => {
     };
   }
 
-  // ---------- Accounts ----------
-  async function hashPassword(password, salt) {
-    const data = new TextEncoder().encode(`${salt}:${password}`);
-    if (window.crypto && crypto.subtle) {
-      return toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", data)));
-    }
-    // Fallback for non-secure contexts
-    let hash = 0;
-    for (const byte of data) hash = (hash * 31 + byte) >>> 0;
-    return `f${hash.toString(16)}`;
-  }
-
-  function randomSalt() {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    return toHex(bytes);
-  }
-
-  const currentEmail = () => read(KEYS.session, null);
-
-  function getPlayer() {
-    const email = currentEmail();
-    if (!email) return null;
-    return read(KEYS.accounts, {})[email] || null;
-  }
-
-  const isAdmin = (player = getPlayer()) => Boolean(player && ADMIN_EMAILS.includes(player.email));
-
-  // Admin only: every player (without password data) and every booking
-  function adminData() {
-    if (!isAdmin()) throw new Error("Admin access only.");
-    const players = Object.values(read(KEYS.accounts, {})).map(({ salt, hash, ...player }) => ({
-      ...player,
-      admin: ADMIN_EMAILS.includes(player.email)
-    }));
-    return { players, bookings: getBookings() };
-  }
-
-  async function signUp({ name, email, password }) {
-    name = String(name || "").trim();
-    email = normaliseEmail(email);
-    if (!name) throw new Error("Choose a player name.");
-    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
-    if (!password || password.length < 6) throw new Error("Your password needs at least 6 characters.");
-
-    const accounts = read(KEYS.accounts, {});
-    if (accounts[email]) throw new Error("A player with this email already exists on this device. Log in instead.");
-
-    const salt = randomSalt();
-    accounts[email] = {
-      name: name.slice(0, 24),
-      email,
-      salt,
-      hash: await hashPassword(password, salt),
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
-      xp: 0,
-      xpLog: [],
-      achievements: {},
-      workouts: [],
-      bodyStats: [],
-      purchases: [],
-      inventory: {}
-    };
-
-    if (!write(KEYS.accounts, accounts)) {
-      throw new Error("Your browser blocked saving the profile (private mode?). Try a normal window.");
-    }
-    write(KEYS.session, email);
-    mutate((player, game) => game.unlock("new_player"));
-    claimGuestOrders();
-    return getPlayer();
-  }
-
-  async function logIn({ email, password }) {
-    email = normaliseEmail(email);
-    const player = read(KEYS.accounts, {})[email];
-    if (!player || (await hashPassword(password || "", player.salt)) !== player.hash) {
-      throw new Error("Wrong email or password. New here? Create a new player.");
-    }
-    write(KEYS.session, email);
-    const accounts = read(KEYS.accounts, {});
-    accounts[email].lastLogin = new Date().toISOString();
-    write(KEYS.accounts, accounts);
-    claimGuestOrders();
-    emit();
-    toast({ title: "Welcome back", text: `${player.name} · LVL ${levelFromXp(player.xp)}` });
-    return getPlayer();
-  }
-
-  function logOut() {
-    remove(KEYS.session);
-    emit();
-  }
-
-  function deleteProfile() {
-    const email = currentEmail();
-    if (!email) return;
-    const accounts = read(KEYS.accounts, {});
-    delete accounts[email];
-    write(KEYS.accounts, accounts);
-    remove(KEYS.session);
-    emit();
-  }
-
-  // Apply a change to the logged-in player, then check achievements,
-  // save, announce XP / level ups and notify the page.
-  function mutate(change) {
-    const email = currentEmail();
-    const accounts = read(KEYS.accounts, {});
-    const player = email && accounts[email];
-    if (!player) return null;
-
-    const startLevel = levelFromXp(player.xp);
-    const events = [];
-    const game = {
-      grant(amount, reason) {
-        amount = Math.round(amount);
-        if (amount <= 0) return;
-        player.xp += amount;
-        player.xpLog.unshift({ date: new Date().toISOString(), amount, reason });
-        player.xpLog = player.xpLog.slice(0, 50);
-        events.push({ type: "xp", amount, reason });
-      },
-      revoke(amount, reason) {
-        amount = Math.min(Math.round(amount), player.xp);
-        if (amount <= 0) return;
-        player.xp -= amount;
-        player.xpLog.unshift({ date: new Date().toISOString(), amount: -amount, reason });
-        player.xpLog = player.xpLog.slice(0, 50);
-        events.push({ type: "xp", amount: -amount, reason });
-      },
-      unlock(id) {
-        if (player.achievements[id]) return;
-        const achievement = ACHIEVEMENTS.find((a) => a.id === id);
-        if (!achievement) return;
-        player.achievements[id] = new Date().toISOString();
-        events.push({ type: "achievement", achievement });
-        player.xp += achievement.xp;
-        player.xpLog.unshift({ date: new Date().toISOString(), amount: achievement.xp, reason: `Achievement: ${achievement.title}` });
-      }
-    };
-
-    const result = change(player, game);
-    checkAchievements(player, game);
-
-    accounts[email] = player;
-    write(KEYS.accounts, accounts);
-    announce(events, startLevel, levelFromXp(player.xp));
-    emit();
-    return result;
-  }
-
-  function checkAchievements(player, game) {
-    const owns = (id) => (player.inventory[id] || 0) > 0;
-    const workouts = player.workouts.length;
-    if (player.bodyStats.length) game.unlock("stats_saved");
-    if (workouts >= 1) game.unlock("first_rep");
-    if (workouts >= 10) game.unlock("workouts_10");
-    if (workouts >= 50) game.unlock("workouts_50");
-    if ((player.sessionsBooked || 0) >= 1) game.unlock("first_session");
-    if ((player.sessionsBooked || 0) >= 5) game.unlock("sessions_5");
-    if (player.purchases.length) game.unlock("first_loot");
-    if (owns("tshirt") && owns("hoodie")) game.unlock("full_drip");
-    if (owns("parallettes") && owns("bands")) game.unlock("home_gym");
-    if (ITEMS.every((item) => owns(item.id))) game.unlock("collector");
-  }
-
-  // ---------- Game actions ----------
-  function workoutXp(minutes) {
-    return 30 + Math.min(30, Math.floor((Number(minutes) || 0) / 10) * 5);
-  }
-
-  function logWorkout({ type, minutes }) {
-    minutes = Math.max(5, Math.min(300, Math.round(Number(minutes) || 0)));
-    return mutate((player, game) => {
-      const date = dateKey();
-      const rewardedToday = player.workouts.filter((w) => w.date === date && w.xp > 0).length;
-      const xp = rewardedToday < WORKOUT_XP_DAILY_LIMIT ? workoutXp(minutes) : 0;
-      player.workouts.unshift({ date, type, minutes, xp });
-      player.workouts = player.workouts.slice(0, 500);
-      game.grant(xp, `Workout: ${type}`);
-      return { xp, limitReached: xp === 0 };
-    });
-  }
-
-  function saveBodyStats(stats) {
-    return mutate((player) => {
-      player.bodyStats.unshift({ date: dateKey(), ...stats });
-      player.bodyStats = player.bodyStats.slice(0, 30);
-      return true;
-    });
-  }
-
   const orderXp = (total) => Math.round(total * XP_PER_EURO);
+  const workoutXp = (minutes) => 30 + Math.min(30, Math.floor((Number(minutes) || 0) / 10) * 5);
 
-  // Records a paid order. Guests' orders are kept on this device and
-  // credited as soon as they log in or create a profile.
-  function recordPurchase(order) {
-    const xp = orderXp(order.total);
-    if (!getPlayer()) {
-      const guestOrders = read(KEYS.guestOrders, []);
-      guestOrders.push(order);
-      write(KEYS.guestOrders, guestOrders);
-      return { guest: true, xp };
+  // ---------- Supabase ----------
+  const sb = window.supabase?.createClient
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      })
+    : null;
+
+  let session = null;
+  let player = null;
+  let isReady = false;
+  let serverError = "";
+  let slots = new Map();      // "trainer|date|hour" -> booking id when it's yours, else null
+  let trainerCounts = {};     // trainer id -> { sessions, clients }
+
+  async function call(fn, args) {
+    if (!sb) throw new Error("Can't reach the server. Check your connection and try again.");
+    const { data, error } = await sb.rpc(fn, args);
+    if (error) throw new Error(friendly(error));
+    return data;
+  }
+
+  // Player data comes back from the database in the shape the pages use
+  function normalisePlayer(data) {
+    if (!data) return null;
+    return {
+      ...data,
+      xp: Number(data.xp) || 0,
+      sessionsBooked: Number(data.sessionsBooked) || 0,
+      inventory: data.inventory || {},
+      achievements: data.achievements || {},
+      xpLog: data.xpLog || [],
+      workouts: data.workouts || [],
+      bodyStats: (data.bodyStats || []).map((s) => ({ ...s, weight: Number(s.weight), height: Number(s.height), bmi: Number(s.bmi) })),
+      purchases: (data.purchases || []).map((o) => ({ ...o, total: Number(o.total) })),
+      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) }))
+    };
+  }
+
+  async function refreshPlayer({ announce = false } = {}) {
+    if (!session) {
+      player = null;
+      return null;
     }
+    const before = player;
+    try {
+      player = normalisePlayer(await call("my_data"));
+      serverError = "";
+    } catch (err) {
+      serverError = err.message;
+      console.error("Loading player failed:", err);
+    }
+    if (announce && before && player) announceDiff(before, player);
+    return player;
+  }
 
-    const before = levelFromXp(getPlayer().xp);
-    mutate((player, game) => {
-      if (player.purchases.some((p) => p.id === order.id)) return;
-      player.purchases.unshift(order);
-      order.items.forEach((item) => {
-        player.inventory[item.id] = (player.inventory[item.id] || 0) + item.qty;
+  async function loadSlots() {
+    try {
+      const rows = await call("slot_status", {
+        p_from: dateKey(startOfWeek(0)),
+        p_to: dateKey(startOfWeek(BOOKING_WEEKS_AHEAD))
       });
-      game.grant(xp, `Order ${order.id.slice(-6)}`);
+      slots = new Map((rows || []).map((r) => [`${r.trainer_id}|${r.day}|${r.hour}`, r.booking_id || null]));
+    } catch (err) {
+      serverError = err.message;
+      console.error("Loading the schedule failed:", err);
+    }
+  }
+
+  async function loadTrainerStats() {
+    try {
+      const rows = await call("trainer_stats");
+      trainerCounts = Object.fromEntries((rows || []).map((r) => [r.trainer_id, { sessions: Number(r.sessions), clients: Number(r.clients) }]));
+    } catch (err) {
+      console.error("Loading trainer stats failed:", err);
+    }
+  }
+
+  // ---------- Google Calendar ----------
+  // Event titles decide what an event means:
+  //  "Filip available" / "Maxim beschikbaar"  → bookable hours for that trainer
+  //  a title with "group" / "groep"            → group session, shown on the board
+  //  anything else                             → busy time (title never shown). It blocks
+  //                                              the trainer named in it, or Pieter when no
+  //                                              trainer is named (it's his calendar).
+  const calendar = { status: "idle", availability: {}, hasAvailability: {}, blocked: {}, groups: [] };
+  const AVAILABLE_RE = /\b(available|availability|beschikbaar|vrij|open)\b/i;
+  const GROUP_RE = /group|groep/i;
+
+  const trainerInTitle = (title) =>
+    TRAINERS.find((t) => new RegExp(`\\b${t.short}\\b`, "i").test(title));
+
+  function addHours(map, trainerId, start, end, allDay) {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (cursor < end) {
+      const key = dateKey(cursor);
+      for (let h = 0; h < 24; h++) {
+        const from = new Date(cursor); from.setHours(h, 0, 0, 0);
+        const to = new Date(cursor); to.setHours(h + 1, 0, 0, 0);
+        const inside = allDay || (map === calendar.availability ? from >= start && to <= end : from < end && to > start);
+        if (!inside) continue;
+        ((map[trainerId] ||= {})[key] ||= new Set()).add(h);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  function parseCalendar(ics) {
+    const from = startOfWeek(0);
+    const to = startOfWeek(BOOKING_WEEKS_AHEAD);
+    const root = new ICAL.Component(ICAL.parse(ics));
+    root.getAllSubcomponents("vtimezone").forEach((vtz) => {
+      const tz = new ICAL.Timezone(vtz);
+      if (!ICAL.TimezoneService.has(tz.tzid)) ICAL.TimezoneService.register(tz.tzid, tz);
     });
-    return { guest: false, xp, levelBefore: before, levelAfter: levelFromXp(getPlayer().xp) };
+
+    const vevents = root.getAllSubcomponents("vevent");
+    const exceptions = vevents.filter((v) => v.hasProperty("recurrence-id"));
+    const occurrences = [];
+
+    vevents.filter((v) => !v.hasProperty("recurrence-id")).forEach((v) => {
+      const event = new ICAL.Event(v);
+      exceptions.filter((x) => x.getFirstPropertyValue("uid") === event.uid).forEach((x) => event.relateException(x));
+      if (event.isRecurring()) {
+        const it = event.iterator();
+        let next;
+        let guard = 0;
+        while ((next = it.next()) && guard++ < 5000) {
+          const d = event.getOccurrenceDetails(next);
+          const start = d.startDate.toJSDate();
+          if (start >= to) break;
+          const end = d.endDate.toJSDate();
+          if (end > from) occurrences.push({ title: d.item.summary || "", location: d.item.location || "", start, end, allDay: d.startDate.isDate });
+        }
+      } else if (event.startDate) {
+        const start = event.startDate.toJSDate();
+        const end = event.endDate ? event.endDate.toJSDate() : new Date(start.getTime() + 3600e3);
+        if (end > from && start < to) occurrences.push({ title: event.summary || "", location: event.location || "", start, end, allDay: event.startDate.isDate });
+      }
+    });
+
+    calendar.availability = {};
+    calendar.hasAvailability = {};
+    calendar.blocked = {};
+    calendar.groups = [];
+    occurrences.forEach((ev) => {
+      const trainer = trainerInTitle(ev.title);
+      if (trainer && AVAILABLE_RE.test(ev.title) && !ev.allDay) {
+        calendar.hasAvailability[trainer.id] = true;
+        addHours(calendar.availability, trainer.id, ev.start, ev.end, false);
+        return;
+      }
+      if (GROUP_RE.test(ev.title) && !ev.allDay) {
+        calendar.groups.push({ title: ev.title.trim(), location: ev.location.split(",")[0].trim(), start: ev.start, end: ev.end });
+      }
+      addHours(calendar.blocked, (trainer || TRAINERS[0]).id, ev.start, ev.end, ev.allDay);
+    });
+    calendar.groups.sort((a, b) => a.start - b.start);
   }
 
-  function claimGuestOrders() {
-    const guestOrders = read(KEYS.guestOrders, []);
-    if (!guestOrders.length || !getPlayer()) return;
-    remove(KEYS.guestOrders);
-    guestOrders.forEach(recordPurchase);
+  async function loadCalendar() {
+    if (!window.ICAL) return;
+    try {
+      const ics = await call("calendar_feed");
+      if (ics) {
+        parseCalendar(ics);
+        calendar.status = "ok";
+      } else {
+        calendar.status = "fallback";
+      }
+    } catch (err) {
+      calendar.status = "fallback";
+      console.error("Loading the calendar failed:", err);
+    }
   }
 
-  // ---------- Trainers & bookings ----------
+  // Bookable hours of a trainer on a date: calendar availability (or the
+  // fallback hours) minus anything else in the trainer's calendar
+  function trainerHours(trainerId, key) {
+    const trainer = trainerById(trainerId);
+    if (!trainer) return [];
+    let hours;
+    if (calendar.hasAvailability[trainerId]) {
+      hours = [...(calendar.availability[trainerId]?.[key] || [])];
+    } else {
+      const range = trainer.availability[parseDate(key).getDay()];
+      hours = [];
+      if (range) for (let h = range[0]; h < range[1]; h++) hours.push(h);
+    }
+    const blocked = calendar.blocked[trainerId]?.[key];
+    return hours.filter((h) => !blocked || !blocked.has(h)).sort((a, b) => a - b);
+  }
+
+  const groupSessions = (key) => calendar.groups.filter((g) => dateKey(g.start) === key);
+
+  // ---------- Bookings ----------
   const trainerById = (id) => TRAINERS.find((t) => t.id === id);
-  const getBookings = () => read(KEYS.bookings, []);
 
-  function parseDate(key) {
-    const [y, m, d] = key.split("-").map(Number);
-    return new Date(y, m - 1, d);
+  // null when free, otherwise { id (only when it's yours), mine }
+  function findBooking(trainerId, key, hour) {
+    const k = `${trainerId}|${key}|${hour}`;
+    if (!slots.has(k)) return null;
+    const id = slots.get(k);
+    return { id, mine: Boolean(id) };
   }
-
-  // Hours a trainer is open on a given date (YYYY-MM-DD)
-  function trainerHours(trainerId, dateKey) {
-    const range = trainerById(trainerId)?.availability[parseDate(dateKey).getDay()];
-    if (!range) return [];
-    const hours = [];
-    for (let h = range[0]; h < range[1]; h++) hours.push(h);
-    return hours;
-  }
-
-  const findBooking = (trainerId, dateKey, hour) =>
-    getBookings().find((b) => b.trainerId === trainerId && b.date === dateKey && b.hour === hour);
-
-  const slotStart = (dateKey, hour) => {
-    const d = parseDate(dateKey);
-    d.setHours(hour, 0, 0, 0);
-    return d;
-  };
 
   // Why a slot can't be booked right now, or null when it can
-  function slotBlocker(dateKeyValue, hour, now = new Date()) {
-    const start = slotStart(dateKeyValue, hour);
+  function slotBlocker(key, hour, now = new Date()) {
+    const start = slotStart(key, hour);
     if (start <= now) return "past";
-    if (start - now < BOOKING_NOTICE_HOURS * 3600 * 1000) return "notice";
+    if (start - now < BOOKING_NOTICE_HOURS * 3600e3) return "notice";
     if (start >= startOfWeek(BOOKING_WEEKS_AHEAD, now)) return "horizon";
     return null;
   }
 
-  function bookSession({ trainerId, date, hour, note = "" }) {
-    const player = getPlayer();
+  async function bookSession({ trainerId, date, hour, note = "" }) {
     if (!player) throw new Error("Log in to book a session.");
-    const trainer = trainerById(trainerId);
-    if (!trainer || !trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
-    const blocker = slotBlocker(date, hour);
-    if (blocker === "past") throw new Error("This time slot has already passed.");
-    if (blocker === "notice") throw new Error(`Sessions must be booked at least ${BOOKING_NOTICE_HOURS} hours in advance.`);
-    if (blocker === "horizon") throw new Error(`You can book up to ${BOOKING_WEEKS_AHEAD} weeks ahead.`);
-    const bookings = getBookings();
-    if (bookings.some((b) => b.trainerId === trainerId && b.date === date && b.hour === hour)) {
-      throw new Error("Someone just booked this slot. Pick another hour.");
-    }
-    if (bookings.some((b) => b.email === player.email && b.date === date && b.hour === hour)) {
-      throw new Error("You already have a session at this time.");
-    }
-
-    const booking = {
-      id: `bk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      trainerId,
-      date,
-      hour,
-      note: String(note).slice(0, 300),
-      email: player.email,
-      name: player.name,
-      xp: SESSION_XP,
-      createdAt: new Date().toISOString()
-    };
-    bookings.push(booking);
-    write(KEYS.bookings, bookings);
-
-    mutate((p, game) => {
-      p.sessionsBooked = (p.sessionsBooked || 0) + 1;
-      game.grant(SESSION_XP, `Session with ${trainer.short}`);
-    });
-    notifyBooking(booking, "booked");
+    if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
+    const booking = await call("book_session", { p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300) });
+    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour), name: player?.name, email: player?.email }, "booked");
+    emit();
     return booking;
   }
 
-  function cancelBooking(id) {
-    const player = getPlayer();
-    const bookings = getBookings();
-    const booking = bookings.find((b) => b.id === id);
-    if (!player || !booking || booking.email !== player.email) throw new Error("Booking not found.");
-    if (slotStart(booking.date, booking.hour) <= new Date()) throw new Error("This session has already started.");
-
-    write(KEYS.bookings, bookings.filter((b) => b.id !== id));
-    mutate((p, game) => {
-      p.sessionsBooked = Math.max(0, (p.sessionsBooked || 0) - 1);
-      game.revoke(booking.xp || SESSION_XP, `Cancelled session with ${trainerById(booking.trainerId).short}`);
-    });
-    notifyBooking(booking, "cancelled");
+  async function cancelBooking(id) {
+    const booking = await call("cancel_booking", { p_id: id });
+    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, "cancelled");
+    emit();
+    return booking;
   }
 
-  const playerBookings = () => {
-    const player = getPlayer();
-    if (!player) return [];
-    return getBookings()
-      .filter((b) => b.email === player.email)
-      .sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour));
-  };
+  const playerBookings = () =>
+    (player?.bookings || []).slice().sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour));
 
   // Trainers level up with every session and every unique client
   function trainerStats(trainerId) {
     const trainer = trainerById(trainerId);
-    const bookings = getBookings().filter((b) => b.trainerId === trainerId);
-    const sessions = trainer.stats.sessions + bookings.length;
-    const clients = trainer.stats.clients + new Set(bookings.map((b) => b.email)).size;
-    const xp = sessions * TRAINER_SESSION_XP + clients * TRAINER_CLIENT_XP;
-    return { sessions, clients, ...progress(xp) };
+    const counts = trainerCounts[trainerId] || { sessions: 0, clients: 0 };
+    const sessions = trainer.stats.sessions + counts.sessions;
+    const clients = trainer.stats.clients + counts.clients;
+    return { sessions, clients, ...progress(sessions * TRAINER_SESSION_XP + clients * TRAINER_CLIENT_XP) };
   }
-
-  const formatSlot = (dateKey, hour) =>
-    `${parseDate(dateKey).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}, ${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`;
 
   // Emails the booking to the LEVEL-UP inbox; the client gets an automatic confirmation.
   function notifyBooking(booking, action) {
@@ -561,16 +488,194 @@ const LevelUp = (() => {
     }).catch((error) => console.error("Booking email failed:", error));
   }
 
+  // Link that adds a session to the visitor's own Google Calendar
+  function googleCalendarLink({ trainerId, date, hour }) {
+    const trainer = trainerById(trainerId);
+    const stamp = (h) => `${String(date).replace(/-/g, "")}T${pad(h)}0000`;
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: `LEVEL-UP session with ${trainer.short}`,
+      dates: `${stamp(hour)}/${stamp(hour + 1)}`,
+      ctz: "Europe/Brussels",
+      details: `Personal training with ${trainer.name}. Your trainer contacts you about the location.`
+    });
+    return `https://calendar.google.com/calendar/render?${params}`;
+  }
+
+  // ---------- Player actions ----------
+  const getPlayer = () => player;
+  const isAdmin = (p = player) => Boolean(p?.admin);
+
+  async function logWorkout({ type, minutes }) {
+    const result = await call("log_workout", { p_type: type, p_minutes: Math.round(Number(minutes) || 0) });
+    await refreshPlayer({ announce: true });
+    emit();
+    return result;
+  }
+
+  async function saveBodyStats(stats) {
+    await call("save_body_stats", { p: stats });
+    await refreshPlayer({ announce: true });
+    emit();
+  }
+
+  // Records a paid order. Guests' orders are remembered on this device
+  // and credited as soon as they log in.
+  async function recordPurchase(order) {
+    const levelBefore = player ? levelFromXp(player.xp) : 1;
+    const result = await call("record_order", {
+      p_id: order.id,
+      p_items: order.items.map(({ id, size, qty }) => ({ id, size, qty }))
+    });
+    const xp = Number(result?.xp) || orderXp(order.total);
+    if (!player) {
+      write(GUEST_ORDERS_KEY, [...new Set([...read(GUEST_ORDERS_KEY, []), order.id])]);
+      return { guest: true, xp };
+    }
+    await refreshPlayer({ announce: true });
+    emit();
+    return { guest: false, xp, levelBefore, levelAfter: levelFromXp(player?.xp || 0) };
+  }
+
+  async function claimGuestOrders() {
+    const ids = read(GUEST_ORDERS_KEY, []);
+    if (!ids.length || !session) return;
+    try {
+      const gained = await call("claim_orders", { p_ids: ids });
+      write(GUEST_ORDERS_KEY, []);
+      if (gained > 0) {
+        await refreshPlayer({ announce: true });
+        emit();
+      }
+    } catch (err) {
+      console.error("Claiming orders failed:", err);
+    }
+  }
+
+  async function adminData() {
+    const data = await call("admin_data");
+    return {
+      players: (data.players || []).map(normalisePlayer),
+      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) }))
+    };
+  }
+
+  // ---------- Accounts ----------
+  const pageUrl = (page) => new URL(page, window.location.href).href.split("#")[0];
+
+  async function signUp({ name, email, password }) {
+    name = String(name || "").trim();
+    email = String(email || "").trim().toLowerCase();
+    if (!name) throw new Error("Choose a player name.");
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
+    if (!password || password.length < 6) throw new Error("Your password needs at least 6 characters.");
+    if (!sb) throw new Error(friendly("network"));
+
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { data: { name: name.slice(0, 24) }, emailRedirectTo: pageUrl("profile.html") }
+    });
+    if (error) throw new Error(/registered|exists/i.test(error.message) ? "An account with this email already exists. Log in instead." : friendly(error));
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error("An account with this email already exists. Log in instead.");
+    }
+    return { needsConfirmation: !data.session };
+  }
+
+  async function logIn({ email, password }) {
+    if (!sb) throw new Error(friendly("network"));
+    const { error } = await sb.auth.signInWithPassword({ email: String(email || "").trim().toLowerCase(), password: password || "" });
+    if (error) {
+      if (/confirm/i.test(error.message)) throw new Error("Confirm your email first: click the link we sent you, then log in.");
+      if (/invalid/i.test(error.message)) throw new Error("Wrong email or password. New here? Create a new player.");
+      throw new Error(friendly(error));
+    }
+    // onAuthStateChange loads the player and shows the welcome toast
+  }
+
+  async function logOut() {
+    if (sb) await sb.auth.signOut();
+  }
+
+  async function requestPasswordReset(email) {
+    email = String(email || "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter the email address of your account.");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: pageUrl("profile.html") });
+    if (error) throw new Error(friendly(error));
+  }
+
+  async function updatePassword(password) {
+    if (!password || password.length < 6) throw new Error("Your password needs at least 6 characters.");
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) throw new Error(friendly(error));
+  }
+
+  async function deleteProfile() {
+    await call("delete_my_account");
+    await sb.auth.signOut();
+  }
+
+  let welcomed = false;
+  async function onSession(event, newSession) {
+    const wasLoggedIn = Boolean(session);
+    session = newSession;
+    if (event === "PASSWORD_RECOVERY") openAuth("new-password");
+    if (!session) {
+      player = null;
+      welcomed = false;
+      await loadSlots();
+      emit();
+      return;
+    }
+    if ((event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && player) return;
+    await Promise.all([refreshPlayer(), loadSlots()]);
+    if (!wasLoggedIn && player && !welcomed) {
+      welcomed = true;
+      call("touch_login").catch(() => {});
+      claimGuestOrders();
+      if (event === "SIGNED_IN") {
+        const fresh = Date.now() - new Date(player.createdAt).getTime() < 10 * 60e3 && player.xpLog.length <= 1;
+        toast(fresh
+          ? { title: "Achievement unlocked", text: "New player · +50 XP", icon: "★" }
+          : { title: "Welcome back", text: `${player.name} · LVL ${levelFromXp(player.xp)}` });
+      }
+    }
+    emit();
+  }
+
+  // ---------- Startup ----------
+  const ready = (async () => {
+    if (!sb) {
+      serverError = "offline";
+    } else {
+      try {
+        const { data } = await sb.auth.getSession();
+        session = data.session;
+        await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar()]);
+        if (player) {
+          welcomed = true;
+          call("touch_login").catch(() => {});
+          claimGuestOrders();
+        }
+      } catch (err) {
+        serverError = friendly(err);
+        console.error(err);
+      }
+      sb.auth.onAuthStateChange((event, newSession) => {
+        // Supabase advises not to await other calls inside this callback
+        setTimeout(() => onSession(event, newSession), 0);
+      });
+    }
+    isReady = true;
+    emit();
+  })();
+
   // ---------- Events ----------
   function emit() {
     renderHud();
-    document.dispatchEvent(new CustomEvent("levelup:change", { detail: getPlayer() }));
+    document.dispatchEvent(new CustomEvent("levelup:change", { detail: player }));
   }
-
-  // Keep tabs in sync
-  window.addEventListener("storage", (event) => {
-    if (Object.values(KEYS).includes(event.key)) emit();
-  });
 
   // ---------- Toasts ----------
   const toastQueue = [];
@@ -605,39 +710,47 @@ const LevelUp = (() => {
     }, 2600);
   }
 
-  function announce(events, startLevel, endLevel) {
-    events.forEach((event) => {
-      if (event.type === "achievement") {
-        const a = event.achievement;
-        toast({ title: "Achievement unlocked", text: `${a.title} · +${a.xp} XP`, icon: a.icon });
+  // Toasts for XP gained since the last load (the server writes the XP log)
+  function announceDiff(before, after) {
+    const last = before.xpLog[0];
+    const fresh = [];
+    for (const entry of after.xpLog) {
+      if (last && entry.date === last.date && entry.reason === last.reason && entry.amount === last.amount) break;
+      fresh.push(entry);
+    }
+    fresh.reverse().forEach((entry) => {
+      const achievement = ACHIEVEMENTS.find((a) => `Achievement: ${a.title}` === entry.reason);
+      if (achievement) {
+        toast({ title: "Achievement unlocked", text: `${achievement.title} · +${achievement.xp} XP`, icon: achievement.icon });
+      } else if (entry.amount > 0) {
+        toast({ title: `+${entry.amount} XP`, text: entry.reason, icon: "▲", tone: "green" });
       } else {
-        toast(event.amount > 0
-          ? { title: `+${event.amount} XP`, text: event.reason, icon: "▲", tone: "green" }
-          : { title: `${event.amount} XP`, text: event.reason, icon: "▼", tone: "gold" });
+        toast({ title: `${entry.amount} XP`, text: entry.reason, icon: "▼", tone: "gold" });
       }
     });
+    const startLevel = levelFromXp(before.xp);
+    const endLevel = levelFromXp(after.xp);
     if (endLevel > startLevel) {
       const rank = rankFor(endLevel);
       const rankUp = rankFor(startLevel).title !== rank.title;
-      toast({
-        title: "Level up!",
-        text: rankUp ? `LVL ${endLevel} · New rank: ${rank.title}` : `You reached LVL ${endLevel}`,
-        icon: "⬆"
-      });
+      toast({ title: "Level up!", text: rankUp ? `LVL ${endLevel} · New rank: ${rank.title}` : `You reached LVL ${endLevel}`, icon: "⬆" });
     }
   }
 
   // ---------- HUD (header player chip) ----------
-  function avatarHtml(player, size = "") {
-    const letter = esc((player.name || "?").trim().charAt(0).toUpperCase() || "?");
-    const tier = RANKS.indexOf(rankFor(levelFromXp(player.xp)));
+  function avatarHtml(p, size = "") {
+    const letter = esc((p.name || "?").trim().charAt(0).toUpperCase() || "?");
+    const tier = RANKS.indexOf(rankFor(levelFromXp(p.xp)));
     return `<span class="avatar ${size}" data-tier="${tier}" aria-hidden="true">${letter}</span>`;
   }
 
   function renderHud() {
     const slot = document.getElementById("hudAccount");
     if (!slot) return;
-    const player = getPlayer();
+    if (!isReady) {
+      slot.innerHTML = `<span class="hud-loading" aria-label="Loading">…</span>`;
+      return;
+    }
     if (!player) {
       slot.innerHTML = `<button type="button" class="btn btn-small hud-login" data-auth-open="login">▶ Log in</button>`;
       return;
@@ -652,11 +765,17 @@ const LevelUp = (() => {
         </span>
         <span class="sr-only">Open your profile, level ${p.level}</span>
       </a>
-      ${isAdmin(player) ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
+      ${isAdmin() ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
   }
 
   // ---------- Login dialog ----------
   let dialog;
+  const MODES = {
+    login: { title: "Continue your quest", submit: "Log in ▶" },
+    signup: { title: "Create your player", submit: "Start at LVL 1 ▶" },
+    reset: { title: "Reset your password", submit: "Send reset link ▶" },
+    "new-password": { title: "Choose a new password", submit: "Save password ▶" }
+  };
 
   function buildDialog() {
     dialog = document.createElement("dialog");
@@ -672,16 +791,19 @@ const LevelUp = (() => {
       </div>
       <form class="auth-form" novalidate>
         <label class="signup-only">Player name<input name="name" autocomplete="nickname" maxlength="24"></label>
-        <label>Email<input name="email" type="email" autocomplete="email" required></label>
-        <label>Password<input name="password" type="password" minlength="6" required></label>
+        <label class="email-field">Email<input name="email" type="email" autocomplete="email" required></label>
+        <label class="password-field">Password<input name="password" type="password" minlength="6" required></label>
         <p class="form-error" role="alert"></p>
+        <p class="form-success" role="status"></p>
         <button type="submit" class="btn btn-primary btn-block auth-submit">Log in ▶</button>
+        <button type="button" class="link-btn auth-forgot" data-mode="reset">Forgot your password?</button>
       </form>
-      <p class="auth-note">Your profile is saved in this browser on this device.</p>`;
+      <p class="auth-note">Your account is stored securely on the LEVEL-UP server.</p>`;
     document.body.appendChild(dialog);
 
     const form = dialog.querySelector("form");
     const error = dialog.querySelector(".form-error");
+    const success = dialog.querySelector(".form-success");
 
     dialog.querySelector("[data-close]").addEventListener("click", () => dialog.close());
     dialog.addEventListener("click", (event) => {
@@ -694,14 +816,35 @@ const LevelUp = (() => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       error.textContent = "";
+      success.textContent = "";
       const data = Object.fromEntries(new FormData(form));
       const submit = form.querySelector(".auth-submit");
+      const mode = dialog.dataset.mode;
       submit.disabled = true;
       try {
-        if (dialog.dataset.mode === "signup") await signUp(data);
-        else await logIn(data);
-        form.reset();
-        dialog.close();
+        if (mode === "signup") {
+          const result = await signUp(data);
+          if (result.needsConfirmation) {
+            form.reset();
+            setMode("login");
+            dialog.querySelector(".form-success").textContent =
+              `Almost there! We sent a confirmation link to ${data.email}. Click it, then log in here.`;
+            return;
+          }
+          dialog.close("success");
+        } else if (mode === "reset") {
+          await requestPasswordReset(data.email);
+          success.textContent = "Check your inbox: we sent you a link to choose a new password.";
+        } else if (mode === "new-password") {
+          await updatePassword(data.password);
+          form.reset();
+          dialog.close("success");
+          toast({ title: "Password saved", text: "You're logged in with your new password.", icon: "✓", tone: "green" });
+        } else {
+          await logIn(data);
+          form.reset();
+          dialog.close("success");
+        }
       } catch (err) {
         error.textContent = err.message;
       } finally {
@@ -712,20 +855,23 @@ const LevelUp = (() => {
 
   function setMode(mode) {
     dialog.dataset.mode = mode;
-    dialog.querySelectorAll("[data-mode]").forEach((tab) => {
+    dialog.querySelectorAll("[role=tab][data-mode]").forEach((tab) => {
       tab.setAttribute("aria-selected", String(tab.dataset.mode === mode));
     });
-    dialog.querySelector(".auth-title").textContent = mode === "signup" ? "Create your player" : "Continue your quest";
-    dialog.querySelector(".auth-submit").textContent = mode === "signup" ? "Start at LVL 1 ▶" : "Log in ▶";
-    dialog.querySelector('[name="password"]').autocomplete = mode === "signup" ? "new-password" : "current-password";
+    dialog.querySelector(".auth-title").textContent = MODES[mode].title;
+    dialog.querySelector(".auth-submit").textContent = MODES[mode].submit;
+    dialog.querySelector('[name="password"]').autocomplete = mode === "login" ? "current-password" : "new-password";
     dialog.querySelector(".form-error").textContent = "";
+    dialog.querySelector(".form-success").textContent = "";
   }
 
   function openAuth(mode = "login") {
     if (!dialog) buildDialog();
     setMode(mode);
+    dialog.returnValue = "";
     if (!dialog.open) dialog.showModal();
-    dialog.querySelector(mode === "signup" ? '[name="name"]' : '[name="email"]').focus();
+    const focus = { signup: '[name="name"]', "new-password": '[name="password"]' }[mode] || '[name="email"]';
+    dialog.querySelector(focus).focus();
   }
 
   // ---------- Shared page chrome ----------
@@ -788,11 +934,12 @@ const LevelUp = (() => {
 
   return {
     ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD, BOOKING_NOTICE_HOURS,
-    TRAINER_SESSION_XP, TRAINER_CLIENT_XP, dateKey, startOfWeek, isAdmin, adminData, slotBlocker,
-    esc, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
-    getPlayer, signUp, logIn, logOut, deleteProfile,
+    TRAINER_SESSION_XP, TRAINER_CLIENT_XP,
+    ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
+    esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
+    getPlayer, isAdmin, adminData, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     logWorkout, saveBodyStats, recordPurchase,
-    trainerById, trainerHours, findBooking, slotStart, parseDate, formatSlot,
+    trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     openAuth, toast
   };

@@ -90,7 +90,7 @@ function renderSessions() {
       </div>
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map((b) => row(b, true)).join("")}</ul>`
-        : `<p class="muted">No upcoming sessions. Book an hour with Filip or Maxim and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>`}
+        : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>`}
       ${done.length ? `<h3 class="panel-sub">Completed</h3><ul class="session-list">${done.map((b) => row(b, false)).join("")}</ul>` : ""}
     </section>`;
 }
@@ -253,8 +253,8 @@ function renderSettings() {
   return `
     <section class="panel panel-wide settings">
       <div>
-        <h2>Save file</h2>
-        <p class="muted">Your profile is stored in this browser on this device. Clearing your browser data removes it.</p>
+        <h2>Account</h2>
+        <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}. Your profile is saved on the LEVEL-UP server, so it works on every device.</p>
       </div>
       <div class="btn-row">
         <button type="button" class="btn btn-ghost btn-small" data-logout>Log out</button>
@@ -265,6 +265,10 @@ function renderSettings() {
 
 function render() {
   const player = LevelUp.getPlayer();
+  if (!LevelUp.isReady()) {
+    root.innerHTML = `<p class="board-message">Loading your save file…</p>`;
+    return;
+  }
   if (!player) {
     renderLoggedOut();
     return;
@@ -295,30 +299,41 @@ function bindEvents(player) {
     preview.textContent = `+${limitReached ? 0 : LevelUp.workoutXp(form.elements.minutes.value)}`;
   });
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
     lastWorkout = { type: form.elements.type.value, minutes: Number(form.elements.minutes.value) || 30 };
-    const result = LevelUp.logWorkout(lastWorkout);
-    workoutMessage = result.limitReached
-      ? "Workout logged. You've reached today's XP limit, so this one earns no XP. Rest up and come back tomorrow!"
-      : `Workout logged: +${result.xp} XP. Keep grinding!`;
+    try {
+      const result = await LevelUp.logWorkout(lastWorkout);
+      workoutMessage = result.limitReached
+        ? "Workout logged. You've reached today's XP limit, so this one earns no XP. Rest up and come back tomorrow!"
+        : `Workout logged: +${result.xp} XP. Keep grinding!`;
+    } catch (err) {
+      workoutMessage = `Not logged: ${err.message}`;
+    }
     render();
   });
 
   root.querySelectorAll("[data-cancel-booking]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       if (!confirm("Cancel this session? The XP you earned for it will be removed.")) return;
+      button.disabled = true;
       try {
-        LevelUp.cancelBooking(button.dataset.cancelBooking);
+        await LevelUp.cancelBooking(button.dataset.cancelBooking);
       } catch (err) {
+        button.disabled = false;
         alert(err.message);
       }
     });
   });
 
-  document.getElementById("deleteProfile").addEventListener("click", () => {
-    if (confirm("Delete your profile? Your level, XP, workouts and stats on this device will be gone for good.")) {
-      LevelUp.deleteProfile();
+  document.getElementById("deleteProfile").addEventListener("click", async () => {
+    if (!confirm("Delete your account? Your level, XP, sessions, workouts and stats will be gone for good.")) return;
+    try {
+      await LevelUp.deleteProfile();
+    } catch (err) {
+      alert(err.message);
     }
   });
 }

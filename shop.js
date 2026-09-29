@@ -328,8 +328,14 @@ function renderPayPal() {
       };
 
       const player = LevelUp.getPlayer();
-      const reward = LevelUp.recordPurchase(order);
-      notifyOwner(order, details, player);
+      notifyOwner(order, details, player); // the order email goes out even if the XP server is down
+      let reward;
+      try {
+        reward = await LevelUp.recordPurchase(order);
+      } catch (err) {
+        console.error("Recording the order failed:", err);
+        reward = { guest: !player, xp: LevelUp.orderXp(order.total), failed: true };
+      }
 
       cart = [];
       saveCart();
@@ -386,7 +392,13 @@ function showLoot(order, reward) {
     <li><span>${item.qty}× ${esc(item.name)}${item.size ? ` (${item.size})` : ""}</span><span>${euro(item.price * item.qty)}</span></li>`).join("");
 
   let rewardHtml;
-  if (reward.guest) {
+  if (reward.failed) {
+    rewardHtml = `
+      <div class="loot-reward">
+        <span class="xp-chip gold">XP pending</span>
+        <p>Your payment went through, but we couldn't add the XP right now. We have your order and will fix it for you.</p>
+      </div>`;
+  } else if (reward.guest) {
     rewardHtml = `
       <div class="loot-reward">
         <span class="xp-chip gold">+${reward.xp} XP waiting</span>
