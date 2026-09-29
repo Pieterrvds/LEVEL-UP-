@@ -1418,6 +1418,55 @@ textarea { resize: vertical; min-height: 130px; }
   .footer-inner { flex-direction: column; text-align: center; padding-bottom: 96px; }
 }
 
+/* ---------- Phones: swipe rows, bigger tap targets ---------- */
+.swipe-hint { display: none; }
+.class-grid.collapsed > .class-card:nth-child(n + 4) { display: none; }
+.see-more { display: flex; justify-content: center; margin-top: 28px; }
+
+@media (max-width: 1140px) {
+  /* dim the page behind the open menu */
+  .nav.open { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.6); }
+}
+
+@media (max-width: 640px) {
+  .section { padding: 56px 0; }
+
+  .team-grid {
+    display: flex;
+    gap: 14px;
+    margin: 0 -20px;
+    padding: 4px 20px 18px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 20px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .team-grid::-webkit-scrollbar { display: none; }
+  .team-grid > * { flex: 0 0 84%; scroll-snap-align: start; }
+  .class-media { aspect-ratio: 16 / 8; }
+  .see-more .btn { width: 100%; }
+  .class-card:hover, .team-card:hover { transform: none; box-shadow: none; }
+  .team-photo { aspect-ratio: 4 / 3; }
+  .swipe-hint {
+    display: block;
+    margin: 4px 0 0;
+    text-align: right;
+    font-family: var(--pixel);
+    font-size: 0.5rem;
+    color: var(--green-bright);
+    animation: nudgeRight 1.6s ease-in-out infinite;
+  }
+  @keyframes nudgeRight { 50% { transform: translateX(-6px); } }
+
+  .filter-tabs button { min-height: 44px; }
+  .dialog-close { width: 44px; height: 44px; }
+  .chart-toggle { min-height: 40px; }
+  .link-btn { padding: 8px 0; }
+
+  .whatsapp-float { width: 50px; height: 50px; right: 14px; bottom: 14px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

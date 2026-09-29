@@ -31,7 +31,7 @@ document.querySelectorAll("main section[id]").forEach(section => sectionObserver
 
 // ===== Reveal on scroll =====
 const revealTargets = document.querySelectorAll(
-  ".section-title, .section-intro, .quest-steps li, .class-card, .team-card, .gallery-item, .calendar, .contact-form, .stats-form, .xp-board"
+  ".section-title, .section-intro, .quest-steps li, .class-grid, .team-grid, .gallery-item, .contact-form, .xp-board, .high-scores"
 );
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
@@ -61,6 +61,18 @@ const subjectSelect = document.getElementById("subject");
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-subject]");
   if (button) subjectSelect.value = button.dataset.subject;
+});
+
+// ===== Classes: show 3, "See all" unfolds the rest =====
+const classGrid = document.getElementById("classGrid");
+const classToggle = document.getElementById("classToggle");
+const classCount = classGrid.querySelectorAll(".class-card").length;
+classToggle.textContent = `See all ${classCount} classes ▼`;
+classToggle.addEventListener("click", () => {
+  const open = classGrid.classList.toggle("collapsed") === false;
+  classToggle.setAttribute("aria-expanded", String(open));
+  classToggle.textContent = open ? "Show fewer classes ▲" : `See all ${classCount} classes ▼`;
+  if (!open) document.getElementById("programs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 // ===== Level 01: one call to action, depending on who is visiting =====

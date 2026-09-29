@@ -330,5 +330,11 @@ body.no-scroll { overflow: hidden; }
   .item-grid { grid-template-columns: 1fr; }
   .loot-steps { grid-template-columns: 1fr; }
   .bag-button-label { display: none; }
+  .bag-button { right: 14px; bottom: 14px; }
+  .size-picker span { width: 44px; height: 42px; }
+  .qty button { width: 40px; height: 36px; }
+  .bag-remove { width: 40px; height: 40px; }
+  .filter-tabs { width: 100%; }
+  .filter-tabs button { flex: 1; }
   .footer-inner { padding-bottom: 96px; }
 }

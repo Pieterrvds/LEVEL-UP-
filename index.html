@@ -161,7 +161,7 @@
         <h2 class="section-title">Choose your class</h2>
         <p class="section-intro">Every class builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> or join a <strong>group session</strong>, both straight from the schedule.</p>
 
-        <div class="class-grid">
+        <div class="class-grid collapsed" id="classGrid">
           <article class="class-card">
             <div class="class-media" style="--img:url('img/jimsgroepstraining.jpg')"></div>
             <div class="class-body">
@@ -233,6 +233,9 @@
             </div>
           </article>
         </div>
+        <div class="see-more">
+          <button type="button" class="btn btn-ghost" id="classToggle" aria-controls="classGrid" aria-expanded="false">See all 7 classes ▼</button>
+        </div>
       </div>
     </section>
 
@@ -293,6 +296,7 @@
             </div>
           </article>
         </div>
+        <p class="swipe-hint" aria-hidden="true">Swipe to meet the team ▸</p>
 
         <div class="high-scores" id="highScores" aria-labelledby="highScoresTitle">
           <div class="hs-head">
