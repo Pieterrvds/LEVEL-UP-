@@ -140,6 +140,15 @@
 .session-row p { margin: 0; }
 .session-trainer { font-weight: 700; margin-bottom: 2px !important; }
 
+/* Coach panel */
+.coach-panel { border-color: var(--gold); }
+.coach-row { grid-template-columns: 34px 1fr auto; }
+.coach-row .form-error { margin: 4px 0 0; font-size: 0.85rem; }
+.coach-row .form-error:empty { display: none; }
+.count-chip { font-family: var(--pixel); font-size: 0.5rem; color: #000; background: var(--gold); padding: 3px 6px; vertical-align: 2px; }
+.session-trainer .status-chip { margin-left: 6px; }
+@media (max-width: 640px) { .coach-row { grid-template-columns: 34px 1fr; } .coach-row .coach-actions { grid-column: 1 / -1; justify-content: flex-start; } }
+
 /* Character stats */
 .stats-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; align-items: start; }
 .result-tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 0; }

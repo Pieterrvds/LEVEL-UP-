@@ -131,9 +131,9 @@ const LevelUp = (() => {
     { id: "first_rep", icon: "▲", title: "First rep", desc: "Log your first workout.", xp: 50 },
     { id: "workouts_10", icon: "⚡", title: "Consistency", desc: "Log 10 workouts.", xp: 150 },
     { id: "workouts_50", icon: "♛", title: "Grinder", desc: "Log 50 workouts.", xp: 500 },
-    { id: "first_session", icon: "⚔", title: "Party up", desc: "Book your first session with a trainer.", xp: 100 },
-    { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Book 5 sessions with a trainer.", xp: 250 },
-    { id: "full_party", icon: "♞", title: "Full party", desc: "Train with 3 different trainers.", xp: 200 },
+    { id: "first_session", icon: "⚔", title: "Party up", desc: "Complete your first session with a trainer.", xp: 100 },
+    { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Complete 5 sessions with a trainer.", xp: 250 },
+    { id: "full_party", icon: "♞", title: "Full party", desc: "Complete sessions with 3 different trainers.", xp: 200 },
     { id: "first_loot", icon: "◆", title: "First loot", desc: "Buy your first item.", xp: 100, shop: true },
     { id: "full_drip", icon: "▣", title: "Full drip", desc: "Own the T-shirt and the hoodie.", xp: 150, shop: true },
     { id: "home_gym", icon: "⚒", title: "Home gym", desc: "Own the parallettes and the resistance bands.", xp: 150, shop: true },
@@ -284,7 +284,8 @@ const LevelUp = (() => {
   let player = null;
   let isReady = false;
   let serverError = "";
-  let slots = new Map();      // "trainer|date|hour" -> booking id when it's yours, else null
+  let slots = new Map();      // "trainer|date|hour" -> { id, status } (only filled in when it's yours)
+  let coachBookings = [];     // bookings for the logged-in trainer's card
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // [{ place, name, xp, isMe }]
 
@@ -312,6 +313,24 @@ const LevelUp = (() => {
     };
   }
 
+  // Tells a player when a trainer confirmed or declined since their last visit
+  function announceBookingChanges() {
+    if (!player) return;
+    const key = `levelup.bookingStatus.${player.id}`;
+    const seen = read(key, null);
+    const now = Object.fromEntries(player.bookings.map((b) => [b.id, b.status]));
+    if (seen) {
+      player.bookings.forEach((b) => {
+        const before = seen[b.id];
+        if (before !== "pending" || b.status === "pending") return;
+        const t = trainerById(b.trainerId);
+        if (b.status === "confirmed") toast({ title: "Session confirmed", text: `${t.short} · ${formatSlot(b.date, b.hour)}`, icon: "✓", tone: "green" });
+        if (b.status === "declined") toast({ title: "Request declined", text: `${t.short} can't make it. Pick another hour.`, icon: "✕" });
+      });
+    }
+    write(key, now);
+  }
+
   async function refreshPlayer({ announce = false } = {}) {
     if (!session) {
       player = null;
@@ -326,6 +345,10 @@ const LevelUp = (() => {
       console.error("Loading player failed:", err);
     }
     if (announce && before && player) announceDiff(before, player);
+    if (player) {
+      announceBookingChanges();
+      await loadCoachBookings();
+    }
     return player;
   }
 
@@ -335,7 +358,7 @@ const LevelUp = (() => {
         p_from: dateKey(startOfWeek(0)),
         p_to: dateKey(startOfWeek(BOOKING_WEEKS_AHEAD))
       });
-      slots = new Map((rows || []).map((r) => [`${r.trainer_id}|${r.day}|${r.hour}`, r.booking_id || null]));
+      slots = new Map((rows || []).map((r) => [`${r.trainer_id}|${r.day}|${r.hour}`, { id: r.booking_id || null, status: r.status || null }]));
     } catch (err) {
       serverError = err.message;
       console.error("Loading the schedule failed:", err);
@@ -490,12 +513,12 @@ const LevelUp = (() => {
   // ---------- Bookings ----------
   const trainerById = (id) => TRAINERS.find((t) => t.id === id);
 
-  // null when free, otherwise { id (only when it's yours), mine }
+  // null when free, otherwise { id, status (only when it's yours), mine }
   function findBooking(trainerId, key, hour) {
     const k = `${trainerId}|${key}|${hour}`;
     if (!slots.has(k)) return null;
-    const id = slots.get(k);
-    return { id, mine: Boolean(id) };
+    const { id, status } = slots.get(k);
+    return { id, status, mine: Boolean(id) };
   }
 
   // Why a slot can't be booked right now, or null when it can
@@ -511,19 +534,52 @@ const LevelUp = (() => {
     if (!player) throw new Error("Log in to book a session.");
     if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
     const booking = await call("book_session", { p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300) });
-    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats(), loadLeaderboard()]);
-    notifyBooking({ ...booking, hour: Number(booking.hour), name: player?.name, email: player?.email }, "booked");
+    await Promise.all([refreshPlayer(), loadSlots()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, "requested");
     emit();
     return booking;
   }
 
   async function cancelBooking(id) {
     const booking = await call("cancel_booking", { p_id: id });
-    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats(), loadLeaderboard()]);
+    await Promise.all([refreshPlayer(), loadSlots(), loadCoachBookings()]);
     notifyBooking({ ...booking, hour: Number(booking.hour) }, "cancelled");
     emit();
     return booking;
   }
+
+  // ---------- Trainer side: confirm, decline, reward ----------
+  const isTrainer = () => Boolean(player?.trainerId);
+
+  async function loadCoachBookings() {
+    if (!isTrainer()) { coachBookings = []; return; }
+    try {
+      coachBookings = ((await call("coach_bookings")) || []).map((b) => ({ ...b, hour: Number(b.hour) }));
+    } catch (err) {
+      console.error("Loading coach bookings failed:", err);
+    }
+  }
+
+  async function respondBooking(id, accept) {
+    const booking = await call("respond_booking", { p_id: id, p_accept: Boolean(accept) });
+    await Promise.all([loadCoachBookings(), loadSlots()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, accept ? "confirmed" : "declined");
+    emit();
+    return booking;
+  }
+
+  async function rewardSession(id) {
+    const booking = await call("reward_session", { p_id: id });
+    await Promise.all([refreshPlayer({ announce: true }), loadCoachBookings(), loadTrainerStats(), loadLeaderboard()]);
+    const trainer = trainerById(booking.trainerId);
+    toast({ title: "Session rewarded", text: `${booking.name} · +${booking.xp} XP with ${trainer.short}`, icon: "★", tone: "green" });
+    emit();
+    return booking;
+  }
+
+  const isToday = (key) => key === dateKey();
+  const coachRequests = () => coachBookings.filter((b) => b.status === "pending" && slotStart(b.date, b.hour) > new Date());
+  const coachToReward = () => coachBookings.filter((b) => b.status === "confirmed" && isToday(b.date));
 
   const playerBookings = () =>
     (player?.bookings || []).slice().sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour));
@@ -539,27 +595,45 @@ const LevelUp = (() => {
     return { sessions, clients, linked: counts.accountXp !== null && counts.accountXp !== undefined, ...progress(xp) };
   }
 
-  // Emails the booking to the LEVEL-UP inbox; the client gets an automatic confirmation.
+  // Emails every booking step to the LEVEL-UP inbox. The trainer gets a copy
+  // (when their account is linked) and the client an automatic reply.
   function notifyBooking(booking, action) {
     const trainer = trainerById(booking.trainerId);
     const when = formatSlot(booking.date, booking.hour);
-    const booked = action === "booked";
+    const texts = {
+      requested: {
+        subject: `New booking request: ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, your request for a session with ${trainer.name} on ${when} has been sent. ${trainer.short} will confirm it soon; you'll see the status in your LEVEL-UP profile.`
+      },
+      confirmed: {
+        subject: `Confirmed: ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. Your trainer will contact you about the location and payment. After the session you get +${booking.xp} XP.`
+      },
+      declined: {
+        subject: `Declined: ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, unfortunately ${trainer.name} can't make it on ${when}. Pick another hour in the LEVEL-UP schedule.`
+      },
+      cancelled: {
+        subject: `Cancelled: ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled.`
+      }
+    }[action];
     fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
-        _subject: `${booked ? "New booking" : "Cancelled"}: ${trainer.short} · ${when}`,
+        _subject: texts.subject,
         _template: "table",
-        _autoresponse: booked
-          ? `Hi ${booking.name}, your session with ${trainer.name} is booked for ${when}. Your trainer will contact you about the location and payment. See you there!\n\nThe LEVEL-UP team`
-          : `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled.\n\nThe LEVEL-UP team`,
-        status: booked ? "Booked" : "Cancelled",
+        ...(booking.trainerEmail && booking.trainerEmail.toLowerCase() !== OWNER_EMAIL.toLowerCase() ? { _cc: booking.trainerEmail } : {}),
+        _autoresponse: `${texts.reply}\n\nThe LEVEL-UP team`,
+        status: action,
         trainer: trainer.name,
         when,
         name: booking.name,
         email: booking.email,
         note: booking.note || "-",
-        booking_id: booking.id
+        booking_id: booking.id,
+        next_step: action === "requested" ? `${trainer.short}: log in on the LEVEL-UP website to confirm or decline.` : "-"
       })
     }).catch((error) => console.error("Booking email failed:", error));
   }
@@ -712,6 +786,7 @@ const LevelUp = (() => {
       welcomed = true;
       call("touch_login").catch(() => {});
       claimGuestOrders();
+      setTimeout(showCoachInbox, 900);
       if (event === "SIGNED_IN") {
         const fresh = Date.now() - new Date(player.createdAt).getTime() < 10 * 60e3;
         toast(fresh
@@ -720,6 +795,67 @@ const LevelUp = (() => {
       }
     }
     emit();
+  }
+
+  // ---------- Trainer pop-up: requests to answer, sessions to reward ----------
+  let coachDialog;
+  function showCoachInbox({ force = false } = {}) {
+    if (!isTrainer()) return;
+    const requests = coachRequests();
+    const rewards = coachToReward();
+    if (!requests.length && !rewards.length) { coachDialog?.close(); return; }
+    const signature = [...requests, ...rewards].map((b) => b.id + b.status).join(",");
+    try {
+      if (!force && sessionStorage.getItem("levelup.coachInbox") === signature) return;
+      sessionStorage.setItem("levelup.coachInbox", signature);
+    } catch { /* storage unavailable */ }
+
+    if (!coachDialog) {
+      coachDialog = document.createElement("dialog");
+      coachDialog.className = "auth-dialog coach-dialog";
+      coachDialog.setAttribute("aria-labelledby", "coachTitle");
+      document.body.appendChild(coachDialog);
+      coachDialog.addEventListener("click", async (event) => {
+        if (event.target === coachDialog || event.target.closest("[data-close]")) { coachDialog.close(); return; }
+        const btn = event.target.closest("[data-coach-action]");
+        if (!btn) return;
+        btn.disabled = true;
+        const row = btn.closest(".coach-item");
+        try {
+          if (btn.dataset.coachAction === "reward") await rewardSession(btn.dataset.id);
+          else await respondBooking(btn.dataset.id, btn.dataset.coachAction === "confirm");
+          showCoachInbox({ force: true });
+        } catch (err) {
+          btn.disabled = false;
+          row.querySelector(".form-error").textContent = err.message;
+        }
+      });
+    }
+    const item = (b, actions) => `
+      <li class="coach-item">
+        <div>
+          <p class="coach-who">${esc(b.name)}</p>
+          <p class="muted">${formatSlot(b.date, b.hour)}${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+          <p class="form-error" role="alert"></p>
+        </div>
+        <div class="coach-actions">${actions(b)}</div>
+      </li>`;
+    coachDialog.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <p class="section-kicker">Coach inbox · ${esc(trainerById(player.trainerId).name)}</p>
+      <h2 class="auth-title" id="coachTitle">${requests.length ? `${requests.length} new booking request${requests.length === 1 ? "" : "s"}` : "Sessions to reward"}</h2>
+      ${requests.length ? `
+        <ul class="coach-list">${requests.map((b) => item(b, (x) => `
+          <button type="button" class="btn btn-small btn-primary" data-coach-action="confirm" data-id="${x.id}">Confirm</button>
+          <button type="button" class="btn btn-small btn-ghost" data-coach-action="decline" data-id="${x.id}">Decline</button>`)).join("")}
+        </ul>` : ""}
+      ${rewards.length ? `
+        <h3 class="panel-sub">Today's sessions · reward after training</h3>
+        <ul class="coach-list">${rewards.map((b) => item(b, (x) => `
+          <button type="button" class="btn btn-small btn-primary" data-coach-action="reward" data-id="${x.id}">Reward +${x.xp} XP</button>`)).join("")}
+        </ul>` : ""}
+      <p class="auth-note">You can also handle these later in your profile, under Coach panel.</p>`;
+    if (!coachDialog.open) coachDialog.showModal();
   }
 
   // ---------- Startup ----------
@@ -735,6 +871,7 @@ const LevelUp = (() => {
           welcomed = true;
           call("touch_login").catch(() => {});
           claimGuestOrders();
+          setTimeout(showCoachInbox, 600);
         }
       } catch (err) {
         serverError = friendly(err);
@@ -1053,6 +1190,7 @@ const LevelUp = (() => {
     logWorkout, saveBodyStats, recordPurchase,
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
+    isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     openAuth, toast
   };
 })();

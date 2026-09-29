@@ -63,7 +63,10 @@ trainerFilter.addEventListener("click", (event) => {
 function slotState(trainer, key, hour, now) {
   const booking = LevelUp.findBooking(trainer.id, key, hour);
   const blocker = LevelUp.slotBlocker(key, hour, now);
-  if (booking?.mine) return { state: blocker === "past" ? "done" : "mine", booking };
+  if (booking?.mine) {
+    if (booking.status === "completed" || blocker === "past") return { state: "done", booking };
+    return { state: booking.status === "pending" ? "requested" : "mine", booking };
+  }
   if (booking) return { state: "taken", booking };
   return { state: blocker ? "past" : "free", booking: null };
 }
@@ -112,11 +115,11 @@ function renderBoard() {
         .map((t) => {
           itemCount++;
           const { state } = slotState(t, day.key, hour, now);
-          const label = { free: `Book ${t.short}`, mine: "Your session", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
+          const label = { free: `Book ${t.short}`, requested: "Requested…", mine: "Confirmed ✓", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
           return `
-            <button type="button" class="slot ${state}" style="--c:${t.color}"
+            <button type="button" class="slot ${state === "requested" ? "mine requested" : state}" style="--c:${t.color}"
               data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
-              ${state === "free" || state === "mine" ? "" : "disabled"}
+              ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
               aria-label="${esc(t.name)}, ${day.name} ${pad(hour)}:00, ${label}">
               <span class="slot-time">${pad(hour)}:00</span>
               <span class="slot-name">${esc(t.short)}</span>
@@ -237,13 +240,16 @@ function renderBookingDialog(message = "") {
     const own = LevelUp.playerBookings().find((b) => b.id === booking.id);
     bookingContent.innerHTML = `
       <p class="section-kicker">Your session</p>
-      <h2 class="auth-title" id="bookingTitle">You're booked!</h2>
+      <h2 class="auth-title" id="bookingTitle">${booking.status === "pending" ? "Waiting for confirmation" : "Confirmed ✓"}</h2>
       ${trainerCard}
+      <p class="status-line">${booking.status === "pending"
+        ? `<span class="status-chip pending">Pending</span> ${esc(trainer.short)} still has to confirm this session.`
+        : `<span class="status-chip confirmed">Confirmed</span> ${esc(trainer.short)} will reward your +${own?.xp ?? LevelUp.SESSION_XP} XP after the session.`}</p>
       ${own?.note ? `<p class="booking-note-view">“${esc(own.note)}”</p>` : ""}
       <p class="form-error" role="alert">${esc(message)}</p>
       <div class="btn-row">
         <a class="btn btn-ghost btn-small" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
-        <button type="button" class="btn btn-small btn-danger" id="cancelBooking">Cancel session (−${own?.xp ?? LevelUp.SESSION_XP} XP)</button>
+        <button type="button" class="btn btn-small btn-danger" id="cancelBooking">${booking.status === "pending" ? "Withdraw request" : "Cancel session"}</button>
       </div>`;
     const cancel = document.getElementById("cancelBooking");
     cancel.addEventListener("click", async () => {
@@ -269,10 +275,10 @@ function renderBookingDialog(message = "") {
           <textarea name="note" rows="3" maxlength="300" placeholder="Your goal, experience level or preferred location…"></textarea>
         </label>
         <p class="form-error" role="alert">${esc(message)}</p>
-        <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>for you, and XP for ${esc(trainer.short)} too</span></div>
-        <button type="submit" class="btn btn-primary btn-block">Confirm booking ▶</button>
+        <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, rewarded by ${esc(trainer.short)}</span></div>
+        <button type="submit" class="btn btn-primary btn-block">Send booking request ▶</button>
       </form>
-      <p class="auth-note">${esc(trainer.short)} gets notified and contacts you about the location and payment.</p>` : `
+      <p class="auth-note">${esc(trainer.short)} gets a notification and confirms or declines. You'll see the status in your profile.</p>` : `
       <div class="booking-login">
         <p>Log in or create your player to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
         <div class="btn-row">
@@ -298,11 +304,11 @@ function renderBookingDialog(message = "") {
 function showBooked() {
   const trainer = LevelUp.trainerById(pendingSlot.trainerId);
   bookingContent.innerHTML = `
-    <p class="section-kicker">Quest accepted</p>
-    <h2 class="auth-title" id="bookingTitle">Session booked!</h2>
+    <p class="section-kicker">Quest sent</p>
+    <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
-    <p>${esc(trainer.name)} has been notified and will contact you about the location and payment. A confirmation is on its way to your email.</p>
-    <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>added to your profile</span></div>
+    <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
+    <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
       <a href="profile.html" class="btn btn-small">My sessions</a>

@@ -56,29 +56,44 @@ function renderSummary(player) {
     <section class="summary-tiles">
       <div class="tile"><span class="tile-label">Total XP</span><span class="tile-value">${player.xp.toLocaleString("en-US")}</span></div>
       <div class="tile"><span class="tile-label">Workouts</span><span class="tile-value">${player.workouts.length}</span><span class="tile-note">${Math.round(minutes / 60)} h trained</span></div>
-      <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${LevelUp.playerBookings().length}</span><span class="tile-note">with a trainer</span></div>
+      <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${LevelUp.playerBookings().filter((b) => b.status === "completed").length}</span><span class="tile-note">completed</span></div>
       <div class="tile"><span class="tile-label">Achievements</span><span class="tile-value">${unlocked}/${ACHIEVEMENTS.length}</span></div>
     </section>`;
 }
 
+const STATUS = {
+  pending: { label: "Waiting for confirmation", cls: "pending" },
+  confirmed: { label: "Confirmed", cls: "confirmed" },
+  declined: { label: "Declined", cls: "declined" },
+  completed: { label: "Completed", cls: "completed" }
+};
+const statusChip = (status) => `<span class="status-chip ${STATUS[status]?.cls || ""}">${STATUS[status]?.label || status}</span>`;
+
 function renderSessions() {
   const now = new Date();
   const bookings = LevelUp.playerBookings();
-  const upcoming = bookings.filter((b) => LevelUp.slotStart(b.date, b.hour) > now);
-  const done = bookings.filter((b) => LevelUp.slotStart(b.date, b.hour) <= now).reverse().slice(0, 5);
+  const upcoming = bookings.filter((b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > now);
+  const history = bookings
+    .filter((b) => !upcoming.includes(b))
+    .sort((a, b) => LevelUp.slotStart(b.date, b.hour) - LevelUp.slotStart(a.date, a.hour))
+    .slice(0, 6);
 
-  const row = (b, canCancel) => {
+  const row = (b) => {
     const trainer = LevelUp.trainerById(b.trainerId);
+    const open = upcoming.includes(b);
+    const past = LevelUp.slotStart(b.date, b.hour) <= now;
+    let side = "";
+    if (open) side = `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${b.status === "pending" ? "Withdraw" : "Cancel"}</button>`;
+    else if (b.status === "completed") side = `<span class="log-xp">+${b.xp} XP</span>`;
+    const note = b.status === "confirmed" && past ? "Waiting for your trainer to reward the session" : "";
     return `
       <li class="session-row" style="--c:${trainer.color}">
         <img src="${trainer.img}" alt="">
         <div>
-          <p class="session-trainer">${esc(trainer.name)}</p>
-          <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}</p>
+          <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}</p>
+          <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${note ? ` · ${note}` : ""}</p>
         </div>
-        ${canCancel
-          ? `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">Cancel</button>`
-          : `<span class="log-xp">+${b.xp} XP</span>`}
+        ${side}
       </li>`;
   };
 
@@ -88,10 +103,54 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
+      <p class="muted small-text">Your trainer confirms each request. After the session they reward it and you get <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
       ${upcoming.length
-        ? `<ul class="session-list">${upcoming.map((b) => row(b, true)).join("")}</ul>`
-        : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>`}
-      ${done.length ? `<h3 class="panel-sub">Completed</h3><ul class="session-list">${done.map((b) => row(b, false)).join("")}</ul>` : ""}
+        ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
+        : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
+      ${history.length ? `<h3 class="panel-sub">History</h3><ul class="session-list">${history.map(row).join("")}</ul>` : ""}
+    </section>`;
+}
+
+// Trainers: answer requests, see upcoming sessions and reward today's sessions
+function renderCoachPanel() {
+  if (!LevelUp.isTrainer()) return "";
+  const now = new Date();
+  const today = LevelUp.dateKey();
+  const all = LevelUp.getCoachBookings();
+  const requests = all.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now);
+  const todayList = all.filter((b) => b.date === today && ["confirmed", "completed"].includes(b.status));
+  const upcoming = all.filter((b) => b.status === "confirmed" && b.date > today);
+  const missed = all.filter((b) => b.status === "confirmed" && b.date < today);
+
+  const row = (b, actions = "") => `
+    <li class="session-row coach-row">
+      <span class="avatar" aria-hidden="true">${esc((b.name || "?").charAt(0).toUpperCase())}</span>
+      <div>
+        <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
+        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+        <p class="form-error" role="alert"></p>
+      </div>
+      <div class="coach-actions">${actions}</div>
+    </li>`;
+
+  return `
+    <section class="panel panel-wide coach-panel" id="coach">
+      <div class="panel-head">
+        <h2>Coach panel</h2>
+        <span class="muted">${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
+      </div>
+      <h3 class="panel-sub first">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
+      ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
+          <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
+          <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
+        : `<p class="muted">No open requests.</p>`}
+      <h3 class="panel-sub">Today</h3>
+      ${todayList.length ? `<ul class="session-list">${todayList.map((b) => row(b, b.status === "confirmed"
+          ? `<button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>`
+          : `<span class="log-xp">Rewarded</span>`)).join("")}</ul>`
+        : `<p class="muted">No sessions today. The reward button appears here on the day of a confirmed session.</p>`}
+      ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3><ul class="session-list">${upcoming.map((b) => row(b)).join("")}</ul>` : ""}
+      ${missed.length ? `<h3 class="panel-sub">Not rewarded</h3><p class="muted small-text">Sessions can only be rewarded on the day itself.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
     </section>`;
 }
 
@@ -381,6 +440,7 @@ function render() {
     ${renderHeader(player, p)}
     ${renderSummary(player)}
     <div class="panel-grid">
+      ${renderCoachPanel()}
       ${renderBodyStats(player)}
       ${renderSessions()}
       ${renderWorkouts(player)}
@@ -418,6 +478,19 @@ function bindEvents(player) {
     render();
   });
 
+  root.querySelectorAll("[data-coach]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        if (button.dataset.coach === "reward") await LevelUp.rewardSession(button.dataset.id);
+        else await LevelUp.respondBooking(button.dataset.id, button.dataset.coach === "confirm");
+      } catch (err) {
+        button.disabled = false;
+        button.closest(".session-row").querySelector(".form-error").textContent = err.message;
+      }
+    });
+  });
+
   const statsFormEl = document.getElementById("statsForm");
   statsFormEl?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -439,7 +512,7 @@ function bindEvents(player) {
 
   root.querySelectorAll("[data-cancel-booking]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!confirm("Cancel this session? The XP you earned for it will be removed.")) return;
+      if (!confirm("Cancel this session? Your trainer gets an email.")) return;
       button.disabled = true;
       try {
         await LevelUp.cancelBooking(button.dataset.cancelBooking);

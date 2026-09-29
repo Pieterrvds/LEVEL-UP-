@@ -1153,6 +1153,37 @@ textarea { resize: vertical; min-height: 130px; }
 .legend-swatch.mine { background: var(--green-bright); border-color: #000; }
 .legend-swatch.taken { background: #000; border-color: var(--line); }
 .legend-swatch.closed { opacity: 0.35; }
+.legend-swatch.requested { background: repeating-linear-gradient(135deg, var(--green-bright) 0 3px, #000 3px 6px); border-color: var(--green-bright); }
+.slot.mine.requested { background: repeating-linear-gradient(135deg, rgba(126, 224, 106, 0.35) 0 6px, #000 6px 12px); color: var(--text); border-color: var(--green-bright); }
+.slot.mine.requested .slot-state { color: var(--green-bright); }
+
+/* Booking status chips */
+.status-chip {
+  display: inline-block;
+  padding: 3px 7px;
+  font-family: var(--pixel);
+  font-size: 0.45rem;
+  text-transform: uppercase;
+  vertical-align: 2px;
+  color: #000;
+  background: var(--muted);
+}
+.status-chip.pending { background: var(--gold); }
+.status-chip.confirmed { background: var(--green-bright); }
+.status-chip.declined { background: var(--red); }
+.status-chip.completed { background: #4fc3f7; }
+.status-line { font-size: 0.92rem; color: var(--muted); }
+
+/* Coach inbox pop-up */
+.coach-dialog { width: min(560px, calc(100% - 32px)); }
+.coach-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 10px; }
+.coach-item { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 12px; background: #000; border-left: 4px solid var(--gold); }
+.coach-item p { margin: 0; }
+.coach-item .muted { font-size: 0.88rem; }
+.coach-who { font-weight: 700; }
+.coach-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.coach-item .form-error:empty { display: none; }
+@media (max-width: 640px) { .coach-item { grid-template-columns: 1fr; } .coach-actions { justify-content: flex-start; } }
 .legend-swatch.group { border-style: dashed; background: repeating-linear-gradient(135deg, rgba(126, 224, 106, 0.3) 0 3px, transparent 3px 6px); }
 .slot.done { background: color-mix(in srgb, var(--green-bright) 25%, #000); border-color: var(--green-bright); cursor: default; }
 .slot.done .slot-state { color: var(--green-bright); }

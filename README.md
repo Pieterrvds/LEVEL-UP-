@@ -51,6 +51,14 @@ Clients earn 75 XP per booking and 25 XP for the first stats check-in each week;
 Link a trainer to their account by filling in `email` in the `trainers` table (Pieter is linked by default): their coaching
 XP then goes to that account, so the level on the team card and in the profile is the same.
 
+## Booking flow (anti-cheat)
+1. A player sends a booking request: status **pending**, the hour is reserved, no XP yet.
+2. The trainer gets a pop-up when logged in (and an email copy when their account is linked) and
+   **confirms** or **declines**. A declined request frees the hour. Admins can do this for any trainer.
+3. On the day of the session the trainer (or an admin) presses **Reward**: the player gets 75 XP, the trainer
+   100 XP (+50 for a new player). The server only allows this on the day itself, and only once.
+Players see the status (pending, confirmed, declined, completed) in their profile and on the schedule.
+
 ## High scores
 Under the team cards: the top 10 players by XP (player name and level only, never email). Trainers are left out
 (their level is on their card). Players can hide themselves in their profile under Account.

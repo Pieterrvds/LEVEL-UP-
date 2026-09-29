@@ -133,9 +133,7 @@ create table if not exists public.bookings (
   hour smallint not null check (hour between 0 and 23),
   note text not null default '',
   xp integer not null default 0,
-  created_at timestamptz not null default now(),
-  unique (trainer_id, day, hour),
-  unique (user_id, day, hour)
+  created_at timestamptz not null default now()
 );
 
 create table if not exists public.orders (
@@ -146,6 +144,37 @@ create table if not exists public.orders (
   xp integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Booking flow: pending → confirmed / declined (by the trainer) → completed
+-- (the trainer rewards the session on the day itself). XP is only awarded
+-- when a session is completed.
+alter table public.bookings add column if not exists status text not null default 'completed';
+alter table public.bookings alter column status set default 'pending';
+alter table public.bookings add column if not exists responded_at timestamptz;
+alter table public.bookings add column if not exists rewarded_at timestamptz;
+do $$ begin
+  alter table public.bookings add constraint bookings_status_check
+    check (status in ('pending', 'confirmed', 'declined', 'completed'));
+exception when duplicate_object then null;
+end $$;
+-- A declined request frees the hour again, so uniqueness only counts active bookings
+alter table public.bookings drop constraint if exists bookings_trainer_id_day_hour_key;
+alter table public.bookings drop constraint if exists bookings_user_id_day_hour_key;
+create unique index if not exists bookings_active_slot on public.bookings (trainer_id, day, hour)
+  where status in ('pending', 'confirmed', 'completed');
+create unique index if not exists bookings_active_user on public.bookings (user_id, day, hour)
+  where status in ('pending', 'confirmed', 'completed');
+
+create or replace function public._booking_json(b public.bookings)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp,
+    'status', b.status, 'createdAt', b.created_at, 'respondedAt', b.responded_at, 'rewardedAt', b.rewarded_at,
+    'name', p.name, 'email', p.email,
+    'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id)
+  )
+  from public.profiles p where p.id = b.user_id;
+$$;
 
 create table if not exists public.calendar_cache (
   id integer primary key default 1 check (id = 1),
@@ -249,7 +278,7 @@ begin
   end if;
 
   if p.sessions_booked >= 1 then perform public._unlock(p_user, 'first_session', 100, 'Party up'); end if;
-  if (select count(distinct trainer_id) from public.bookings where user_id = p_user) >= 3 then
+  if (select count(distinct trainer_id) from public.bookings where user_id = p_user and status = 'completed') >= 3 then
     perform public._unlock(p_user, 'full_party', 200, 'Full party');
   end if;
   if p.sessions_booked >= 5 then perform public._unlock(p_user, 'sessions_5', 250, 'Regular'); end if;
@@ -354,8 +383,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                            from public.body_stats b where b.user_id = p.id), '[]'::jsonb),
     'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total) order by o.created_at desc)
                            from public.orders o where o.user_id = p.id), '[]'::jsonb),
-    'bookings', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'trainerId', k.trainer_id, 'date', k.day, 'hour', k.hour,
-                              'note', k.note, 'xp', k.xp, 'name', p.name, 'email', p.email, 'createdAt', k.created_at) order by k.day, k.hour)
+    'bookings', coalesce((select jsonb_agg(public._booking_json(k) order by k.day, k.hour)
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb)
   )
   from public.profiles p
@@ -388,26 +416,30 @@ returns timestamptz language sql stable as $$
   select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
 $$;
 
--- Coaching XP for a trainer with a linked account: +100 per session and
--- +50 for each new player (direction -1 takes it back after a cancel)
-create or replace function public._trainer_xp(t public.trainers, p_client uuid, p_direction integer)
+-- The trainer (by linked account email) or an admin may handle a booking
+create or replace function public._can_coach(p_trainer text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.is_admin() or exists (
+    select 1 from public.trainers t
+    where t.id = p_trainer and t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+  );
+$$;
+
+-- Coaching XP for a trainer with a linked account when a session is rewarded:
+-- +100 per session and +50 the first time they coach a player
+drop function if exists public._trainer_xp(public.trainers, uuid, integer);
+create or replace function public._trainer_xp(t public.trainers, p_client uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
   coach uuid;
   client_name text;
-  sessions_with_client integer;
 begin
   select id into coach from public.profiles where t.email is not null and lower(email) = lower(t.email);
   if coach is null or coach = p_client then return; end if;
   select name into client_name from public.profiles where id = p_client;
-  select count(*) into sessions_with_client from public.bookings where trainer_id = t.id and user_id = p_client;
-
-  if p_direction > 0 then
-    perform public._grant_xp(coach, 100, 'Coached ' || client_name);
-    if sessions_with_client = 1 then perform public._grant_xp(coach, 50, 'New player: ' || client_name); end if;
-  else
-    perform public._grant_xp(coach, -100, 'Cancelled: ' || client_name);
-    if sessions_with_client = 0 then perform public._grant_xp(coach, -50, 'Lost player: ' || client_name); end if;
+  perform public._grant_xp(coach, 100, 'Coached ' || client_name);
+  if (select count(*) from public.bookings where trainer_id = t.id and user_id = p_client and status = 'completed') = 1 then
+    perform public._grant_xp(coach, 50, 'New player: ' || client_name);
   end if;
 end $$;
 
@@ -416,7 +448,6 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := auth.uid();
   t public.trainers;
-  v_xp integer := public._config('session_xp')::int;
   horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
                    + 7 * public._config('booking_weeks_ahead')::int);
   b public.bookings;
@@ -432,31 +463,45 @@ begin
   if p_day >= horizon then
     raise exception 'You can book up to % weeks ahead.', public._config('booking_weeks_ahead');
   end if;
-  if exists (select 1 from public.bookings where trainer_id = p_trainer and day = p_day and hour = p_hour) then
+  if exists (select 1 from public.bookings where trainer_id = p_trainer and day = p_day and hour = p_hour
+             and status in ('pending', 'confirmed', 'completed')) then
     raise exception 'Someone just booked this slot. Pick another hour.';
   end if;
-  if exists (select 1 from public.bookings where user_id = uid and day = p_day and hour = p_hour) then
+  if exists (select 1 from public.bookings where user_id = uid and day = p_day and hour = p_hour
+             and status in ('pending', 'confirmed', 'completed')) then
     raise exception 'You already have a session at this time.';
   end if;
 
   begin
-    insert into public.bookings (user_id, trainer_id, day, hour, note, xp)
-    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), v_xp)
+    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status)
+    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int, 'pending')
     returning * into b;
   exception when unique_violation then
     raise exception 'Someone just booked this slot. Pick another hour.';
   end;
 
-  update public.profiles set sessions_booked = sessions_booked + 1 where id = uid;
-  perform public._grant_xp(uid, v_xp, 'Session with ' || split_part(t.name, ' ', 1));
-  perform public._trainer_xp(t, uid, 1);
-  perform public._check_achievements(uid);
-
-  return jsonb_build_object('id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp);
+  return public._booking_json(b);
 end $$;
 
--- Players cancel their own upcoming sessions; admins can cancel any upcoming session
-create or replace function public.cancel_booking(p_id uuid)
+-- The trainer (or an admin) confirms or declines a pending request
+create or replace function public.respond_booking(p_id uuid, p_accept boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b public.bookings;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into b from public.bookings where id = p_id;
+  if not found or not public._can_coach(b.trainer_id) then raise exception 'Booking not found.'; end if;
+  if b.status <> 'pending' then raise exception 'This request has already been handled.'; end if;
+  if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session time has already passed.'; end if;
+  update public.bookings
+    set status = case when p_accept then 'confirmed' else 'declined' end, responded_at = now()
+    where id = p_id returning * into b;
+  return public._booking_json(b);
+end $$;
+
+-- On the day of the session the trainer (or an admin) rewards it:
+-- the player gets their XP, the trainer gets coaching XP
+create or replace function public.reward_session(p_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   b public.bookings;
@@ -464,38 +509,73 @@ declare
 begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
   select * into b from public.bookings where id = p_id;
+  if not found or not public._can_coach(b.trainer_id) then raise exception 'Booking not found.'; end if;
+  if b.status = 'completed' then raise exception 'This session has already been rewarded.'; end if;
+  if b.status <> 'confirmed' then raise exception 'Confirm the session before rewarding it.'; end if;
+  if b.day <> (now() at time zone 'Europe/Brussels')::date then
+    raise exception 'You can only reward a session on the day itself.';
+  end if;
+
+  update public.bookings set status = 'completed', rewarded_at = now() where id = p_id returning * into b;
+  select * into t from public.trainers where id = b.trainer_id;
+  update public.profiles set sessions_booked = sessions_booked + 1 where id = b.user_id;
+  perform public._grant_xp(b.user_id, b.xp, 'Session with ' || split_part(t.name, ' ', 1));
+  perform public._trainer_xp(t, b.user_id);
+  perform public._check_achievements(b.user_id);
+  return public._booking_json(b);
+end $$;
+
+-- Players cancel their own open request or confirmed session before it starts;
+-- admins can cancel any. No XP was given yet, so nothing is taken back.
+create or replace function public.cancel_booking(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  b public.bookings;
+  result jsonb;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into b from public.bookings where id = p_id;
   if not found or (b.user_id <> auth.uid() and not public.is_admin()) then
     raise exception 'Booking not found.';
   end if;
+  if b.status not in ('pending', 'confirmed') then raise exception 'This session can no longer be cancelled.'; end if;
   if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session has already started.'; end if;
-
-  select * into t from public.trainers where id = b.trainer_id;
+  result := public._booking_json(b);
   delete from public.bookings where id = p_id;
-  update public.profiles set sessions_booked = greatest(0, sessions_booked - 1) where id = b.user_id;
-  perform public._grant_xp(b.user_id, -b.xp, 'Cancelled session with ' || split_part(t.name, ' ', 1));
-  perform public._trainer_xp(t, b.user_id, -1);
-
-  return jsonb_build_object('id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note,
-    'name', (select name from public.profiles where id = b.user_id),
-    'email', (select email from public.profiles where id = b.user_id));
+  return result;
 end $$;
 
--- Which hours are taken (no names), for the public schedule
-create or replace function public.slot_status(p_from date, p_to date)
-returns table (trainer_id text, day date, hour smallint, booking_id uuid)
-language sql stable security definer set search_path = public as $$
-  select b.trainer_id, b.day, b.hour, case when b.user_id = auth.uid() then b.id end
+-- Bookings a trainer has to handle (their linked trainer card)
+create or replace function public.coach_bookings()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(public._booking_json(b) order by b.day, b.hour), '[]'::jsonb)
   from public.bookings b
-  where b.day between p_from and least(p_to, p_from + 70);
+  join public.trainers t on t.id = b.trainer_id
+  where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+    and b.day >= (now() at time zone 'Europe/Brussels')::date - 30;
 $$;
 
+-- Which hours are taken (no names), for the public schedule
+drop function if exists public.slot_status(date, date);
+create or replace function public.slot_status(p_from date, p_to date)
+returns table (trainer_id text, day date, hour smallint, booking_id uuid, status text)
+language sql stable security definer set search_path = public as $$
+  select b.trainer_id, b.day, b.hour,
+         case when b.user_id = auth.uid() then b.id end,
+         case when b.user_id = auth.uid() then b.status end
+  from public.bookings b
+  where b.day between p_from and least(p_to, p_from + 70)
+    and b.status in ('pending', 'confirmed', 'completed');
+$$;
+
+-- Trainer levels count completed sessions only
 drop function if exists public.trainer_stats();
 create or replace function public.trainer_stats()
 returns table (trainer_id text, sessions bigint, clients bigint, account_xp integer)
 language sql stable security definer set search_path = public as $$
   select t.id, count(b.id), count(distinct b.user_id),
          (select p.xp from public.profiles p where t.email is not null and lower(p.email) = lower(t.email))
-  from public.trainers t left join public.bookings b on b.trainer_id = t.id
+  from public.trainers t left join public.bookings b on b.trainer_id = t.id and b.status = 'completed'
   group by t.id, t.email;
 $$;
 
@@ -661,9 +741,8 @@ begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   return jsonb_build_object(
     'players', coalesce((select jsonb_agg(public._player_json(p.id)) from public.profiles p), '[]'::jsonb),
-    'bookings', coalesce((select jsonb_agg(jsonb_build_object('id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour,
-                           'note', b.note, 'xp', b.xp, 'name', p.name, 'email', p.email, 'createdAt', b.created_at) order by b.day, b.hour)
-                         from public.bookings b join public.profiles p on p.id = b.user_id), '[]'::jsonb)
+    'bookings', coalesce((select jsonb_agg(public._booking_json(b) order by b.day, b.hour)
+                         from public.bookings b), '[]'::jsonb)
   );
 end $$;
 
@@ -677,7 +756,15 @@ revoke execute on function public._check_achievements(uuid) from public, anon, a
 revoke execute on function public._player_json(uuid) from public, anon, authenticated;
 revoke execute on function public._credit_order(text, uuid) from public, anon, authenticated;
 revoke execute on function public._insert_stats(uuid, jsonb) from public, anon, authenticated;
-revoke execute on function public._trainer_xp(public.trainers, uuid, integer) from public, anon, authenticated;
+revoke execute on function public._trainer_xp(public.trainers, uuid) from public, anon, authenticated;
+revoke execute on function public._booking_json(public.bookings) from public, anon, authenticated;
+revoke execute on function public._can_coach(text) from public, anon, authenticated;
+revoke execute on function public.respond_booking(uuid, boolean) from public, anon;
+revoke execute on function public.reward_session(uuid) from public, anon;
+revoke execute on function public.coach_bookings() from public, anon;
+grant execute on function public.respond_booking(uuid, boolean) to authenticated;
+grant execute on function public.reward_session(uuid) to authenticated;
+grant execute on function public.coach_bookings() to authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard() to anon, authenticated;

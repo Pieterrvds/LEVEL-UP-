@@ -169,3 +169,5 @@
   .member-grid { grid-template-columns: 1fr 1fr; }
   .member-head .avatar.xl { width: 64px; height: 64px; font-size: 1.4rem; }
 }
+
+.admin-actions { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -23,7 +23,8 @@ const euro = (n) => `€${n.toFixed(2)}`;
 const fmtDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const fmtShort = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const isUpcoming = (b) => LevelUp.slotStart(b.date, b.hour) > new Date();
+const isUpcoming = (b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
+const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed" };
 const slotLabel = (b) => {
   const d = LevelUp.parseDate(b.date);
   return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${String(b.hour).padStart(2, "0")}:00`;
@@ -37,7 +38,7 @@ async function loadData() {
     return {
       ...p,
       prog: LevelUp.progress(p.xp),
-      sessions: own.length,
+      sessions: own.filter((b) => b.status === "completed").length,
       upcoming: own.filter(isUpcoming).length,
       spent: p.purchases.reduce((sum, o) => sum + o.total, 0),
       lastSeen: p.lastLogin || p.createdAt
@@ -46,6 +47,7 @@ async function loadData() {
   return {
     players: rows,
     members: rows.filter((p) => !p.admin),
+    active: bookings.filter((b) => b.status !== "declined"),
     bookings: [...bookings].sort((a, b) => LevelUp.slotStart(a.date, a.hour) - LevelUp.slotStart(b.date, b.hour))
   };
 }
@@ -184,7 +186,8 @@ function renderKpis() {
   const next = upcoming[0];
   const thisWeekStart = LevelUp.startOfWeek(0);
   const nextWeekStart = LevelUp.startOfWeek(1);
-  const thisWeek = bookings.filter((b) => {
+  const requests = bookings.filter((b) => b.status === "pending" && isUpcoming(b)).length;
+  const thisWeek = data.active.filter((b) => {
     const t = LevelUp.slotStart(b.date, b.hour);
     return t >= thisWeekStart && t < nextWeekStart;
   }).length;
@@ -202,8 +205,8 @@ function renderKpis() {
 
   document.getElementById("kpis").innerHTML = [
     tile("Members", members.length, newMembers ? `▲ ${newMembers} new this week` : "No new members this week", newMembers > 0),
-    tile("Upcoming sessions", upcoming.length, next ? `Next: ${slotLabel(next)} · ${esc(LevelUp.trainerById(next.trainerId).short)}` : "Nothing booked yet"),
-    tile("Sessions this week", thisWeek, `${plural(bookings.length, "session")} in total`),
+    tile("Upcoming sessions", upcoming.length, requests ? `⚠ ${plural(requests, "request")} waiting for a trainer` : next ? `Next: ${slotLabel(next)} · ${esc(LevelUp.trainerById(next.trainerId).short)}` : "Nothing booked yet", false),
+    tile("Sessions this week", thisWeek, `${plural(data.active.filter((b) => b.status === "completed").length, "completed session")} in total`),
     tile("Shop revenue", euro(revenue), plural(orders.length, "order")),
     tile("Workouts logged", workouts, "By members themselves"),
     tile("Average level", avgLevel ? avgLevel.toFixed(1) : "–", members.length ? `${plural(members.length, "member")}` : "No members yet")
@@ -378,7 +381,7 @@ function weeklyData() {
     color: t.chartColor,
     values: weeks.map((wk) => data.bookings.filter((b) => {
       const time = LevelUp.slotStart(b.date, b.hour);
-      return b.trainerId === t.id && time >= wk.start && time < wk.end;
+      return b.status !== "declined" && b.trainerId === t.id && time >= wk.start && time < wk.end;
     }).length)
   }));
   const labels = weeks.map((wk) => ({
@@ -629,16 +632,20 @@ function renderBookings() {
     return;
   }
   el.innerHTML = tableView(
-    ["When", "Trainer", "Player", "Note", "Booked on", ""],
+    ["When", "Trainer", "Player", "Status", "Note", ""],
     list.map((b) => {
       const t = LevelUp.trainerById(b.trainerId);
       return [
         `<span class="nowrap">${slotLabel(b)}</span>`,
         `<span class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.short)}</span>`,
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
+        `<span class="status-chip ${b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
-        `<span class="nowrap">${fmtDate(b.createdAt)}</span>`,
-        isUpcoming(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-cancel="${b.id}">Cancel</button>` : ""
+        `<span class="admin-actions">${[
+          b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
+          b.status === "confirmed" && b.date === LevelUp.dateKey() ? `<button type="button" class="btn btn-small btn-primary" data-admin-reward="${b.id}">Reward</button>` : "",
+          isUpcoming(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-cancel="${b.id}">Cancel</button>` : ""
+        ].join("")}</span>`
       ];
     })
   );
@@ -752,10 +759,19 @@ root.addEventListener("click", (event) => {
     renderBookings();
     return;
   }
+  const respond = event.target.closest("[data-admin-respond]");
+  const reward = event.target.closest("[data-admin-reward]");
+  if (respond || reward) {
+    const btn = respond || reward;
+    btn.disabled = true;
+    const action = reward ? LevelUp.rewardSession(btn.dataset.adminReward) : LevelUp.respondBooking(btn.dataset.id, btn.dataset.adminRespond === "confirm");
+    action.catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
   const cancel = event.target.closest("[data-admin-cancel]");
   if (cancel) {
     const b = data.bookings.find((x) => x.id === cancel.dataset.adminCancel);
-    if (!b || !confirm(`Cancel ${b.name}'s session with ${LevelUp.trainerById(b.trainerId).short} on ${slotLabel(b)}? Their XP for it is removed and they get an email.`)) return;
+    if (!b || !confirm(`Cancel ${b.name}'s session with ${LevelUp.trainerById(b.trainerId).short} on ${slotLabel(b)}? They get an email.`)) return;
     cancel.disabled = true;
     LevelUp.cancelBooking(b.id).catch((err) => {
       cancel.disabled = false;
