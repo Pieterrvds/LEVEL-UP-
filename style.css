@@ -273,6 +273,13 @@ a { color: inherit; }
 .auth-dialog[data-mode="new-password"] .auth-tabs { display: none; }
 .auth-dialog:not([data-mode="login"]) .auth-forgot { display: none; }
 .auth-forgot { justify-self: center; font-weight: 500; color: var(--muted); }
+.signup-stats, .auth-back { display: none; }
+.auth-dialog[data-mode="signup"][data-step="2"] .signup-stats { display: grid; gap: 14px; }
+.auth-dialog[data-mode="signup"][data-step="2"] .auth-back { display: block; justify-self: center; font-weight: 500; color: var(--muted); }
+.auth-dialog[data-mode="signup"][data-step="2"] :is(.signup-only, .email-field, .password-field, .auth-tabs) { display: none; }
+.stats-intro { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.stats-intro strong { color: var(--text); }
+.auth-dialog { max-height: 92vh; overflow-y: auto; }
 .auth-form .form-success { margin: 0; padding: 10px 12px; font-size: 0.9rem; color: var(--green-bright); background: #000; border-left: 4px solid var(--green-bright); }
 .auth-form .form-success:empty { display: none; }
 .hud-loading { font-family: var(--pixel); color: var(--muted); padding: 0 12px; animation: blink 1s steps(2) infinite; }
@@ -848,6 +855,40 @@ textarea { resize: vertical; min-height: 130px; }
 .meal-list b { min-width: 88px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
 .results-note { font-size: 0.85rem; color: var(--muted); margin: 0; }
 
+/* XP table + ranks (Level 01) */
+.xp-board {
+  margin-top: clamp(48px, 7vw, 72px);
+  padding: clamp(20px, 3vw, 32px);
+  background: var(--panel);
+  border: 3px solid var(--text);
+  box-shadow: 6px 6px 0 #000, 0 0 0 3px #000;
+}
+.xp-board-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 20px; }
+.xp-board-head h3 { font-family: var(--pixel); font-size: 0.8rem; text-transform: uppercase; }
+.xp-board-head p { margin: 0; }
+.xp-rules { list-style: none; padding: 0; margin: 0 0 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.xp-rules li { display: flex; align-items: center; gap: 14px; padding: 14px; background: #000; border: 2px solid var(--line); }
+.xp-rules .xp-chip { flex-shrink: 0; min-width: 76px; text-align: center; }
+.xp-rules strong { display: block; font-size: 0.95rem; }
+.xp-rules small { display: block; color: var(--muted); font-size: 0.82rem; }
+.rank-strip { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.rank-strip li {
+  --tier-color: var(--green-bright);
+  display: grid;
+  gap: 4px;
+  padding: 10px 8px;
+  text-align: center;
+  background: #000;
+  border-bottom: 6px solid var(--tier-color);
+}
+.rank-strip li[data-tier="1"] { --tier-color: #4fc3f7; }
+.rank-strip li[data-tier="2"] { --tier-color: #c77dff; }
+.rank-strip li[data-tier="3"] { --tier-color: #ff8a3d; }
+.rank-strip li[data-tier="4"] { --tier-color: var(--red); }
+.rank-strip li[data-tier="5"] { --tier-color: var(--gold); }
+.rank-strip b { font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; font-weight: 400; color: var(--text); }
+.rank-strip small { font-size: 0.75rem; color: var(--muted); }
+
 /* Level system section */
 .levels-grid {
   display: grid;
@@ -1254,6 +1295,7 @@ textarea { resize: vertical; min-height: 130px; }
   :root { --hud-h: 60px; }
 
   .hero-grid, .about-grid, .stats-grid, .contact-grid, .levels-grid { grid-template-columns: 1fr; }
+  .xp-rules { grid-template-columns: 1fr 1fr; }
   .player-card, .quest-board { justify-self: start; max-width: 460px; }
 }
 
@@ -1268,7 +1310,8 @@ textarea { resize: vertical; min-height: 130px; }
   .player-card, .quest-board { max-width: none; animation: none; }
   .press-start { display: none; }
 
-  .class-grid, .team-grid, .xp-sources { grid-template-columns: 1fr; }
+  .class-grid, .team-grid, .xp-sources, .xp-rules { grid-template-columns: 1fr; }
+  .rank-strip { grid-template-columns: repeat(3, 1fr); }
   .mini-xp { width: 44px; }
   .hud-admin-label { display: none; }
   .hud-admin { height: 42px; padding: 0 10px; margin-left: 6px; font-size: 0.8rem; }

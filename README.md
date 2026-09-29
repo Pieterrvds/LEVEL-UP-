@@ -2,9 +2,9 @@
 Personal training platform with a retro game theme: players and personal trainers meet, train and level up together.
 
 ## Pages
-- `index.html`: home page: quest board with the next open sessions, classes, stats calculator, level system, team with trainer levels, weekly booking schedule, contact
+- `index.html`: home page: quest board with the next open sessions, the platform + XP table, classes, team with trainer levels, weekly booking schedule, contact
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
-- `profile.html`: player profile with level, rank, XP, sessions, workout log, body stats, achievements, inventory and orders
+- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, workout log, achievements, inventory and orders. New players set their character stats as step 2 of sign-up.
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details
 - `archive/webshop-v1/`: the old webshop, kept for reference
 
@@ -46,7 +46,7 @@ A trainer without any "available" events falls back to the hours in `TRAINERS` i
 ## Trainers and bookings
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`
 table in Supabase. Sessions are 1 hour, need at least 12 hours notice and can be booked up to 4 weeks ahead.
-Clients earn 75 XP per booking; trainers earn 100 XP per session and 50 XP per unique client.
+Clients earn 75 XP per booking and 25 XP for the first stats check-in each week; trainers earn 100 XP per session and 50 XP per unique client.
 Every booking and cancellation is emailed to the LEVEL-UP inbox, the client gets an automatic confirmation and can
 add the session to their own Google Calendar.
 

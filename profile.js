@@ -134,37 +134,135 @@ function renderWorkouts(player) {
     </section>`;
 }
 
+const MEAL_PLANS = {
+  lose: ["Scrambled egg whites & avocado", "Grilled chicken salad", "Greek yogurt & berries", "Salmon & quinoa"],
+  maintain: ["Oatmeal with peanut butter", "Brown rice & tuna", "Greek yogurt with nuts", "Grilled chicken wrap"],
+  gain: ["Egg omelette with toast", "Salmon with pasta", "Protein shake with oats", "Steak with potatoes"]
+};
+let statsMessage = "";
+
+// Weight over time: one line, hover or focus a point for its value (the table below has every value)
+function weightChart(entries) {
+  const points = entries.slice(0, 12).reverse();
+  if (points.length < 2) {
+    return `<p class="muted chart-hint">Do your next weekly check-in to start your progress line.</p>`;
+  }
+  const w = 560, h = 180, m = { top: 20, right: 44, bottom: 28, left: 40 };
+  const weights = points.map((p) => p.weight);
+  let min = Math.floor(Math.min(...weights) - 1);
+  let max = Math.ceil(Math.max(...weights) + 1);
+  const x = (i) => m.left + (i / (points.length - 1)) * (w - m.left - m.right);
+  const y = (v) => m.top + (1 - (v - min) / (max - min)) * (h - m.top - m.bottom);
+  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.weight)}`).join("");
+  const grid = [min, (min + max) / 2, max].map((v) => `
+    <line x1="${m.left}" x2="${w - m.right}" y1="${y(v)}" y2="${y(v)}" stroke="#1f3026"/>
+    <text x="${m.left - 8}" y="${y(v) + 4}" text-anchor="end" class="tick">${Math.round(v)}</text>`).join("");
+  const last = points[points.length - 1];
+  const fmt = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return `
+    <svg class="weight-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Weight over time, from ${points[0].weight} to ${last.weight} kg">
+      ${grid}
+      <path d="${line}L${x(points.length - 1)},${h - m.bottom}L${x(0)},${h - m.bottom}Z" fill="#3fa34d" opacity="0.1"/>
+      <path d="${line}" fill="none" stroke="#3fa34d" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${points.map((p, i) => `
+        <g class="pt" tabindex="0" aria-label="${fmt(p.date)}: ${p.weight} kg">
+          <circle cx="${x(i)}" cy="${y(p.weight)}" r="12" fill="transparent"/>
+          <circle cx="${x(i)}" cy="${y(p.weight)}" r="4" fill="#3fa34d" stroke="var(--panel)" stroke-width="2"/>
+          <title>${fmt(p.date)}: ${p.weight} kg</title>
+        </g>`).join("")}
+      <text x="${x(points.length - 1) + 8}" y="${y(last.weight) + 4}" class="val">${last.weight}</text>
+      <text x="${m.left}" y="${h - 8}" class="tick">${fmt(points[0].date)}</text>
+      <text x="${w - m.right}" y="${h - 8}" text-anchor="end" class="tick">${fmt(last.date)}</text>
+    </svg>`;
+}
+
+function statsForm(latest) {
+  const v = latest || { sex: "male", activity: 1.55, goal: "maintain" };
+  const next = LevelUp.nextCheckin();
+  const reward = next
+    ? `Next check-in XP on ${next.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`
+    : `+${LevelUp.CHECKIN_XP} XP weekly check-in`;
+  return `
+    <form class="stats-form-inline" id="statsForm" novalidate>
+      <div class="field-row four">
+        <label>Weight (kg)<input name="weight" type="number" min="30" max="300" step="0.1" inputmode="decimal" value="${v.weight ?? ""}" required></label>
+        <label>Height (cm)<input name="height" type="number" min="120" max="230" inputmode="numeric" value="${v.height ?? ""}" required></label>
+        <label>Age<input name="age" type="number" min="14" max="100" inputmode="numeric" value="${v.age ?? ""}" required></label>
+        <label>Sex<select name="sex">${["male", "female"].map((x) => `<option value="${x}" ${v.sex === x ? "selected" : ""}>${x === "male" ? "Male" : "Female"}</option>`).join("")}</select></label>
+      </div>
+      <div class="field-row">
+        <label>Activity level<select name="activity">${LevelUp.ACTIVITY_LEVELS.map((a) => `<option value="${a.value}" ${Math.abs(Number(v.activity) - a.value) < 0.001 ? "selected" : ""}>${a.label}</option>`).join("")}</select></label>
+        <label>Goal<select name="goal">${Object.entries(LevelUp.GOALS).map(([k, l]) => `<option value="${k}" ${v.goal === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      </div>
+      <p class="form-error" role="alert"></p>
+      <div class="stats-submit">
+        <button type="submit" class="btn btn-primary">${latest ? "Save check-in ▶" : "Save my stats ▶"}</button>
+        <span class="xp-chip ${next ? "muted-chip" : ""}">${reward}</span>
+      </div>
+    </form>`;
+}
+
 function renderBodyStats(player) {
-  const [latest, previous] = player.bodyStats;
+  const entries = player.bodyStats;
+  const [latest] = entries;
   if (!latest) {
     return `
-      <section class="panel">
-        <div class="panel-head"><h2>Body stats</h2></div>
-        <p class="muted">No stats saved yet. Use the stats calculator and press <strong>Save to profile</strong> to track your BMI, BMR and calories over time.</p>
-        <a href="index.html#stats" class="btn btn-small">Open stats calculator</a>
+      <section class="panel panel-wide" id="stats">
+        <div class="panel-head"><h2>Character stats</h2><span class="xp-chip">+${25 + LevelUp.CHECKIN_XP} XP</span></div>
+        <p class="muted">Set your stats to see your BMI, daily calories and protein target, and to track your progress week by week.</p>
+        ${statsForm(null)}
       </section>`;
   }
-  const change = previous ? latest.weight - previous.weight : null;
-  const changeText = change === null ? "First entry" : `${change > 0 ? "+" : ""}${change.toFixed(1)} kg since last`;
+  const first = entries[entries.length - 1];
+  const change = latest.weight - first.weight;
+  const since = new Date(first.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const cat = LevelUp.bmiCategory(latest.bmi);
+  const meals = MEAL_PLANS[latest.goal] || MEAL_PLANS.maintain;
+  const activity = LevelUp.ACTIVITY_LEVELS.find((a) => Math.abs(a.value - Number(latest.activity)) < 0.001);
+  const fmtNum = (n) => Number(n).toLocaleString("en-US");
+
   return `
-    <section class="panel">
+    <section class="panel panel-wide" id="stats">
       <div class="panel-head">
-        <h2>Body stats</h2>
-        <a href="index.html#stats" class="btn btn-small btn-ghost">Update</a>
+        <h2>Character stats</h2>
+        <span class="muted">Goal: <strong>${LevelUp.GOALS[latest.goal] || "Maintain"}</strong>${activity ? ` · ${activity.label}` : ""}</span>
       </div>
-      <div class="result-tiles">
-        <div class="tile"><span class="tile-label">Weight</span><span class="tile-value">${latest.weight}<small>kg</small></span><span class="tile-note">${changeText}</span></div>
-        <div class="tile"><span class="tile-label">BMI</span><span class="tile-value">${latest.bmi}</span></div>
-        <div class="tile"><span class="tile-label">BMR</span><span class="tile-value">${latest.bmr.toLocaleString("en-US")}<small>kcal</small></span></div>
-        <div class="tile highlight"><span class="tile-label">Daily target</span><span class="tile-value">${latest.target.toLocaleString("en-US")}<small>kcal</small></span><span class="tile-note">~${latest.protein} g protein</span></div>
+      <div class="stats-layout">
+        <div>
+          <div class="result-tiles three">
+            <div class="tile"><span class="tile-label">Weight</span><span class="tile-value">${latest.weight}<small>kg</small></span>
+              <span class="tile-note">${entries.length > 1 ? `${change > 0 ? "+" : ""}${change.toFixed(1)} kg since ${since}` : "Starting point"}</span></div>
+            <div class="tile"><span class="tile-label">BMI</span><span class="tile-value">${latest.bmi}</span><span class="tile-note ${cat.warn ? "warn" : ""}">${cat.label}</span></div>
+            <div class="tile"><span class="tile-label">BMR</span><span class="tile-value">${fmtNum(latest.bmr)}<small>kcal</small></span><span class="tile-note">At rest</span></div>
+            <div class="tile"><span class="tile-label">Maintenance</span><span class="tile-value">${fmtNum(latest.maintenance)}<small>kcal</small></span><span class="tile-note">Per day</span></div>
+            <div class="tile highlight"><span class="tile-label">Daily target</span><span class="tile-value">${fmtNum(latest.target)}<small>kcal</small></span><span class="tile-note">For your goal</span></div>
+            <div class="tile"><span class="tile-label">Protein</span><span class="tile-value">${latest.protein}<small>g</small></span><span class="tile-note">Per day</span></div>
+          </div>
+          <h3 class="panel-sub">Weight progress</h3>
+          ${weightChart(entries)}
+        </div>
+        <div>
+          <h3 class="panel-sub first">Weekly check-in</h3>
+          <p class="muted small-text">Update your stats whenever you like. Your first update each week earns XP, and 4 check-in weeks unlock <strong>On track</strong>.</p>
+          ${statsForm(latest)}
+          ${statsMessage ? `<p class="form-success">${esc(statsMessage)}</p>` : ""}
+          <h3 class="panel-sub">Starter meal plan</h3>
+          <ul class="meal-list">
+            <li><b>Breakfast</b><span>${meals[0]}</span></li>
+            <li><b>Lunch</b><span>${meals[1]}</span></li>
+            <li><b>Snack</b><span>${meals[2]}</span></li>
+            <li><b>Dinner</b><span>${meals[3]}</span></li>
+          </ul>
+          <p class="muted small-text">Estimates only. Want a plan built for you? <a href="index.html#contact" class="text-link">Ask your coach</a>.</p>
+        </div>
       </div>
       <h3 class="panel-sub">History</h3>
       <div class="table-wrap">
         <table class="stats-table">
-          <thead><tr><th>Date</th><th>Weight</th><th>BMI</th><th>Target</th></tr></thead>
+          <thead><tr><th>Date</th><th>Weight</th><th>BMI</th><th>Target</th><th>Goal</th></tr></thead>
           <tbody>
-            ${player.bodyStats.slice(0, 8).map((s) => `
-              <tr><td>${formatDate(s.date)}</td><td>${s.weight} kg</td><td>${s.bmi}</td><td>${s.target.toLocaleString("en-US")} kcal</td></tr>`).join("")}
+            ${entries.slice(0, 10).map((e) => `
+              <tr><td>${formatDate(e.date)}</td><td>${e.weight} kg</td><td>${e.bmi}</td><td>${fmtNum(e.target)} kcal</td><td>${LevelUp.GOALS[e.goal] || ""}</td></tr>`).join("")}
           </tbody>
         </table>
       </div>
@@ -278,9 +376,9 @@ function render() {
     ${renderHeader(player, p)}
     ${renderSummary(player)}
     <div class="panel-grid">
+      ${renderBodyStats(player)}
       ${renderSessions()}
       ${renderWorkouts(player)}
-      ${renderBodyStats(player)}
       ${renderAchievements(player)}
       ${renderInventory(player)}
       ${renderRanks(player, p)}
@@ -313,6 +411,25 @@ function bindEvents(player) {
       workoutMessage = `Not logged: ${err.message}`;
     }
     render();
+  });
+
+  const statsFormEl = document.getElementById("statsForm");
+  statsFormEl?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = statsFormEl.querySelector('button[type="submit"]');
+    const error = statsFormEl.querySelector(".form-error");
+    error.textContent = "";
+    submit.disabled = true;
+    submit.textContent = "Saving…";
+    try {
+      const result = await LevelUp.saveBodyStats(Object.fromEntries(new FormData(statsFormEl)));
+      statsMessage = result.xp ? `Check-in saved: +${result.xp} XP.` : "Stats updated. Check-in XP is once a week.";
+      render();
+    } catch (err) {
+      error.textContent = err.message;
+      submit.disabled = false;
+      submit.textContent = "Try again";
+    }
   });
 
   root.querySelectorAll("[data-cancel-booking]").forEach((button) => {

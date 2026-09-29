@@ -28,10 +28,8 @@
     </a>
 
     <nav class="nav" id="nav" aria-label="Main">
-      <a href="#about">Coach</a>
+      <a href="#about">Play</a>
       <a href="#programs">Classes</a>
-      <a href="#stats">Stats</a>
-      <a href="#levels">Levels</a>
       <a href="#team">Party</a>
       <a href="#schedule">Book</a>
       <a href="#contact">Contact</a>
@@ -93,46 +91,66 @@
 
     <div class="vine-divider" aria-hidden="true"></div>
 
-    <!-- ABOUT -->
+    <!-- ABOUT + LEVEL SYSTEM -->
     <section id="about" class="section">
-      <div class="container about-grid">
-        <div>
-          <p class="section-kicker">Level 01 · The platform</p>
-          <h2 class="section-title">Hey there!</h2>
-          <p class="text-lg">
-            <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Pick a coach from our team, book a one-hour session straight from their weekly schedule and train one-on-one.
-          </p>
-          <p>
-            Every session you book earns XP and levels up your player profile. Our trainers level up too: the more players they coach, the higher their level. You push each other, rep after rep.
-          </p>
-          <p>
-            Want to go further? Check your body stats, log your own workouts and grab your gear in the <a href="shop.html" class="text-link">item shop</a>.
-          </p>
-          <div class="btn-row">
-            <a href="#schedule" class="btn btn-primary">Book a trainer</a>
-            <a href="#team" class="btn btn-ghost">Meet the team</a>
-            <a href="shop.html" class="btn btn-ghost">Shop</a>
+      <div class="container">
+        <div class="about-grid">
+          <div>
+            <p class="section-kicker">Level 01 · The platform</p>
+            <h2 class="section-title">Hey there!</h2>
+            <p class="text-lg">
+              <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player, pick a coach from our team and book a one-hour session straight from their weekly schedule.
+            </p>
+            <p>
+              Your training becomes a game. Every session, workout and weekly check-in earns XP, and you climb from <strong>Rookie</strong> to <strong>Legend</strong>. Our trainers level up too: the more players they coach, the higher their level.
+            </p>
+            <div class="btn-row" id="aboutCta">
+              <button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your player</button>
+            </div>
           </div>
+
+          <ol class="quest-steps">
+            <li>
+              <span class="step-no">1</span>
+              <div><h3>Create your player</h3><p>Sign up and set your character stats: BMI, daily calories and your goal, tracked in your profile.</p></div>
+            </li>
+            <li>
+              <span class="step-no">2</span>
+              <div><h3>Choose your trainer</h3><p>Meet the team and find the coach that fits your goal.</p></div>
+            </li>
+            <li>
+              <span class="step-no">3</span>
+              <div><h3>Book a slot</h3><p>Pick an open hour in the weekly schedule. Your trainer gets notified straight away.</p></div>
+            </li>
+            <li>
+              <span class="step-no">★</span>
+              <div><h3>Level up together</h3><p>Earn XP for every session and check-in. Your trainer earns XP for every player they coach.</p></div>
+            </li>
+          </ol>
         </div>
 
-        <ol class="quest-steps">
-          <li>
-            <span class="step-no">1</span>
-            <div><h3>Create your player</h3><p>A free profile that tracks your level, XP, sessions and body stats.</p></div>
-          </li>
-          <li>
-            <span class="step-no">2</span>
-            <div><h3>Choose your trainer</h3><p>Meet the team and find the coach that fits your goal.</p></div>
-          </li>
-          <li>
-            <span class="step-no">3</span>
-            <div><h3>Book a slot</h3><p>Pick an open hour in the weekly schedule. Your trainer gets notified straight away.</p></div>
-          </li>
-          <li>
-            <span class="step-no">★</span>
-            <div><h3>Level up together</h3><p>You earn XP for every session, and your trainer earns XP for every player they coach.</p></div>
-          </li>
-        </ol>
+        <div class="xp-board" id="levels">
+          <div class="xp-board-head">
+            <h3>XP table</h3>
+            <p class="muted">How you earn XP on LEVEL-UP</p>
+          </div>
+          <ul class="xp-rules">
+            <li><span class="xp-chip">+50</span><span><strong>Create your player</strong><small>+25 more for your character stats</small></span></li>
+            <li><span class="xp-chip">+75</span><span><strong>Book a session</strong><small>with any LEVEL-UP trainer</small></span></li>
+            <li><span class="xp-chip">+25</span><span><strong>Weekly check-in</strong><small>update your stats once a week</small></span></li>
+            <li><span class="xp-chip">+30–60</span><span><strong>Log a workout</strong><small>training on your own, up to 3 a day</small></span></li>
+            <li><span class="xp-chip">10 / €</span><span><strong>Gear up in the shop</strong><small>merch and tools, set bonuses</small></span></li>
+            <li><span class="xp-chip gold">+50–500</span><span><strong>Achievements</strong><small>Party up, On track, Full party, Collector…</small></span></li>
+          </ul>
+          <ol class="rank-strip" aria-label="Ranks">
+            <li data-tier="0"><b>Rookie</b><small>LVL 1</small></li>
+            <li data-tier="1"><b>Trainee</b><small>LVL 3</small></li>
+            <li data-tier="2"><b>Athlete</b><small>LVL 5</small></li>
+            <li data-tier="3"><b>Warrior</b><small>LVL 8</small></li>
+            <li data-tier="4"><b>Champion</b><small>LVL 12</small></li>
+            <li data-tier="5"><b>Legend</b><small>LVL 16</small></li>
+          </ol>
+        </div>
       </div>
     </section>
 
@@ -207,85 +225,10 @@
       </div>
     </section>
 
-    <!-- STATS CALCULATOR -->
-    <section id="stats" class="section">
-      <div class="container stats-grid">
-        <div>
-          <p class="section-kicker">Level 03 · Character stats</p>
-          <h2 class="section-title">Check your stats</h2>
-          <p class="section-intro left">
-            Find your BMI, your resting energy use (BMR) and the daily calories that match your goal. You also get a simple meal plan to start with.
-          </p>
-          <form class="stats-form pixel-frame" id="statsForm" novalidate>
-            <div class="field-row">
-              <label>Weight (kg)<input type="number" id="weight" min="30" max="300" step="0.1" required inputmode="decimal"></label>
-              <label>Height (cm)<input type="number" id="height" min="120" max="230" required inputmode="numeric"></label>
-            </div>
-            <div class="field-row">
-              <label>Age<input type="number" id="age" min="14" max="100" required inputmode="numeric"></label>
-              <label>Sex
-                <select id="gender">
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
-              </label>
-            </div>
-            <label>Activity level
-              <select id="activity">
-                <option value="1.2">Sedentary (little to no exercise)</option>
-                <option value="1.375">Lightly active (1–3 days/week)</option>
-                <option value="1.55" selected>Moderately active (3–5 days/week)</option>
-                <option value="1.725">Very active (6–7 days/week)</option>
-                <option value="1.9">Athlete level</option>
-              </select>
-            </label>
-            <fieldset class="goal-picker">
-              <legend>Goal</legend>
-              <label><input type="radio" name="goal" value="lose"> <span>Lose fat</span></label>
-              <label><input type="radio" name="goal" value="maintain" checked> <span>Maintain</span></label>
-              <label><input type="radio" name="goal" value="gain"> <span>Build muscle</span></label>
-            </fieldset>
-            <p class="form-error" id="statsError" role="alert"></p>
-            <button type="submit" class="btn btn-primary btn-block">Calculate stats</button>
-          </form>
-        </div>
-
-        <div class="results pixel-frame" id="results" aria-live="polite">
-          <div class="results-empty">
-            <span class="pixel-heart" aria-hidden="true"></span>
-            <p>Enter your details to reveal your stats.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- LEVEL SYSTEM -->
-    <section id="levels" class="section">
-      <div class="container levels-grid">
-        <div>
-          <p class="section-kicker">Bonus level · Save file</p>
-          <h2 class="section-title">Level up for real</h2>
-          <p class="section-intro left">
-            Create your player profile and turn your training into a game. Every session, every workout and every piece of gear earns XP, and unlocks achievements along the way. Climb from <strong>Rookie</strong> to <strong>Legend</strong>.
-          </p>
-          <div class="btn-row" id="levelsCta">
-            <button type="button" class="btn btn-primary" data-auth-open="signup">Create your player</button>
-            <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>
-          </div>
-        </div>
-        <ul class="xp-sources">
-          <li><span class="xp-chip">+75 XP</span><div><h3>Book a session</h3><p>Every hour with a LEVEL-UP trainer levels you up, and your trainer too.</p></div></li>
-          <li><span class="xp-chip">+30–60 XP</span><div><h3>Log a workout</h3><p>Training on your own? Log it and it counts toward your next level.</p></div></li>
-          <li><span class="xp-chip">+25 XP</span><div><h3>Save your stats</h3><p>Track your BMI, BMR and daily calories over time.</p></div></li>
-          <li><span class="xp-chip">10 XP / €</span><div><h3>Gear up in the shop</h3><p>Merch and tools earn XP, and complete sets unlock bonus achievements.</p></div></li>
-        </ul>
-      </div>
-    </section>
-
     <!-- TEAM -->
     <section id="team" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">Level 04 · Your party</p>
+        <p class="section-kicker">Level 03 · Your party</p>
         <h2 class="section-title">Meet the team</h2>
         <div class="team-grid">
           <article class="team-card team-card-lead">
@@ -345,7 +288,7 @@
     <!-- GALLERY -->
     <section id="gallery" class="section">
       <div class="container">
-        <p class="section-kicker">Level 05 · Replays</p>
+        <p class="section-kicker">Level 04 · Replays</p>
         <h2 class="section-title">In action</h2>
         <div class="gallery">
           <figure class="gallery-item"><img src="img/galleryfotocrossfit.jpg" alt="Pull-ups in a LEVEL-UP hoodie at the CrossFit box" loading="lazy"></figure>
@@ -358,7 +301,7 @@
     <!-- SCHEDULE / BOOKING -->
     <section id="schedule" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">Level 06 · Quest board</p>
+        <p class="section-kicker">Level 05 · Quest board</p>
         <h2 class="section-title">Book your trainer</h2>
         <p class="section-intro">Live from the LEVEL-UP calendar. Every open square is a one-hour session. Click a free hour to book it. You earn <strong>+75 XP</strong> and your trainer levels up too.</p>
 

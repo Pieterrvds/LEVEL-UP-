@@ -116,6 +116,7 @@ create table if not exists public.body_stats (
   protein integer not null,
   created_at timestamptz not null default now()
 );
+alter table public.body_stats add column if not exists activity numeric(4, 3) not null default 1.55;
 create index if not exists body_stats_user_idx on public.body_stats (user_id, created_at desc);
 
 create table if not exists public.bookings (
@@ -237,7 +238,14 @@ begin
   if n_workouts >= 10 then perform public._unlock(p_user, 'workouts_10', 150, 'Consistency'); end if;
   if n_workouts >= 50 then perform public._unlock(p_user, 'workouts_50', 500, 'Grinder'); end if;
 
+  if (select count(distinct date_trunc('week', day)) from public.body_stats where user_id = p_user) >= 4 then
+    perform public._unlock(p_user, 'checkins_4', 150, 'On track');
+  end if;
+
   if p.sessions_booked >= 1 then perform public._unlock(p_user, 'first_session', 100, 'Party up'); end if;
+  if (select count(distinct trainer_id) from public.bookings where user_id = p_user) >= 3 then
+    perform public._unlock(p_user, 'full_party', 200, 'Full party');
+  end if;
   if p.sessions_booked >= 5 then perform public._unlock(p_user, 'sessions_5', 250, 'Regular'); end if;
 
   if exists (select 1 from public.orders where user_id = p_user) then
@@ -253,6 +261,37 @@ begin
   if owns_all then perform public._unlock(p_user, 'collector', 300, 'Collector'); end if;
 end $$;
 
+-- Saves a set of character stats; the first save each week earns check-in XP
+create or replace function public._insert_stats(p_user uuid, p jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  w numeric := (p ->> 'weight')::numeric;
+  h numeric := (p ->> 'height')::numeric;
+  a integer := (p ->> 'age')::int;
+  gained integer := 0;
+begin
+  if w is null or w < 30 or w > 300 then raise exception 'Enter a weight between 30 and 300 kg.'; end if;
+  if h is null or h < 120 or h > 230 then raise exception 'Enter a height between 120 and 230 cm.'; end if;
+  if a is null or a < 14 or a > 100 then raise exception 'Enter an age between 14 and 100.'; end if;
+
+  if not exists (
+    select 1 from public.xp_log
+    where user_id = p_user and reason = 'Weekly check-in' and created_at > now() - interval '6 days 12 hours'
+  ) then
+    gained := 25;
+  end if;
+
+  insert into public.body_stats (user_id, day, weight, height, age, sex, goal, activity, bmi, bmr, maintenance, target, protein)
+  values (p_user, (now() at time zone 'Europe/Brussels')::date,
+    w, h, a, left(coalesce(p ->> 'sex', 'male'), 10), left(coalesce(p ->> 'goal', 'maintain'), 20),
+    least(2.0, greatest(1.0, coalesce((p ->> 'activity')::numeric, 1.55))),
+    (p ->> 'bmi')::numeric, (p ->> 'bmr')::int, (p ->> 'maintenance')::int, (p ->> 'target')::int, (p ->> 'protein')::int);
+
+  perform public._grant_xp(p_user, gained, 'Weekly check-in');
+  perform public._check_achievements(p_user);
+  return gained;
+end $$;
+
 -- New sign-ups get a profile automatically
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -265,6 +304,14 @@ begin
   )
   on conflict (id) do nothing;
   perform public._check_achievements(new.id);
+  -- Character stats filled in during sign-up
+  if new.raw_user_meta_data ? 'stats' then
+    begin
+      perform public._insert_stats(new.id, new.raw_user_meta_data -> 'stats');
+    exception when others then
+      null; -- never block a sign-up because of the stats
+    end;
+  end if;
   return new;
 end $$;
 
@@ -295,7 +342,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                           from public.workouts w where w.user_id = p.id), '[]'::jsonb),
     'bodyStats', coalesce((select jsonb_agg(jsonb_build_object('date', b.day, 'weight', b.weight, 'height', b.height, 'age', b.age,
                               'sex', b.sex, 'goal', b.goal, 'bmi', b.bmi, 'bmr', b.bmr, 'maintenance', b.maintenance,
-                              'target', b.target, 'protein', b.protein) order by b.id desc)
+                              'target', b.target, 'protein', b.protein, 'activity', b.activity) order by b.day desc, b.id desc)
                            from public.body_stats b where b.user_id = p.id), '[]'::jsonb),
     'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total) order by o.created_at desc)
                            from public.orders o where o.user_id = p.id), '[]'::jsonb),
@@ -438,16 +485,13 @@ begin
   return jsonb_build_object('xp', v_xp, 'limitReached', v_xp = 0);
 end $$;
 
+drop function if exists public.save_body_stats(jsonb);
 create or replace function public.save_body_stats(p jsonb)
-returns void language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare uid uuid := auth.uid();
 begin
   if uid is null then raise exception 'Log in first.'; end if;
-  insert into public.body_stats (user_id, day, weight, height, age, sex, goal, bmi, bmr, maintenance, target, protein)
-  values (uid, (now() at time zone 'Europe/Brussels')::date,
-    (p ->> 'weight')::numeric, (p ->> 'height')::numeric, (p ->> 'age')::int, left(p ->> 'sex', 10), left(p ->> 'goal', 20),
-    (p ->> 'bmi')::numeric, (p ->> 'bmr')::int, (p ->> 'maintenance')::int, (p ->> 'target')::int, (p ->> 'protein')::int);
-  perform public._check_achievements(uid);
+  return jsonb_build_object('xp', public._insert_stats(uid, p));
 end $$;
 
 -- Adds an order's items and XP to a player
@@ -575,6 +619,7 @@ revoke execute on function public._unlock(uuid, text, integer, text) from public
 revoke execute on function public._check_achievements(uuid) from public, anon, authenticated;
 revoke execute on function public._player_json(uuid) from public, anon, authenticated;
 revoke execute on function public._credit_order(text, uuid) from public, anon, authenticated;
+revoke execute on function public._insert_stats(uuid, jsonb) from public, anon, authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 revoke execute on function public.my_data() from public, anon;

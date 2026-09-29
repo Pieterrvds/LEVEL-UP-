@@ -126,12 +126,14 @@ const LevelUp = (() => {
 
   const ACHIEVEMENTS = [
     { id: "new_player", icon: "★", title: "New player", desc: "Create your player profile.", xp: 50 },
-    { id: "stats_saved", icon: "♥", title: "Know your numbers", desc: "Save your body stats.", xp: 25 },
+    { id: "stats_saved", icon: "♥", title: "Know your numbers", desc: "Set your character stats.", xp: 25 },
+    { id: "checkins_4", icon: "◷", title: "On track", desc: "Do a weekly check-in in 4 different weeks.", xp: 150 },
     { id: "first_rep", icon: "▲", title: "First rep", desc: "Log your first workout.", xp: 50 },
     { id: "workouts_10", icon: "⚡", title: "Consistency", desc: "Log 10 workouts.", xp: 150 },
     { id: "workouts_50", icon: "♛", title: "Grinder", desc: "Log 50 workouts.", xp: 500 },
     { id: "first_session", icon: "⚔", title: "Party up", desc: "Book your first session with a trainer.", xp: 100 },
     { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Book 5 sessions with a trainer.", xp: 250 },
+    { id: "full_party", icon: "♞", title: "Full party", desc: "Train with 3 different trainers.", xp: 200 },
     { id: "first_loot", icon: "◆", title: "First loot", desc: "Buy your first item.", xp: 100, shop: true },
     { id: "full_drip", icon: "▣", title: "Full drip", desc: "Own the T-shirt and the hoodie.", xp: 150, shop: true },
     { id: "home_gym", icon: "⚒", title: "Home gym", desc: "Own the parallettes and the resistance bands.", xp: 150, shop: true },
@@ -217,6 +219,58 @@ const LevelUp = (() => {
   }
 
   const orderXp = (total) => Math.round(total * XP_PER_EURO);
+  const CHECKIN_XP = 25;
+
+  // ---------- Character stats ----------
+  const ACTIVITY_LEVELS = [
+    { value: 1.2, label: "Sedentary (little to no exercise)" },
+    { value: 1.375, label: "Lightly active (1–3 days/week)" },
+    { value: 1.55, label: "Moderately active (3–5 days/week)" },
+    { value: 1.725, label: "Very active (6–7 days/week)" },
+    { value: 1.9, label: "Athlete level" }
+  ];
+  const GOALS = { lose: "Lose fat", maintain: "Maintain", gain: "Build muscle" };
+
+  // BMI, BMR (Mifflin-St Jeor), daily calories for the goal and a protein target
+  function computeStats({ weight, height, age, sex, activity, goal }) {
+    weight = Number(weight);
+    height = Number(height);
+    age = Number(age);
+    activity = Number(activity) || 1.55;
+    goal = GOALS[goal] ? goal : "maintain";
+    sex = sex === "female" ? "female" : "male";
+    if (!(weight >= 30 && weight <= 300)) throw new Error("Enter a weight between 30 and 300 kg.");
+    if (!(height >= 120 && height <= 230)) throw new Error("Enter a height between 120 and 230 cm.");
+    if (!(age >= 14 && age <= 100)) throw new Error("Enter an age between 14 and 100.");
+    const bmi = weight / ((height / 100) ** 2);
+    const bmr = 10 * weight + 6.25 * height - 5 * age + (sex === "male" ? 5 : -161);
+    const maintenance = bmr * activity;
+    const target = maintenance * { lose: 0.8, maintain: 1, gain: 1.1 }[goal];
+    const protein = weight * { lose: 2.0, maintain: 1.6, gain: 1.8 }[goal];
+    return {
+      weight, height, age, sex, activity, goal,
+      bmi: Math.round(bmi * 10) / 10,
+      bmr: Math.round(bmr),
+      maintenance: Math.round(maintenance),
+      target: Math.round(target),
+      protein: Math.round(protein)
+    };
+  }
+
+  function bmiCategory(bmi) {
+    if (bmi < 18.5) return { label: "Underweight", warn: true };
+    if (bmi < 25) return { label: "Healthy range", warn: false };
+    if (bmi < 30) return { label: "Overweight", warn: true };
+    return { label: "Obese", warn: true };
+  }
+
+  // Next moment the weekly check-in pays XP again (null = now)
+  function nextCheckin(p = player) {
+    const last = (p?.xpLog || []).find((e) => e.reason === "Weekly check-in" && e.amount > 0);
+    if (!last) return null;
+    const next = new Date(new Date(last.date).getTime() + (6 * 24 + 12) * 3600e3);
+    return next > new Date() ? next : null;
+  }
   const workoutXp = (minutes) => 30 + Math.min(30, Math.floor((Number(minutes) || 0) / 10) * 5);
 
   // ---------- Supabase ----------
@@ -513,10 +567,12 @@ const LevelUp = (() => {
     return result;
   }
 
-  async function saveBodyStats(stats) {
-    await call("save_body_stats", { p: stats });
+  async function saveBodyStats(input) {
+    const stats = computeStats(input);
+    const result = await call("save_body_stats", { p: stats });
     await refreshPlayer({ announce: true });
     emit();
+    return { xp: Number(result?.xp) || 0, stats };
   }
 
   // Records a paid order. Guests' orders are remembered on this device
@@ -563,7 +619,7 @@ const LevelUp = (() => {
   // ---------- Accounts ----------
   const pageUrl = (page) => new URL(page, window.location.href).href.split("#")[0];
 
-  async function signUp({ name, email, password }) {
+  async function signUp({ name, email, password, stats }) {
     name = String(name || "").trim();
     email = String(email || "").trim().toLowerCase();
     if (!name) throw new Error("Choose a player name.");
@@ -574,7 +630,7 @@ const LevelUp = (() => {
     const { data, error } = await sb.auth.signUp({
       email,
       password,
-      options: { data: { name: name.slice(0, 24) }, emailRedirectTo: pageUrl("profile.html") }
+      options: { data: { name: name.slice(0, 24), ...(stats ? { stats } : {}) }, emailRedirectTo: pageUrl("profile.html") }
     });
     if (error) throw new Error(/registered|exists/i.test(error.message) ? "An account with this email already exists. Log in instead." : friendly(error));
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
@@ -635,9 +691,9 @@ const LevelUp = (() => {
       call("touch_login").catch(() => {});
       claimGuestOrders();
       if (event === "SIGNED_IN") {
-        const fresh = Date.now() - new Date(player.createdAt).getTime() < 10 * 60e3 && player.xpLog.length <= 1;
+        const fresh = Date.now() - new Date(player.createdAt).getTime() < 10 * 60e3;
         toast(fresh
-          ? { title: "Achievement unlocked", text: "New player · +50 XP", icon: "★" }
+          ? { title: "Player created", text: `${player.name} · LVL ${levelFromXp(player.xp)} · ${player.xp} XP`, icon: "★" }
           : { title: "Welcome back", text: `${player.name} · LVL ${levelFromXp(player.xp)}` });
       }
     }
@@ -793,10 +849,24 @@ const LevelUp = (() => {
         <label class="signup-only">Player name<input name="name" autocomplete="nickname" maxlength="24"></label>
         <label class="email-field">Email<input name="email" type="email" autocomplete="email" required></label>
         <label class="password-field">Password<input name="password" type="password" minlength="6" required></label>
+        <div class="signup-stats">
+          <p class="stats-intro">Step 2 of 2 · <strong>Character stats.</strong> We use these for your BMI, daily calories and progress. Only you and your coach can see them.</p>
+          <div class="field-row">
+            <label>Weight (kg)<input name="weight" type="number" min="30" max="300" step="0.1" inputmode="decimal"></label>
+            <label>Height (cm)<input name="height" type="number" min="120" max="230" inputmode="numeric"></label>
+          </div>
+          <div class="field-row">
+            <label>Age<input name="age" type="number" min="14" max="100" inputmode="numeric"></label>
+            <label>Sex<select name="sex"><option value="male">Male</option><option value="female">Female</option></select></label>
+          </div>
+          <label>Activity level<select name="activity">${ACTIVITY_LEVELS.map((a) => `<option value="${a.value}" ${a.value === 1.55 ? "selected" : ""}>${a.label}</option>`).join("")}</select></label>
+          <label>Goal<select name="goal">${Object.entries(GOALS).map(([v, l]) => `<option value="${v}" ${v === "maintain" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        </div>
         <p class="form-error" role="alert"></p>
         <p class="form-success" role="status"></p>
         <button type="submit" class="btn btn-primary btn-block auth-submit">Log in ▶</button>
         <button type="button" class="link-btn auth-forgot" data-mode="reset">Forgot your password?</button>
+        <button type="button" class="link-btn auth-back">◀ Back to step 1</button>
       </form>
       <p class="auth-note">Your account is stored securely on the LEVEL-UP server.</p>`;
     document.body.appendChild(dialog);
@@ -812,6 +882,7 @@ const LevelUp = (() => {
     dialog.querySelectorAll("[data-mode]").forEach((tab) => {
       tab.addEventListener("click", () => setMode(tab.dataset.mode));
     });
+    dialog.querySelector(".auth-back").addEventListener("click", () => setStep(1));
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -822,8 +893,18 @@ const LevelUp = (() => {
       const mode = dialog.dataset.mode;
       submit.disabled = true;
       try {
+        if (mode === "signup" && dialog.dataset.step !== "2") {
+          // Step 1: account details. Check them before asking for stats.
+          if (!String(data.name || "").trim()) throw new Error("Choose a player name.");
+          if (!/^\S+@\S+\.\S+$/.test(String(data.email || "").trim())) throw new Error("Enter a valid email address.");
+          if (!data.password || data.password.length < 6) throw new Error("Your password needs at least 6 characters.");
+          setStep(2);
+          form.elements.weight.focus();
+          return;
+        }
         if (mode === "signup") {
-          const result = await signUp(data);
+          const stats = computeStats(data);
+          const result = await signUp({ ...data, stats });
           if (result.needsConfirmation) {
             form.reset();
             setMode("login");
@@ -853,8 +934,16 @@ const LevelUp = (() => {
     });
   }
 
+  function setStep(step) {
+    dialog.dataset.step = String(step);
+    dialog.querySelector(".auth-submit").textContent = step === 2 ? "Create player ▶" : "Next: character stats ▶";
+    dialog.querySelector(".auth-title").textContent = step === 2 ? "Character creation" : MODES.signup.title;
+    dialog.querySelector(".form-error").textContent = "";
+  }
+
   function setMode(mode) {
     dialog.dataset.mode = mode;
+    dialog.dataset.step = "1";
     dialog.querySelectorAll("[role=tab][data-mode]").forEach((tab) => {
       tab.setAttribute("aria-selected", String(tab.dataset.mode === mode));
     });
@@ -863,6 +952,7 @@ const LevelUp = (() => {
     dialog.querySelector('[name="password"]').autocomplete = mode === "login" ? "current-password" : "new-password";
     dialog.querySelector(".form-error").textContent = "";
     dialog.querySelector(".form-success").textContent = "";
+    if (mode === "signup") setStep(1);
   }
 
   function openAuth(mode = "login") {
@@ -934,7 +1024,7 @@ const LevelUp = (() => {
 
   return {
     ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD, BOOKING_NOTICE_HOURS,
-    TRAINER_SESSION_XP, TRAINER_CLIENT_XP,
+    TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
     getPlayer, isAdmin, adminData, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
