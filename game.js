@@ -285,7 +285,8 @@ const LevelUp = (() => {
   let isReady = false;
   let serverError = "";
   let slots = new Map();      // "trainer|date|hour" -> booking id when it's yours, else null
-  let trainerCounts = {};     // trainer id -> { sessions, clients }
+  let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
+  let leaderboard = [];       // [{ place, name, xp, isMe }]
 
   async function call(fn, args) {
     if (!sb) throw new Error("Can't reach the server. Check your connection and try again.");
@@ -344,10 +345,29 @@ const LevelUp = (() => {
   async function loadTrainerStats() {
     try {
       const rows = await call("trainer_stats");
-      trainerCounts = Object.fromEntries((rows || []).map((r) => [r.trainer_id, { sessions: Number(r.sessions), clients: Number(r.clients) }]));
+      trainerCounts = Object.fromEntries((rows || []).map((r) => [r.trainer_id, {
+        sessions: Number(r.sessions),
+        clients: Number(r.clients),
+        accountXp: r.account_xp === null || r.account_xp === undefined ? null : Number(r.account_xp)
+      }]));
     } catch (err) {
       console.error("Loading trainer stats failed:", err);
     }
+  }
+
+  async function loadLeaderboard() {
+    try {
+      const rows = await call("leaderboard");
+      leaderboard = (rows || []).map((r) => ({ place: Number(r.place), name: r.name, xp: Number(r.xp), isMe: Boolean(r.is_me) }));
+    } catch (err) {
+      console.error("Loading the high scores failed:", err);
+    }
+  }
+
+  async function setLeaderboardVisibility(show) {
+    await call("set_leaderboard_visibility", { p_show: Boolean(show) });
+    await Promise.all([refreshPlayer(), loadLeaderboard()]);
+    emit();
   }
 
   // ---------- Google Calendar ----------
@@ -491,7 +511,7 @@ const LevelUp = (() => {
     if (!player) throw new Error("Log in to book a session.");
     if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
     const booking = await call("book_session", { p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300) });
-    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats()]);
+    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats(), loadLeaderboard()]);
     notifyBooking({ ...booking, hour: Number(booking.hour), name: player?.name, email: player?.email }, "booked");
     emit();
     return booking;
@@ -499,7 +519,7 @@ const LevelUp = (() => {
 
   async function cancelBooking(id) {
     const booking = await call("cancel_booking", { p_id: id });
-    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats()]);
+    await Promise.all([refreshPlayer({ announce: true }), loadSlots(), loadTrainerStats(), loadLeaderboard()]);
     notifyBooking({ ...booking, hour: Number(booking.hour) }, "cancelled");
     emit();
     return booking;
@@ -514,7 +534,9 @@ const LevelUp = (() => {
     const counts = trainerCounts[trainerId] || { sessions: 0, clients: 0 };
     const sessions = trainer.stats.sessions + counts.sessions;
     const clients = trainer.stats.clients + counts.clients;
-    return { sessions, clients, ...progress(sessions * TRAINER_SESSION_XP + clients * TRAINER_CLIENT_XP) };
+    // A trainer with an account levels up in that account (coaching XP goes there)
+    const xp = counts.accountXp ?? sessions * TRAINER_SESSION_XP + clients * TRAINER_CLIENT_XP;
+    return { sessions, clients, linked: counts.accountXp !== null && counts.accountXp !== undefined, ...progress(xp) };
   }
 
   // Emails the booking to the LEVEL-UP inbox; the client gets an automatic confirmation.
@@ -562,7 +584,7 @@ const LevelUp = (() => {
 
   async function logWorkout({ type, minutes }) {
     const result = await call("log_workout", { p_type: type, p_minutes: Math.round(Number(minutes) || 0) });
-    await refreshPlayer({ announce: true });
+    await Promise.all([refreshPlayer({ announce: true }), loadLeaderboard(), loadTrainerStats()]);
     emit();
     return result;
   }
@@ -570,7 +592,7 @@ const LevelUp = (() => {
   async function saveBodyStats(input) {
     const stats = computeStats(input);
     const result = await call("save_body_stats", { p: stats });
-    await refreshPlayer({ announce: true });
+    await Promise.all([refreshPlayer({ announce: true }), loadLeaderboard(), loadTrainerStats()]);
     emit();
     return { xp: Number(result?.xp) || 0, stats };
   }
@@ -588,7 +610,7 @@ const LevelUp = (() => {
       write(GUEST_ORDERS_KEY, [...new Set([...read(GUEST_ORDERS_KEY, []), order.id])]);
       return { guest: true, xp };
     }
-    await refreshPlayer({ announce: true });
+    await Promise.all([refreshPlayer({ announce: true }), loadLeaderboard(), loadTrainerStats()]);
     emit();
     return { guest: false, xp, levelBefore, levelAfter: levelFromXp(player?.xp || 0) };
   }
@@ -680,12 +702,12 @@ const LevelUp = (() => {
     if (!session) {
       player = null;
       welcomed = false;
-      await loadSlots();
+      await Promise.all([loadSlots(), loadLeaderboard()]);
       emit();
       return;
     }
     if ((event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && player) return;
-    await Promise.all([refreshPlayer(), loadSlots()]);
+    await Promise.all([refreshPlayer(), loadSlots(), loadLeaderboard(), loadTrainerStats()]);
     if (!wasLoggedIn && player && !welcomed) {
       welcomed = true;
       call("touch_login").catch(() => {});
@@ -708,7 +730,7 @@ const LevelUp = (() => {
       try {
         const { data } = await sb.auth.getSession();
         session = data.session;
-        await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar()]);
+        await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar(), loadLeaderboard()]);
         if (player) {
           welcomed = true;
           call("touch_login").catch(() => {});
@@ -1027,7 +1049,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
-    getPlayer, isAdmin, adminData, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: () => leaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     logWorkout, saveBodyStats, recordPurchase,
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

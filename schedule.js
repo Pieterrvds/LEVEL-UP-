@@ -369,7 +369,48 @@ document.addEventListener("click", (event) => {
   renderBoard();
 });
 
+// ---------- High scores ----------
+function renderHighScores() {
+  const list = document.getElementById("hsList");
+  const foot = document.getElementById("hsFoot");
+  if (!list) return;
+  if (!LevelUp.isReady()) return;
+  const rows = LevelUp.getLeaderboard();
+  const player = LevelUp.getPlayer();
+  const top = rows.filter((r) => r.place <= 10);
+  const me = rows.find((r) => r.isMe);
+
+  if (!top.length) {
+    list.innerHTML = `<li class="hs-empty">No scores yet. Create your player and claim the #1 spot!</li>`;
+  } else {
+    const row = (r) => {
+      const p = LevelUp.progress(r.xp);
+      return `
+        <li class="hs-row ${r.place <= 3 ? `podium p${r.place}` : ""} ${r.isMe ? "me" : ""}">
+          <span class="hs-place">${r.place <= 3 ? ["", "1ST", "2ND", "3RD"][r.place] : `${r.place}TH`}</span>
+          ${LevelUp.avatarHtml({ name: r.name, xp: r.xp })}
+          <span class="hs-name">${esc(r.name)}${r.isMe ? ` <span class="hs-you">You</span>` : ""}</span>
+          <span class="hs-rank"><span class="rank-badge" data-tier="${LevelUp.RANKS.indexOf(p.rank)}">${p.rank.title}</span></span>
+          <span class="hs-level">LVL ${p.level}</span>
+          <span class="hs-xp">${r.xp.toLocaleString("en-US")} XP</span>
+        </li>`;
+    };
+    list.innerHTML = top.map(row).join("") + (me && me.place > 10 ? `<li class="hs-gap" aria-hidden="true">···</li>${row(me)}` : "");
+  }
+
+  if (!player) {
+    foot.innerHTML = `<button type="button" class="link-btn" data-auth-open="signup">Create your player</button> to get on the board.`;
+  } else if (player.trainerId) {
+    foot.textContent = "You're a trainer: your level shows on your team card.";
+  } else if (player.showOnLeaderboard === false) {
+    foot.innerHTML = `You're hidden from the high scores. <a href="profile.html#account" class="text-link">Change this in your profile</a>.`;
+  } else {
+    foot.textContent = me ? `You're #${me.place}. Every session, check-in and workout moves you up.` : "";
+  }
+}
+
 function renderAll() {
+  renderHighScores();
   renderBoard();
   renderQuestBoard();
   renderTrainerStats();

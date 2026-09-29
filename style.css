@@ -899,6 +899,45 @@ textarea { resize: vertical; min-height: 130px; }
 .rank-strip b { font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; font-weight: 400; color: var(--text); }
 .rank-strip small { font-size: 0.75rem; color: var(--muted); }
 
+/* High scores (Party section) */
+.high-scores {
+  margin-top: 40px;
+  padding: clamp(18px, 3vw, 28px);
+  background: #000;
+  border: 3px solid var(--gold);
+  box-shadow: 6px 6px 0 rgba(255, 210, 63, 0.25);
+}
+.hs-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.hs-head h3 { font-family: var(--pixel); font-size: 0.9rem; text-transform: uppercase; color: var(--gold); animation: blink 2.4s steps(2) infinite; }
+.hs-head p { margin: 0; font-size: 0.88rem; }
+.hs-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.hs-row {
+  --medal: var(--line);
+  display: grid;
+  grid-template-columns: 52px 34px 1fr auto 64px 96px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-left: 6px solid var(--medal);
+}
+.hs-row.p1 { --medal: var(--gold); }
+.hs-row.p2 { --medal: #c9d1d9; }
+.hs-row.p3 { --medal: #cd7f32; }
+.hs-row.me { outline: 2px solid var(--green-bright); outline-offset: -2px; }
+.hs-place { font-family: var(--pixel); font-size: 0.6rem; color: var(--muted); }
+.hs-row.podium .hs-place { color: var(--medal); }
+.hs-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-you { font-family: var(--pixel); font-size: 0.45rem; color: #000; background: var(--green-bright); padding: 3px 5px; vertical-align: 2px; }
+.hs-level { font-family: var(--pixel); font-size: 0.6rem; color: var(--gold); }
+.hs-xp { font-size: 0.9rem; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.hs-gap { text-align: center; color: var(--muted); letter-spacing: 4px; }
+.hs-empty { padding: 16px; color: var(--muted); border: 2px dashed var(--line); }
+.hs-foot { margin: 14px 0 0; font-size: 0.88rem; color: var(--muted); }
+.hs-foot .link-btn { color: var(--green-bright); }
+.toggle { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; font-family: var(--sans); font-size: 0.9rem; text-transform: none; color: var(--text); cursor: pointer; }
+.toggle input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--green-bright); flex-shrink: 0; }
+
 /* Level system section */
 .levels-grid {
   display: grid;
@@ -1322,6 +1361,9 @@ textarea { resize: vertical; min-height: 130px; }
 
   .class-grid, .team-grid, .xp-sources, .xp-rules { grid-template-columns: 1fr; }
   .rank-strip { grid-template-columns: repeat(3, 1fr); }
+  .hs-row { grid-template-columns: 40px 30px 1fr auto; gap: 10px; }
+  .hs-row .hs-rank { display: none; }
+  .hs-row .hs-xp { grid-column: 3 / -1; text-align: left; font-size: 0.8rem; margin-top: -6px; }
   .mini-xp { width: 44px; }
   .hud-admin-label { display: none; }
   .hud-admin { height: 42px; padding: 0 10px; margin-left: 6px; font-size: 0.8rem; }

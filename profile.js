@@ -349,10 +349,15 @@ function renderRanks(player, p) {
 
 function renderSettings() {
   return `
-    <section class="panel panel-wide settings">
+    <section class="panel panel-wide settings" id="account">
       <div>
         <h2>Account</h2>
         <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}. Your profile is saved on the LEVEL-UP server, so it works on every device.</p>
+        ${LevelUp.getPlayer().trainerId ? `<p class="muted">You're linked to your trainer card: coaching XP (+100 per session, +50 per new player) goes to this account.</p>` : `
+        <label class="toggle">
+          <input type="checkbox" id="leaderboardToggle" ${LevelUp.getPlayer().showOnLeaderboard !== false ? "checked" : ""}>
+          <span>Show my player name and level on the <a href="index.html#highScores" class="text-link">high scores</a></span>
+        </label>`}
       </div>
       <div class="btn-row">
         <button type="button" class="btn btn-ghost btn-small" data-logout>Log out</button>
@@ -443,6 +448,17 @@ function bindEvents(player) {
         alert(err.message);
       }
     });
+  });
+
+  document.getElementById("leaderboardToggle")?.addEventListener("change", async (event) => {
+    event.target.disabled = true;
+    try {
+      await LevelUp.setLeaderboardVisibility(event.target.checked);
+    } catch (err) {
+      event.target.checked = !event.target.checked;
+      alert(err.message);
+    }
+    event.target.disabled = false;
   });
 
   document.getElementById("deleteProfile").addEventListener("click", async () => {

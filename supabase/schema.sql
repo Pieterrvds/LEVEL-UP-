@@ -49,6 +49,11 @@ create table if not exists public.trainers (
   active boolean not null default true
 );
 
+-- A trainer's account (by email): coaching XP goes to that account, so the
+-- level on the team card and in the profile is the same
+alter table public.trainers add column if not exists email text;
+update public.trainers set email = 'pieterv-d-s@hotmail.com' where id = 'pieter' and email is null;
+
 insert into public.trainers (id, name) values
   ('pieter', 'Pieter'),
   ('filip', 'Filip De Meyst'),
@@ -79,6 +84,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   last_login timestamptz not null default now()
 );
+alter table public.profiles add column if not exists show_on_leaderboard boolean not null default true;
 
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
@@ -335,6 +341,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     'achievements', p.achievements,
     'createdAt', p.created_at,
     'lastLogin', p.last_login,
+    'showOnLeaderboard', p.show_on_leaderboard,
+    'trainerId', (select t.id from public.trainers t where t.email is not null and lower(t.email) = lower(p.email)),
     'admin', lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')),
     'xpLog', coalesce((select jsonb_agg(jsonb_build_object('date', x.created_at, 'amount', x.amount, 'reason', x.reason) order by x.id desc)
                        from (select * from public.xp_log where user_id = p.id order by id desc limit 50) x), '[]'::jsonb),
@@ -380,6 +388,29 @@ returns timestamptz language sql stable as $$
   select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
 $$;
 
+-- Coaching XP for a trainer with a linked account: +100 per session and
+-- +50 for each new player (direction -1 takes it back after a cancel)
+create or replace function public._trainer_xp(t public.trainers, p_client uuid, p_direction integer)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  coach uuid;
+  client_name text;
+  sessions_with_client integer;
+begin
+  select id into coach from public.profiles where t.email is not null and lower(email) = lower(t.email);
+  if coach is null or coach = p_client then return; end if;
+  select name into client_name from public.profiles where id = p_client;
+  select count(*) into sessions_with_client from public.bookings where trainer_id = t.id and user_id = p_client;
+
+  if p_direction > 0 then
+    perform public._grant_xp(coach, 100, 'Coached ' || client_name);
+    if sessions_with_client = 1 then perform public._grant_xp(coach, 50, 'New player: ' || client_name); end if;
+  else
+    perform public._grant_xp(coach, -100, 'Cancelled: ' || client_name);
+    if sessions_with_client = 0 then perform public._grant_xp(coach, -50, 'Lost player: ' || client_name); end if;
+  end if;
+end $$;
+
 create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -418,6 +449,7 @@ begin
 
   update public.profiles set sessions_booked = sessions_booked + 1 where id = uid;
   perform public._grant_xp(uid, v_xp, 'Session with ' || split_part(t.name, ' ', 1));
+  perform public._trainer_xp(t, uid, 1);
   perform public._check_achievements(uid);
 
   return jsonb_build_object('id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp);
@@ -441,6 +473,7 @@ begin
   delete from public.bookings where id = p_id;
   update public.profiles set sessions_booked = greatest(0, sessions_booked - 1) where id = b.user_id;
   perform public._grant_xp(b.user_id, -b.xp, 'Cancelled session with ' || split_part(t.name, ' ', 1));
+  perform public._trainer_xp(t, b.user_id, -1);
 
   return jsonb_build_object('id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note,
     'name', (select name from public.profiles where id = b.user_id),
@@ -456,12 +489,36 @@ language sql stable security definer set search_path = public as $$
   where b.day between p_from and least(p_to, p_from + 70);
 $$;
 
+drop function if exists public.trainer_stats();
 create or replace function public.trainer_stats()
-returns table (trainer_id text, sessions bigint, clients bigint)
+returns table (trainer_id text, sessions bigint, clients bigint, account_xp integer)
 language sql stable security definer set search_path = public as $$
-  select t.id, count(b.id), count(distinct b.user_id)
+  select t.id, count(b.id), count(distinct b.user_id),
+         (select p.xp from public.profiles p where t.email is not null and lower(p.email) = lower(t.email))
   from public.trainers t left join public.bookings b on b.trainer_id = t.id
-  group by t.id;
+  group by t.id, t.email;
+$$;
+
+-- High scores: top 10 players (trainers and hidden players left out), plus
+-- your own position when you're not in the top 10
+create or replace function public.leaderboard()
+returns table (place bigint, name text, xp integer, is_me boolean)
+language sql stable security definer set search_path = public as $$
+  with ranked as (
+    select p.id, p.name, p.xp, rank() over (order by p.xp desc, p.created_at) as place
+    from public.profiles p
+    where p.show_on_leaderboard
+      and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email))
+  )
+  select r.place, r.name, r.xp, coalesce(r.id = auth.uid(), false)
+  from ranked r
+  where r.place <= 10 or r.id = auth.uid()
+  order by r.place;
+$$;
+
+create or replace function public.set_leaderboard_visibility(p_show boolean)
+returns void language sql security definer set search_path = public as $$
+  update public.profiles set show_on_leaderboard = coalesce(p_show, true) where id = auth.uid();
 $$;
 
 -- ---------------------------------------------------------
@@ -620,6 +677,10 @@ revoke execute on function public._check_achievements(uuid) from public, anon, a
 revoke execute on function public._player_json(uuid) from public, anon, authenticated;
 revoke execute on function public._credit_order(text, uuid) from public, anon, authenticated;
 revoke execute on function public._insert_stats(uuid, jsonb) from public, anon, authenticated;
+revoke execute on function public._trainer_xp(public.trainers, uuid, integer) from public, anon, authenticated;
+revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
+grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
+grant execute on function public.leaderboard() to anon, authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 revoke execute on function public.my_data() from public, anon;
