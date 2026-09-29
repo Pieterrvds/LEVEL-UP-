@@ -96,7 +96,7 @@ function renderSessions() {
 }
 
 function renderWorkouts(player) {
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = LevelUp.dateKey();
   const rewardedToday = player.workouts.filter((w) => w.date === today && w.xp > 0).length;
   const left = Math.max(0, LevelUp.WORKOUT_XP_DAILY_LIMIT - rewardedToday);
   const recent = player.workouts.slice(0, 6);
@@ -288,7 +288,7 @@ function render() {
 function bindEvents(player) {
   const form = document.getElementById("workoutForm");
   const preview = document.getElementById("workoutXpPreview");
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = LevelUp.dateKey();
   const limitReached = player.workouts.filter((w) => w.date === today && w.xp > 0).length >= LevelUp.WORKOUT_XP_DAILY_LIMIT;
 
   form.elements.minutes.addEventListener("input", () => {

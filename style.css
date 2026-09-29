@@ -174,6 +174,23 @@ a { color: inherit; }
   transition: border-color 0.2s;
 }
 .hud-player:hover { border-color: var(--green-bright); }
+.hud-admin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  height: 46px;
+  margin-left: 8px;
+  padding: 0 12px;
+  font-family: var(--pixel);
+  font-size: 0.55rem;
+  text-decoration: none;
+  color: #000;
+  background: var(--gold);
+  border: 2px solid #000;
+  box-shadow: 3px 3px 0 #000;
+}
+.hud-admin:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
 .hud-player-meta { display: grid; gap: 6px; }
 .hud-player-level { font-family: var(--pixel); font-size: 0.55rem; color: var(--muted); }
 .hud-player-level b { color: var(--gold); font-weight: 400; }
@@ -946,6 +963,9 @@ textarea { resize: vertical; min-height: 130px; }
 .legend-swatch { width: 16px; height: 16px; border: 2px solid var(--green-bright); background: rgba(126, 224, 106, 0.15); }
 .legend-swatch.mine { background: var(--green-bright); border-color: #000; }
 .legend-swatch.taken { background: #000; border-color: var(--line); }
+.legend-swatch.closed { opacity: 0.35; }
+.slot.done { background: color-mix(in srgb, var(--green-bright) 25%, #000); border-color: var(--green-bright); cursor: default; }
+.slot.done .slot-state { color: var(--green-bright); }
 
 /* Booking dialog */
 .booking-trainer { display: flex; align-items: center; gap: 14px; padding: 12px; margin-bottom: 14px; background: #000; border-left: 6px solid var(--c); }
@@ -1169,6 +1189,8 @@ textarea { resize: vertical; min-height: 130px; }
 
   .class-grid, .team-grid, .xp-sources { grid-template-columns: 1fr; }
   .mini-xp { width: 44px; }
+  .hud-admin-label { display: none; }
+  .hud-admin { height: 42px; padding: 0 10px; margin-left: 6px; font-size: 0.8rem; }
   .hud-login { padding: 10px; font-size: 0.5rem; }
   .gallery { grid-template-columns: 1fr 1fr; }
   .gallery-item:nth-child(2) { grid-column: span 2; aspect-ratio: 16 / 10; order: 3; }

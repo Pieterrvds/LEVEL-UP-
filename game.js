@@ -22,6 +22,10 @@ const LevelUp = (() => {
   const TRAINER_SESSION_XP = 100; // trainer XP per session
   const TRAINER_CLIENT_XP = 50;   // trainer XP per unique client
   const BOOKING_WEEKS_AHEAD = 4;
+  const BOOKING_NOTICE_HOURS = 12; // how long before a session it must be booked
+
+  // Accounts with access to the admin dashboard
+  const ADMIN_EMAILS = ["pieterv-d-s@hotmail.com"];
 
   const XP_PER_EURO = 10;
   const WORKOUT_XP_DAILY_LIMIT = 3;
@@ -38,6 +42,8 @@ const LevelUp = (() => {
   // Personal trainers and the hours they are open for 1-hour sessions.
   // availability: { weekday: [startHour, endHour] }, weekday 0 = Sunday … 6 = Saturday.
   // stats: sessions/clients from before the online schedule, added to their level.
+  // color: identity on the site; chartColor: the same hue stepped for charts on the
+  // dark surface (validated for colour-blind separation). Next slots: #d95926, #199e70.
   const TRAINERS = [
     {
       id: "filip",
@@ -46,6 +52,7 @@ const LevelUp = (() => {
       role: "Triathlon coach",
       img: "img/filipironmancoach.jpg",
       color: "#4fc3f7",
+      chartColor: "#3987e5",
       availability: { 3: [13, 18] }, // Wednesday afternoon
       stats: { sessions: 0, clients: 0 }
     },
@@ -56,6 +63,7 @@ const LevelUp = (() => {
       role: "Cycling coach",
       img: "img/teammembermaximtshirt.jpg",
       color: "#ffd23f",
+      chartColor: "#c98500",
       availability: { 0: [9, 18] }, // all day Sunday
       stats: { sessions: 0, clients: 0 }
     }
@@ -151,7 +159,14 @@ const LevelUp = (() => {
     try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
   }
 
-  const localDate = (date = new Date()) => date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const pad = (n) => String(n).padStart(2, "0");
+  // Local calendar date as YYYY-MM-DD (built by hand: locale formats differ per browser)
+  const dateKey = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+  // Monday 00:00 of the current week, shifted by whole weeks
+  function startOfWeek(offset = 0, from = new Date()) {
+    return new Date(from.getFullYear(), from.getMonth(), from.getDate() - ((from.getDay() + 6) % 7) + offset * 7);
+  }
   const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
   const normaliseEmail = (email) => String(email || "").trim().toLowerCase();
 
@@ -210,6 +225,18 @@ const LevelUp = (() => {
     return read(KEYS.accounts, {})[email] || null;
   }
 
+  const isAdmin = (player = getPlayer()) => Boolean(player && ADMIN_EMAILS.includes(player.email));
+
+  // Admin only: every player (without password data) and every booking
+  function adminData() {
+    if (!isAdmin()) throw new Error("Admin access only.");
+    const players = Object.values(read(KEYS.accounts, {})).map(({ salt, hash, ...player }) => ({
+      ...player,
+      admin: ADMIN_EMAILS.includes(player.email)
+    }));
+    return { players, bookings: getBookings() };
+  }
+
   async function signUp({ name, email, password }) {
     name = String(name || "").trim();
     email = normaliseEmail(email);
@@ -227,6 +254,7 @@ const LevelUp = (() => {
       salt,
       hash: await hashPassword(password, salt),
       createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
       xp: 0,
       xpLog: [],
       achievements: {},
@@ -252,6 +280,9 @@ const LevelUp = (() => {
       throw new Error("Wrong email or password. New here? Create a new player.");
     }
     write(KEYS.session, email);
+    const accounts = read(KEYS.accounts, {});
+    accounts[email].lastLogin = new Date().toISOString();
+    write(KEYS.accounts, accounts);
     claimGuestOrders();
     emit();
     toast({ title: "Welcome back", text: `${player.name} · LVL ${levelFromXp(player.xp)}` });
@@ -344,7 +375,7 @@ const LevelUp = (() => {
   function logWorkout({ type, minutes }) {
     minutes = Math.max(5, Math.min(300, Math.round(Number(minutes) || 0)));
     return mutate((player, game) => {
-      const date = localDate();
+      const date = dateKey();
       const rewardedToday = player.workouts.filter((w) => w.date === date && w.xp > 0).length;
       const xp = rewardedToday < WORKOUT_XP_DAILY_LIMIT ? workoutXp(minutes) : 0;
       player.workouts.unshift({ date, type, minutes, xp });
@@ -356,7 +387,7 @@ const LevelUp = (() => {
 
   function saveBodyStats(stats) {
     return mutate((player) => {
-      player.bodyStats.unshift({ date: localDate(), ...stats });
+      player.bodyStats.unshift({ date: dateKey(), ...stats });
       player.bodyStats = player.bodyStats.slice(0, 30);
       return true;
     });
@@ -421,12 +452,24 @@ const LevelUp = (() => {
     return d;
   };
 
+  // Why a slot can't be booked right now, or null when it can
+  function slotBlocker(dateKeyValue, hour, now = new Date()) {
+    const start = slotStart(dateKeyValue, hour);
+    if (start <= now) return "past";
+    if (start - now < BOOKING_NOTICE_HOURS * 3600 * 1000) return "notice";
+    if (start >= startOfWeek(BOOKING_WEEKS_AHEAD, now)) return "horizon";
+    return null;
+  }
+
   function bookSession({ trainerId, date, hour, note = "" }) {
     const player = getPlayer();
     if (!player) throw new Error("Log in to book a session.");
     const trainer = trainerById(trainerId);
     if (!trainer || !trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
-    if (slotStart(date, hour) <= new Date()) throw new Error("This time slot has already passed.");
+    const blocker = slotBlocker(date, hour);
+    if (blocker === "past") throw new Error("This time slot has already passed.");
+    if (blocker === "notice") throw new Error(`Sessions must be booked at least ${BOOKING_NOTICE_HOURS} hours in advance.`);
+    if (blocker === "horizon") throw new Error(`You can book up to ${BOOKING_WEEKS_AHEAD} weeks ahead.`);
     const bookings = getBookings();
     if (bookings.some((b) => b.trainerId === trainerId && b.date === date && b.hour === hour)) {
       throw new Error("Someone just booked this slot. Pick another hour.");
@@ -608,7 +651,8 @@ const LevelUp = (() => {
           <span class="mini-xp" aria-hidden="true"><i style="width:${p.pct.toFixed(1)}%"></i></span>
         </span>
         <span class="sr-only">Open your profile, level ${p.level}</span>
-      </a>`;
+      </a>
+      ${isAdmin(player) ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
   }
 
   // ---------- Login dialog ----------
@@ -743,7 +787,8 @@ const LevelUp = (() => {
   initChrome();
 
   return {
-    ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD,
+    ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD, BOOKING_NOTICE_HOURS,
+    TRAINER_SESSION_XP, TRAINER_CLIENT_XP, dateKey, startOfWeek, isAdmin, adminData, slotBlocker,
     esc, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
     getPlayer, signUp, logIn, logOut, deleteProfile,
     logWorkout, saveBodyStats, recordPurchase,

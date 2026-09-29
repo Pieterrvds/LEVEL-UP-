@@ -15,15 +15,8 @@ let weekOffset = 0;
 let activeTrainer = "all";
 let pendingSlot = null;
 
-const dateKey = (date) => date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+const { dateKey, startOfWeek } = LevelUp;
 const pad = (n) => String(n).padStart(2, "0");
-
-function startOfWeek(offset) {
-  const now = new Date();
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-  monday.setDate(monday.getDate() + offset * 7);
-  return monday;
-}
 
 function weekDays(offset) {
   const monday = startOfWeek(offset);
@@ -36,6 +29,7 @@ function weekDays(offset) {
 // Hours to show: from the earliest to the latest open hour of any trainer
 function boardHours() {
   const ranges = TRAINERS.flatMap((t) => Object.values(t.availability));
+  if (!ranges.length) return [];
   const start = Math.min(...ranges.map((r) => r[0]));
   const end = Math.max(...ranges.map((r) => r[1]));
   return Array.from({ length: end - start }, (_, i) => start + i);
@@ -98,10 +92,12 @@ function renderBoard() {
         .map((t) => {
           openCount++;
           const booking = LevelUp.findBooking(t.id, day.key, hour);
-          const past = LevelUp.slotStart(day.key, hour) <= now;
+          const blocker = LevelUp.slotBlocker(day.key, hour, now);
+          const past = blocker === "past";
           const mine = booking && player && booking.email === player.email;
-          const state = mine ? "mine" : booking ? "taken" : past ? "past" : "free";
-          const label = { free: `Book ${t.short}`, mine: "Your session", taken: "Booked", past: "Closed" }[state];
+          // Your own session stays clickable (to cancel) until it can no longer be changed
+          const state = mine ? (past ? "done" : "mine") : booking ? "taken" : blocker ? "past" : "free";
+          const label = { free: `Book ${t.short}`, mine: "Your session", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
           return `
             <button type="button" class="slot ${state}" style="--c:${t.color}"
               data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
@@ -235,6 +231,11 @@ function showBooked() {
 // When a guest logs in from the booking dialog, reopen the slot they picked
 let reopenAfterLogin = false;
 
+// Closing the login dialog without logging in forgets the pending slot
+document.addEventListener("close", (event) => {
+  if (event.target !== bookingDialog && !LevelUp.getPlayer()) reopenAfterLogin = false;
+}, true);
+
 bookingDialog.addEventListener("click", (event) => {
   if (event.target === bookingDialog || event.target.closest("[data-close], [data-close-dialog]")) {
     reopenAfterLogin = false;
@@ -278,6 +279,7 @@ document.addEventListener("levelup:change", () => {
   }
 });
 
+document.getElementById("noticeText").textContent = `Closed: book at least ${LevelUp.BOOKING_NOTICE_HOURS} hours ahead`;
 renderFilter();
 renderBoard();
 renderTrainerStats();
