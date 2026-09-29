@@ -5,7 +5,7 @@ Personal training website with a retro game theme: train, earn XP and level up y
 - `index.html`: home page (classes, stats calculator, team, schedule, contact)
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
 - `profile.html`: player profile with level, rank, XP, workout log, body stats, achievements, inventory and orders
-- `archive/webshop-v1/`: the old webshop, kept for reference (also git tag `webshop-v1`)
+- `archive/webshop-v1/`: the old webshop, kept for reference
 
 ## Code
 - `game.js`: shared game core on every page: player profiles and login, XP, levels, ranks, achievements, the header player chip, login dialog and toasts. The shop catalog (`ITEMS`) lives here too.
