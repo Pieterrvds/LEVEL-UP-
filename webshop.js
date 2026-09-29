@@ -36,9 +36,9 @@ document.querySelectorAll(".add-to-cart").forEach(button => {
       const product = button.getAttribute("data-product");
       const price = parseFloat(button.getAttribute("data-price"));
   
-      // Get selected category (HIIT, CrossFit, Running)
-      const subscriptionSelect = button.previousElementSibling;
-      let selectedCategory = subscriptionSelect ? subscriptionSelect.value : "HIIT"; // Default to HIIT if none selected
+      // Get selected option (category or size) from the same product card
+      const optionSelect = button.closest(".product-card").querySelector("select");
+      const selectedCategory = optionSelect ? optionSelect.value : "Standard";
   
       // Add product with selected category to the cart
       cart.push({ product, price, category: selectedCategory });
@@ -64,7 +64,7 @@ document.querySelectorAll(".add-to-cart").forEach(button => {
   
       // Create cart item element
       const li = document.createElement("li");
-      li.textContent = `${item.product} (${item.category}) - $${item.price.toFixed(2)}`;
+      li.textContent = `${item.product} (${item.category}) - €${item.price.toFixed(2)}`;
   
       // Add Remove Button
       const removeBtn = document.createElement("button");
@@ -77,9 +77,13 @@ document.querySelectorAll(".add-to-cart").forEach(button => {
     });
   
     // Update total price
-    cartTotal.textContent = `Total: $${total.toFixed(2)}`;
+    cartTotal.textContent = `Total: €${total.toFixed(2)}`;
     updateCartCount();
-    renderPayPalButton(total);
+    if (total > 0) {
+      renderPayPalButton(total);
+    } else {
+      document.querySelector("#paypal-button-container").innerHTML = "";
+    }
   }
   
   
@@ -189,7 +193,13 @@ function sendConfirmationEmail(name, email, purchaseDetails) {
     });
 }
 
-// Close Cart
+// Close Cart (button, click on backdrop or Escape)
 document.querySelector(".close-cart").addEventListener("click", () => {
   cartOverlay.classList.add("hidden");
+});
+cartOverlay.addEventListener("click", (event) => {
+  if (event.target === cartOverlay) cartOverlay.classList.add("hidden");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") cartOverlay.classList.add("hidden");
 });

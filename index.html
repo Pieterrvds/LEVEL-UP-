@@ -3,275 +3,418 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LEVEL-UP Personal Training</title>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <title>LEVEL-UP | Personal Training & Group Workouts</title>
+  <meta name="description" content="LEVEL-UP Movement: personal training, group training, CrossFit, Muay Thai, calisthenics and HIIT. Pick your class, train hard and level up your body.">
+  <meta name="theme-color" content="#050807">
+  <meta property="og:title" content="LEVEL-UP | Level up your body">
+  <meta property="og:description" content="Personal training, group sessions, CrossFit, Muay Thai, calisthenics and HIIT.">
+  <meta property="og:image" content="img/levelup.png">
+  <link rel="icon" href="img/logo.JPG">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- Add Font Awesome CDN for Icons -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
- <body>
+<body>
 
-  <!-- Mobile Top Bar -->
-  <div class="mobile-top-bar">
-    <img src="img/logo.JPG" alt="LEVEL-UP Logo" class="Mobile-logo">
-    <a href="https://levelupmovement.store/" class="shopping-cart"> 🛒 </a>
-    <div class="hamburger-menu" onclick="toggleMenu()">☰</div>
-  </div>
+  <!-- XP bar: fills as you scroll -->
+  <div class="xp-track" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
 
-  <!-- Hidden Mobile Menu -->
-  <div class="mobile-menu" id="mobileMenu">
-    <a href="#heroo" onclick="closeMenu()">Home</a>
-    <a href="#heroo" onclick="closeMenu()">Home</a>
-    <a href="https://levelupmovement.store/" onclick="closeMenu()">Webshop</a>
-    <a href="#team" onclick="closeMenu()">Team</a>
-    <a href="#programs" onclick="closeMenu()">Programs</a>
-    <a href="#calendar-section" onclick="closeMenu()">Schedule</a>
-    <a href="#contact" onclick="closeMenu()">Contact</a>
-    <img src="img/levelup.png" alt="LEVEL-UP Logo" class="mobile-logo">
-  </div>
+  <!-- HUD / Navigation -->
+  <header class="hud" id="hud">
+    <a href="#home" class="brand" aria-label="LEVEL-UP home">
+      <img src="img/logo.JPG" alt="" class="brand-logo">
+      <span class="brand-name">LEVEL-UP</span>
+    </a>
 
+    <nav class="nav" id="nav" aria-label="Main">
+      <a href="#about">Coach</a>
+      <a href="#programs">Classes</a>
+      <a href="#stats">Stats</a>
+      <a href="#team">Party</a>
+      <a href="#schedule">Schedule</a>
+      <a href="#contact">Contact</a>
+      <a href="https://levelupmovement.store/" class="nav-shop" target="_blank" rel="noopener">
+        <span class="coin" aria-hidden="true"></span> Shop
+      </a>
+    </nav>
 
-  <!-- Header Section -->
-  <header id="heroo" class="hero">
-    <div class="header-container">
-      <!-- Left Image -->
-      <img src="img/logo.JPG" alt="Left Image" class="header-image left-image">
-      <!-- Center Title -->
-      <div class="title-container">
-        <h1 class="title">LEVEL-UP</h1>
-        <p id="subtitle" class="subtitle"> <strong> CROSSFIT </strong></p>
-         <!--<p class="tagline">Push Beyond Limits. Train Like Never Before.</p> -->
-        <a href="#contact" class="cta-button">Start Your Journey Today!</a>
-      </div>
-      <!-- Right Image -->
-      <img src="img/logo.JPG" alt="Right Image" class="header-image right-image">
+    <div class="hud-level" aria-live="polite">
+      <span class="hud-label">LVL</span>
+      <span class="hud-value" id="hudLevel">1</span>
     </div>
+
+    <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
+      <span></span><span></span><span></span>
+    </button>
   </header>
 
-  <a href="https://wa.me/+32471955489" target="_blank" class="whatsapp-float">
-    <img src="img/whatsapp.png" alt="WhatsApp">
-  </a>
-  
-
-<!-- About Section -->
-<section id="about" class="section about">
-  <h2>HEY THERE!</h2>
-  <div class="about-content">
-    <img src="img/pf.png" alt="Trainer Image" class="trainer-image">
-    <div id="textmobilehide">
-      <p>
-        <strong>WELCOME TO THE LEVEL-UP MOVEMENT!</strong>
-        WE ORGANIZE WORKOUT SESSIONS TO HELP YOU GET FIT!
-        FOLLOW OUR <a class="linktext" href="#calendar-section"><strong>SCHEDULE</strong></a> TO SEE WHEN AND WHERE!
-        GET YOUR LEVEL-UP-GEAR AT OUR <a class="linktext" href="https://levelupmovement.store/"><strong>WEBSHOP</strong></a>!
-        <a class="linktext" href="#contact"><strong>CONTACT</strong></a> US TO BOOK A SESSION OR FOR MORE INFO!    
-      </p>
-    </div>
-  </div> 
-  <div id="textmobile">
-    <p>
-      <strong>WELCOME TO THE LEVEL-UP MOVEMENT!</strong>
-        WE ORGANIZE WORKOUT SESSIONS TO HELP YOU GET FIT!
-        FOLLOW OUR <a class="linktext" href="#calendar-section"><strong>SCHEDULE</strong></a> TO SEE WHEN AND WHERE!
-        GET YOURE LEVEL-UP-GEAR AT OUR <a class="linktext" href="https://levelupmovement.store/"><strong>WEBSHOP</strong></a>!
-        <a class="linktext" href="#contact"><strong>CONTACT</strong></a> US TO BOOK A SESSION OR FOR MORE INFO!
-    </p>
-  </div>
-      <a href="#calendar-section" id="calendarbutton" class="calendarbutton">SCHEDULE</a>
-      <a href="https://levelupmovement.store/" id="calendarbutton" class="calenderbutton">WEBSHOP</a>
-         <!-- Diet Plan Button -->
-      <button class="calenderbutton" id="openModal">MEAL PLAN</button>
-  </section>
-
-<!--Program section -->
-  <section id="programs" class="section programs">
-    <h2>PROGRAMS</h2>
-    <div class="programs-grid">
-      <!-- Program 1 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <!-- Front Side (Program Details) -->
-          <div id="card-front1" class="card-front">
-            <h3>Personal Training</h3>
+  <main>
+    <!-- HERO / TITLE SCREEN -->
+    <section id="home" class="hero" data-level="1" data-achievement="Game started">
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">▸ Player 1 ready</p>
+          <h1 class="title">LEVEL<span class="dash">-</span>UP</h1>
+          <p class="class-line">
+            Class: <span class="class-name" id="classRotator">CROSSFIT</span><span class="cursor" aria-hidden="true">_</span>
+          </p>
+          <p class="lead">
+            Personal training and group workouts that treat your body like a character build. Put in the reps, earn the XP, level up your life.
+          </p>
+          <div class="hero-actions">
+            <a href="#contact" class="btn btn-primary">▶ Start your quest</a>
+            <a href="#schedule" class="btn btn-ghost">View schedule</a>
           </div>
-          <!-- Back Side (Image) -->
-          <div class="card-back">
-            <p>Your goals. Your pace. All eyes on you. Let’s smash your limits together! Contact us for more info!</p>
+          <ul class="hero-stats">
+            <li><strong>6</strong><span>Classes</span></li>
+            <li><strong>1:1</strong><span>Coaching</span></li>
+            <li><strong>€6</strong><span>Group session</span></li>
+          </ul>
+        </div>
+
+        <aside class="player-card pixel-frame" aria-label="Player card">
+          <div class="player-top">
+            <span class="tag">P1</span>
+            <span class="player-title">Your coach</span>
+          </div>
+          <img src="img/pf.jpg" alt="Pieter, LEVEL-UP head coach" class="player-photo" width="800" height="932">
+          <h2 class="player-name">Pieter</h2>
+          <p class="player-class">Head coach · Founder</p>
+          <div class="stat-bars">
+            <div class="stat"><span>STR</span><div class="bar"><i style="--v:88%"></i></div></div>
+            <div class="stat"><span>END</span><div class="bar"><i style="--v:80%"></i></div></div>
+            <div class="stat"><span>AGI</span><div class="bar"><i style="--v:75%"></i></div></div>
+            <div class="stat"><span>HYPE</span><div class="bar"><i style="--v:100%"></i></div></div>
+          </div>
+        </aside>
+      </div>
+      <a href="#about" class="press-start" aria-label="Scroll down">PRESS START ▼</a>
+    </section>
+
+    <div class="vine-divider" aria-hidden="true"></div>
+
+    <!-- ABOUT -->
+    <section id="about" class="section" data-level="2" data-achievement="Met the coach">
+      <div class="container about-grid">
+        <div>
+          <p class="section-kicker">Level 01 · The Movement</p>
+          <h2 class="section-title">Hey there!</h2>
+          <p class="text-lg">
+            <strong>Welcome to the LEVEL-UP movement.</strong> We organise workout sessions that help you get fit, get strong and have fun doing it, one level at a time.
+          </p>
+          <p>
+            Check the <a href="#schedule" class="text-link">schedule</a> to see when and where we train, grab your gear in the <a href="https://levelupmovement.store/" class="text-link" target="_blank" rel="noopener">webshop</a>, or <a href="#contact" class="text-link">contact us</a> to book a session or ask anything.
+          </p>
+          <div class="btn-row">
+            <a href="#schedule" class="btn btn-primary">Schedule</a>
+            <a href="https://levelupmovement.store/" class="btn btn-ghost" target="_blank" rel="noopener">Webshop</a>
+            <a href="#stats" class="btn btn-ghost">Meal plan</a>
+          </div>
+        </div>
+
+        <ol class="quest-steps">
+          <li>
+            <span class="step-no">1</span>
+            <div><h3>Choose your class</h3><p>Personal training, group sessions, CrossFit, Muay Thai, calisthenics or HIIT.</p></div>
+          </li>
+          <li>
+            <span class="step-no">2</span>
+            <div><h3>Join a session</h3><p>Book one-on-one or drop in on a group workout from the schedule.</p></div>
+          </li>
+          <li>
+            <span class="step-no">3</span>
+            <div><h3>Earn your XP</h3><p>Train consistently with a coach who tracks your progress and pushes you.</p></div>
+          </li>
+          <li>
+            <span class="step-no">★</span>
+            <div><h3>Level up</h3><p>Stronger, fitter, more confident. Then unlock the next level.</p></div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- PROGRAMS -->
+    <section id="programs" class="section section-alt" data-level="3" data-achievement="Classes discovered">
+      <div class="container">
+        <p class="section-kicker">Level 02 · Character select</p>
+        <h2 class="section-title">Choose your class</h2>
+        <p class="section-intro">Every class builds different stats. Pick one to start, or mix them to build a complete character.</p>
+
+        <div class="class-grid">
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/PULL-UP%20BAR%20GRNDJN.JPG')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>Personal Training</h3><span class="badge">1:1</span></div>
+              <p>Your goals. Your pace. All eyes on you. A plan built around you, so we can smash your limits together.</p>
+              <ul class="class-tags"><li>STR +</li><li>Custom plan</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="Personal Training">Select class</a>
+            </div>
+          </article>
+
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/ktakrachttraining.jpg')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>Group Training</h3><span class="badge">Co-op</span></div>
+              <p>We bring people together. We plan the location and the time, you bring the energy.</p>
+              <ul class="class-tags"><li>END +</li><li>Team</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="Group Training">Select class</a>
+            </div>
+          </article>
+
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/muaythay.jpg')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>Muay Thai</h3><span class="badge">Fighter</span></div>
+              <p>Unleash your inner warrior. Learn powerful strikes, sharpen your reflexes and build real confidence.</p>
+              <ul class="class-tags"><li>AGI +</li><li>Technique</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="Muay Thai">Select class</a>
+            </div>
+          </article>
+
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/jimsgroepstraining.jpg')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>CrossFit</h3><span class="badge">All-round</span></div>
+              <p>Push beyond your limits with explosive workouts, powerful results and a community that lifts you higher.</p>
+              <ul class="class-tags"><li>STR +</li><li>END +</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="CrossFit">Select class</a>
+            </div>
+          </article>
+
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/calipersonal.jpg')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>Calisthenics</h3><span class="badge">Skill</span></div>
+              <p>Unlock impressive skills while building lean muscle. Train anywhere, anytime, using only your bodyweight.</p>
+              <ul class="class-tags"><li>STR +</li><li>Control</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="Calisthenics">Select class</a>
+            </div>
+          </article>
+
+          <article class="class-card">
+            <div class="class-media" style="--img:url('img/HIIT.JPG')"></div>
+            <div class="class-body">
+              <div class="class-head"><h3>HIIT</h3><span class="badge">Speedrun</span></div>
+              <p>Hit it hard, feel the burn and love the results. Maximum effort in minimum time.</p>
+              <ul class="class-tags"><li>END +</li><li>Fat burn</li></ul>
+              <a href="#contact" class="btn btn-small" data-subject="HIIT">Select class</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS CALCULATOR -->
+    <section id="stats" class="section" data-level="4" data-achievement="Stats checked">
+      <div class="container stats-grid">
+        <div>
+          <p class="section-kicker">Level 03 · Character stats</p>
+          <h2 class="section-title">Check your stats</h2>
+          <p class="section-intro left">
+            Find your BMI, your resting energy use (BMR) and the daily calories that match your goal. You also get a simple meal plan to start with.
+          </p>
+          <form class="stats-form pixel-frame" id="statsForm" novalidate>
+            <div class="field-row">
+              <label>Weight (kg)<input type="number" id="weight" min="30" max="300" step="0.1" required inputmode="decimal"></label>
+              <label>Height (cm)<input type="number" id="height" min="120" max="230" required inputmode="numeric"></label>
+            </div>
+            <div class="field-row">
+              <label>Age<input type="number" id="age" min="14" max="100" required inputmode="numeric"></label>
+              <label>Sex
+                <select id="gender">
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </label>
+            </div>
+            <label>Activity level
+              <select id="activity">
+                <option value="1.2">Sedentary (little to no exercise)</option>
+                <option value="1.375">Lightly active (1–3 days/week)</option>
+                <option value="1.55" selected>Moderately active (3–5 days/week)</option>
+                <option value="1.725">Very active (6–7 days/week)</option>
+                <option value="1.9">Athlete level</option>
+              </select>
+            </label>
+            <fieldset class="goal-picker">
+              <legend>Goal</legend>
+              <label><input type="radio" name="goal" value="lose"> <span>Lose fat</span></label>
+              <label><input type="radio" name="goal" value="maintain" checked> <span>Maintain</span></label>
+              <label><input type="radio" name="goal" value="gain"> <span>Build muscle</span></label>
+            </fieldset>
+            <p class="form-error" id="statsError" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block">Calculate stats</button>
+          </form>
+        </div>
+
+        <div class="results pixel-frame" id="results" aria-live="polite">
+          <div class="results-empty">
+            <span class="pixel-heart" aria-hidden="true"></span>
+            <p>Enter your details to reveal your stats.</p>
           </div>
         </div>
       </div>
-      <!-- Program 2 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <div id="card-front2" class="card-front">
-            <h3>Group Training</h3>
-          </div>
-          <div class="card-back">
-            <p>Let's bring people together!, we plan the location and time! Contact us for more info!</p>
-          </div>
+    </section>
+
+    <!-- TEAM -->
+    <section id="team" class="section section-alt" data-level="5" data-achievement="Party assembled">
+      <div class="container">
+        <p class="section-kicker">Level 04 · Your party</p>
+        <h2 class="section-title">Meet the team</h2>
+        <div class="team-grid">
+          <article class="team-card">
+            <img src="img/teammembermaximtshirt.jpg" alt="Maxim Buyl" class="team-photo" loading="lazy">
+            <div class="team-body">
+              <p class="team-role">Cycling coach</p>
+              <h3>Maxim Buyl</h3>
+              <p>Our very first team member. A dedicated cycling coach who knows how to build strength, speed and endurance on the bike.</p>
+              <a href="https://www.instagram.com/maximbuyl99/" class="btn btn-small btn-ghost" target="_blank" rel="noopener">Instagram ↗</a>
+            </div>
+          </article>
+
+          <article class="team-card">
+            <img src="img/filipironmancoach.jpg" alt="Filip De Meyst" class="team-photo" loading="lazy">
+            <div class="team-body">
+              <p class="team-role">Triathlon coach</p>
+              <h3>Filip De Meyst</h3>
+              <p>An experienced Ironman athlete who guides you through every swim stroke, pedal and stride to get you race-ready.</p>
+              <span class="btn btn-small btn-ghost is-disabled" aria-disabled="true">Profile coming soon</span>
+            </div>
+          </article>
+
+          <article class="team-card team-card-recruit">
+            <img src="img/pfdefault.png" alt="" class="team-photo" loading="lazy">
+            <div class="team-body">
+              <p class="team-role">Slot open</p>
+              <h3>Player 3?</h3>
+              <p>Are you a coach who wants to join the party? We're always looking for motivated trainers.</p>
+              <a href="#contact" class="btn btn-small" data-subject="Join Our Team">Join the team</a>
+            </div>
+          </article>
         </div>
       </div>
-      <!-- Program 3 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <div id="card-front3" class="card-front">
-            <h3>Muay Thai</h3>
-          </div>
-          <div class="card-back">
-            <p>Unleash your inner warrior! Learn powerful strikes, sharpen your reflexes, and build unstoppable confidence!</p>
-          </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery" class="section" data-level="6" data-achievement="Highlights unlocked">
+      <div class="container">
+        <p class="section-kicker">Level 05 · Replays</p>
+        <h2 class="section-title">In action</h2>
+        <div class="gallery">
+          <figure class="gallery-item"><img src="img/galleryfotocrossfit.jpg" alt="Pull-ups in a LEVEL-UP hoodie at the CrossFit box" loading="lazy"></figure>
+          <figure class="gallery-item"><video src="img/galleryvideocrossfit.mp4" muted loop playsinline preload="metadata" controls aria-label="CrossFit training video"></video></figure>
+          <figure class="gallery-item"><img src="img/galleryfotoklimzaal.jpg" alt="LEVEL-UP hoodie at the climbing gym" loading="lazy"></figure>
         </div>
       </div>
-      <!-- Program 4 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <div id="card-front4" class="card-front">
-            <h3>Crossfit</h3>
-          </div>
-          <div class="card-back">
-            <p>Push beyond your limits! Explosive workouts, powerful results, and a community that lifts you higher!</p>
-          </div>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section id="schedule" class="section section-alt" data-level="7" data-achievement="Quest log opened">
+      <div class="container">
+        <p class="section-kicker">Level 06 · Quest log</p>
+        <h2 class="section-title">Schedule</h2>
+        <p class="section-intro">All sessions are listed in our LEVEL-UP calendar. Find a time, show up and earn your XP.</p>
+        <div class="calendar pixel-frame">
+          <iframe
+            title="LEVEL-UP training calendar"
+            src="https://calendar.google.com/calendar/embed?src=53bf8048ea28f4795aa89c52f00b8733569f2ee2e4ec97104dfed265a6559182%40group.calendar.google.com&ctz=Europe%2FBrussels&mode=AGENDA&showTitle=0&showPrint=0"
+            loading="lazy"></iframe>
         </div>
+        <p class="center">
+          <a class="text-link" href="https://calendar.google.com/calendar/u/0/embed?src=53bf8048ea28f4795aa89c52f00b8733569f2ee2e4ec97104dfed265a6559182@group.calendar.google.com&ctz=Europe/Brussels" target="_blank" rel="noopener">Open the full calendar ↗</a>
+        </p>
       </div>
-      <!-- Program 5 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <div id="card-front5" class="card-front">
-            <h3>Calisthenics</h3>
-          </div>
-          <div class="card-back">
-            <p>Unlock incredible skills while building lean muscle. Train anywhere, anytime, and amaze yourself!</p>
-          </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section id="contact" class="section contact" data-level="8" data-achievement="Ready to level up">
+      <div class="container contact-grid">
+        <div>
+          <p class="section-kicker">Final level · Join the party</p>
+          <h2 class="section-title">Let's connect!</h2>
+          <p>Book a session, ask about pricing or tell us what you want to achieve. We usually reply within a day.</p>
+
+          <ul class="contact-links">
+            <li>
+              <a href="https://wa.me/32471955489" target="_blank" rel="noopener">
+                <img src="img/whatsapp.png" alt="" width="40" height="40">
+                <span><strong>WhatsApp</strong><small>Fastest way to reach us</small></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://chat.whatsapp.com/EGDu4ZuQn1A8VyeGrmPFoG" target="_blank" rel="noopener">
+                <img src="img/whatsapp.png" alt="" width="40" height="40">
+                <span><strong>Community group</strong><small>Session updates and news</small></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://www.instagram.com/levelupcrossfitpvds/" target="_blank" rel="noopener">
+                <img src="img/Instagram.png" alt="" width="40" height="40">
+                <span><strong>Instagram</strong><small>@levelupcrossfitpvds</small></span>
+              </a>
+            </li>
+            <li>
+              <a href="https://www.facebook.com/profile.php?id=61569874411174" target="_blank" rel="noopener">
+                <img src="img/facebook.png" alt="" width="40" height="40">
+                <span><strong>Facebook</strong><small>LEVEL-UP Movement</small></span>
+              </a>
+            </li>
+          </ul>
         </div>
+
+        <form class="contact-form pixel-frame" id="contactForm" action="https://formsubmit.co/PieterV-D-S@hotmail.com" method="POST">
+          <input type="hidden" name="_subject" value="New LEVEL-UP website message">
+          <input type="hidden" name="_template" value="table">
+          <input type="text" name="_honey" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+          <label>Name<input type="text" name="name" autocomplete="name" required></label>
+          <label>Email<input type="email" name="email" autocomplete="email" required></label>
+          <label>What are you interested in?
+            <select name="subject" id="subject" required>
+              <option value="" disabled selected>Select a category</option>
+              <option value="Personal Training">Personal Training</option>
+              <option value="Group Training">Group Training</option>
+              <option value="CrossFit">CrossFit</option>
+              <option value="Muay Thai">Muay Thai</option>
+              <option value="Calisthenics">Calisthenics</option>
+              <option value="HIIT">HIIT</option>
+              <option value="Online Coaching">Online Coaching</option>
+              <option value="Customized Meal Plans">Customized Meal Plans</option>
+              <option value="Join Our Team">Join Our Team</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <label>Message<textarea name="message" rows="5" required placeholder="Tell us about your goals…"></textarea></label>
+          <button type="submit" class="btn btn-primary btn-block">Level up now ▶</button>
+        </form>
       </div>
-      <!-- Program 6 -->
-      <div class="program-card">
-        <div class="card-inner">
-          <div id="card-front6" class="card-front">
-            <h3>HIIT</h3>
-          </div>
-          <div class="card-back">
-            <p>Hit it hard, feel the burn, and love the results!</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+    </section>
+  </main>
 
-<!-- BMI & BMR Modal -->
-<div id="bmiModal" class="modal">
-    <div class="modal-content">
-        <span class="close">&times;</span>
-        <h2>BMI & BMR Calculator</h2>
-
-        <input type="number" id="weight" placeholder="Weight (kg)">
-        <input type="number" id="height" placeholder="Height (cm)">
-        <input type="number" id="age" placeholder="Age (years)">
-
-        <select id="gender">
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-        </select>
-
-        <select id="activity">
-            <option value="1.2">Sedentary (Little to no exercise)</option>
-            <option value="1.375">Lightly Active (1-3 days/week)</option>
-            <option value="1.55">Moderately Active (3-5 days/week)</option>
-            <option value="1.725">Very Active (6-7 days/week)</option>
-            <option value="1.9">Super Active (Athlete level)</option>
-        </select>
-
-        <!-- New Goal Selection -->
-        <select id="goal">
-            <option value="lose">Lose Weight</option>
-            <option value="maintain">Maintain Weight</option>
-            <option value="gain">Build Muscle</option>
-        </select>
-
-        <button id="calculate">Calculate</button>
-
-        <!-- Display results inside the pop-up -->
-        <div id="results"></div>
-    </div>
-</div>
-
-<!-- The Team Section -->
-<section id="team" class="section team">
-  <h2>Meet Our Team</h2>
-  <div class="team-grid">
-    <!-- Team Member 1 -->
-    <div class="team-member" data-url="https://www.instagram.com/maximbuyl99/">
-      <img src="img/teammembermaximtshirt.jpg" alt="Colleague 1" class="team-photo">
-      <div class="team-info">
-        <h3>Maxim Buyl</h3>
-        <p>Our very first team member! A dedicated cycling coach who knows how to build strength, speed, and endurance on the bike! </p>
-      </div>
-    </div>
-    <!-- Team Member 2 -->
-    <div class="team-member" data-url="">
-      <img src="img/filipironmancoach.jpg" alt="Colleague 2" class="team-photo">
-      <div class="team-info">
-        <h3>Filip de meyst</h3>
-        <p>This experienced iron man runner will guide you through every swim stroke, pedal, and stride to get you Ironman-ready!</p>
-      </div>
-    </div>
-    <!-- Team Member 3 -->
-    <div class="team-member" data-url="">
-      <img src="img/pfdefault.png" alt="youre foto" class="team-photo">
-      <div class="team-info">
-        <h3>New teammember?</h3>
-        <p>Contact us if you want to join our team!</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!--callender section! -->
-  <section id="calendar-section" class="section calendar-section">
-    <h2>SCHEDULE</h2>
-      <p>All activities are shared in our level-up calender!</p>
-    <div class="calendar-container">
-      <!-- Google Calendar Embed -->
-      <iframe 
-      src="https://calendar.google.com/calendar/embed?src=53bf8048ea28f4795aa89c52f00b8733569f2ee2e4ec97104dfed265a6559182%40group.calendar.google.com&ctz=Europe%2FBrussels&bgcolor=%23000000&color=%23FFFFFF&textColor=%23FFFFFF&linkColor=%23FFD700" 
-      style="border: 0" 
-      width="800" 
-      height="600" 
-      frameborder="0" 
-      scrolling="no">
-    </iframe>    
-    </div>
-  </section>
- 
-<!-- Contact Section -->
-<section id="contact" class="section contact">
-  <h2>LET'S CONNECT!</h2>
-  <form class="contact-form" action="https://formsubmit.co/PieterV-D-S@hotmail.com" method="POST">
-    <input type="text" name="name" placeholder="Name" required>
-    <input type="email" name="email" placeholder="Email" required>
-    <select name="subject" required>
-      <option value="" disabled selected>Select a Category</option>
-      <option value="Personal Training">Personal Training</option>
-      <option value="Online Coaching">Online Coaching</option>
-      <option value="Customized Meal Plans">Customized Meal Plans</option>
-      <option value="Group Training">Group Training</option>
-      <option value="other">Join Our Team</option>
-    </select>
-    <textarea name="message" placeholder="Your Message" required></textarea>
-    <button type="submit">Level Up Now!</button>
-  </form>
-    <div class="icoon">
-      <a id="icon" href="https://www.facebook.com/profile.php?id=61569874411174"><img src="img/facebook.png" alt="Facebook"></a>
-      <a id="icon" href="https://www.instagram.com/levelupcrossfitpvds/"><img src="img/Instagram.png" alt="Instagram"></a>
-      <a id="icon" href="https://chat.whatsapp.com/EGDu4ZuQn1A8VyeGrmPFoG"><img src="img/whatsapp.png" alt="whatsapp"></a>
-    </div>
-</section>
-
-  
-  <!-- Footer -->
   <footer class="footer">
-    <p>© 2025 LEVEL-UP Personal Training. All Rights Reserved.</p>
+    <div class="vine-divider" aria-hidden="true"></div>
+    <div class="container footer-inner">
+      <a href="#home" class="brand">
+        <img src="img/logo.JPG" alt="" class="brand-logo">
+        <span class="brand-name">LEVEL-UP</span>
+      </a>
+      <p>© <span id="year">2025</span> LEVEL-UP Personal Training. All rights reserved.</p>
+      <p class="footer-hint">Game over? Never. Continue ▶</p>
+    </div>
   </footer>
+
+  <!-- Floating WhatsApp -->
+  <a href="https://wa.me/32471955489" target="_blank" rel="noopener" class="whatsapp-float" aria-label="Chat with us on WhatsApp">
+    <img src="img/whatsapp.png" alt="">
+  </a>
+
+  <!-- Achievement toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span class="toast-icon" aria-hidden="true">★</span>
+    <div><p class="toast-title">Level up!</p><p class="toast-text" id="toastText"></p></div>
+  </div>
 
   <script src="script.js"></script>
 </body>

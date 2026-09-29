@@ -1,158 +1,229 @@
+// ===== Navigation =====
+const hud = document.getElementById("hud");
+const nav = document.getElementById("nav");
+const menuToggle = document.getElementById("menuToggle");
 
-// toggle hamburger menu 
-function toggleMenu() {
-  const menu = document.getElementById("mobileMenu");
-  menu.classList.toggle("open"); // Toggle open/close
+function setMenu(open) {
+  nav.classList.toggle("open", open);
+  menuToggle.setAttribute("aria-expanded", String(open));
+  menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
 }
 
-const subtitleElement = document.getElementById("subtitle");
-  const words = ["CROSSFIT","THERAPHEUTIC BOXING", "CALISTHENICS", "MUAY THAI" , "RUNNING"];
-  let index = 0;
-
-  setInterval(() => {
-    // Fade out
-    subtitleElement.classList.add("fade-out");
-
-    // Wait for fade out, then change text and fade in
-    setTimeout(() => {
-      index = (index + 1) % words.length;
-      subtitleElement.innerHTML = `<strong>${words[index]}</strong>`;
-      subtitleElement.classList.remove("fade-out");
-    }, 500); // Match this to your CSS transition time
-  }, 1500); // Every 0.5 seconds for a smooth experience
-
-// Close menu when clicking a link
-document.querySelectorAll(".mobile-menu a").forEach(link => {
-  link.addEventListener("click", () => {
-    document.getElementById("mobileMenu").classList.remove("open");
-  });
+menuToggle.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setMenu(!nav.classList.contains("open"));
 });
 
-// Close menu when clicking outside
+// Close menu when clicking a link, clicking outside or pressing Escape
+nav.querySelectorAll("a").forEach(link => link.addEventListener("click", () => setMenu(false)));
 document.addEventListener("click", (event) => {
-  const menu = document.getElementById("mobileMenu");
-  const menuButton = document.querySelector(".hamburger-menu");
-
-  if (!menu.contains(event.target) && !menuButton.contains(event.target)) {
-    menu.classList.remove("open"); // Close the menu
-  }
+  if (nav.classList.contains("open") && !nav.contains(event.target)) setMenu(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setMenu(false);
 });
 
+// ===== XP bar (scroll progress) + HUD background =====
+const xpFill = document.getElementById("xpFill");
 
-// Add hover effect to the header images
-const headerImages = document.querySelectorAll('.header-image');
+function onScroll() {
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = max > 0 ? (window.scrollY / max) * 100 : 0;
+  xpFill.style.width = `${progress}%`;
+  hud.classList.toggle("scrolled", window.scrollY > 10);
+}
+window.addEventListener("scroll", onScroll, { passive: true });
+onScroll();
 
-headerImages.forEach(image => {
-  image.addEventListener('mouseover', () => {
-    image.style.transform = 'scale(1.1)';
-    image.style.transition = 'transform 0.3s';
+// ===== Rotating class name in the hero =====
+const classRotator = document.getElementById("classRotator");
+const classes = ["CROSSFIT", "THERAPEUTIC BOXING", "CALISTHENICS", "MUAY THAI", "RUNNING", "HIIT"];
+let classIndex = 0;
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+setInterval(() => {
+  classRotator.classList.add("swap");
+  setTimeout(() => {
+    classIndex = (classIndex + 1) % classes.length;
+    classRotator.textContent = classes[classIndex];
+    classRotator.classList.remove("swap");
+  }, prefersReducedMotion ? 0 : 250);
+}, 2200);
+
+// ===== Player card stat bars =====
+window.addEventListener("load", () => {
+  document.querySelector(".player-card")?.classList.add("ready");
+});
+
+// ===== Levels, active nav link and achievement toasts =====
+const sections = document.querySelectorAll("section[data-level]");
+const navLinks = nav.querySelectorAll('a[href^="#"]');
+const hudLevel = document.getElementById("hudLevel");
+const hudLevelBox = hudLevel.parentElement;
+const toast = document.getElementById("toast");
+const toastText = document.getElementById("toastText");
+let currentLevel = 1;
+let toastTimer;
+
+function showToast(message) {
+  toastText.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+const sectionObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const section = entry.target;
+
+    navLinks.forEach(link => {
+      link.classList.toggle("active", link.getAttribute("href") === `#${section.id}`);
+    });
+
+    const level = Number(section.dataset.level);
+    if (level > currentLevel) {
+      currentLevel = level;
+      hudLevel.textContent = level;
+      hudLevelBox.classList.remove("bump");
+      void hudLevelBox.offsetWidth; // restart animation
+      hudLevelBox.classList.add("bump");
+      showToast(`LVL ${level}: ${section.dataset.achievement}`);
+    }
   });
+}, { rootMargin: "-45% 0px -50% 0px" });
 
-  image.addEventListener('mouseout', () => {
-    image.style.transform = 'scale(1)';
+sections.forEach(section => sectionObserver.observe(section));
+
+// ===== Reveal on scroll =====
+const revealTargets = document.querySelectorAll(
+  ".section-title, .section-intro, .quest-steps li, .class-card, .team-card, .gallery-item, .calendar, .contact-form, .stats-form, .results"
+);
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("in");
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12 });
+
+revealTargets.forEach(el => {
+  el.classList.add("reveal");
+  revealObserver.observe(el);
+});
+
+// ===== Gallery video: play only while visible =====
+const galleryVideo = document.querySelector(".gallery video");
+if (galleryVideo && !prefersReducedMotion) {
+  new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) galleryVideo.play().catch(() => {});
+    else galleryVideo.pause();
+  }, { threshold: 0.4 }).observe(galleryVideo);
+}
+
+// ===== "Select class" buttons pre-fill the contact form =====
+const subjectSelect = document.getElementById("subject");
+document.querySelectorAll("[data-subject]").forEach(button => {
+  button.addEventListener("click", () => {
+    subjectSelect.value = button.dataset.subject;
   });
 });
 
-// Select all program cards
-const programCards = document.querySelectorAll('.program-card');
+// ===== Stats calculator: BMI, BMR, calories & meal plan =====
+const statsForm = document.getElementById("statsForm");
+const statsError = document.getElementById("statsError");
+const results = document.getElementById("results");
 
-    programCards.forEach(card => {
-    // Add click event listener to toggle the "flipped" class
-    card.addEventListener('click', () => {
-      card.classList.toggle('flipped');
-    });
-  });
+function bmiCategory(bmi) {
+  if (bmi < 18.5) return { label: "Underweight", warn: true };
+  if (bmi < 25) return { label: "Healthy range", warn: false };
+  if (bmi < 30) return { label: "Overweight", warn: true };
+  return { label: "Obese", warn: true };
+}
 
-  // Select all team members
-  const teamMembers = document.querySelectorAll('.team-member');
-
-  // Add a double-click event to each team member
-  teamMembers.forEach(member => {
-    member.addEventListener('dblclick', () => {
-      const url = member.getAttribute('data-url'); // Get the URL from the data attribute
-      if (url) {
-        window.open(url, '_blank'); // Open the URL in a new tab
-      }
-      if (!url) {
-        alert('Link to this trainer comming soon ;)');
-      }
-
-    });
-  });
-
-// Open & Close Modal
-const modal = document.getElementById("bmiModal");
-const openModalBtn = document.getElementById("openModal");
-const closeModal = document.querySelector(".close");
-
-openModalBtn.onclick = () => { modal.style.display = "flex"; };
-closeModal.onclick = () => { modal.style.display = "none"; };
-window.onclick = (e) => { if (e.target === modal) modal.style.display = "none"; };
-
-// BMI, BMR & Meal Plan Calculation
-document.getElementById("calculate").onclick = function () {
-  const weight = parseFloat(document.getElementById("weight").value);
-  const height = parseFloat(document.getElementById("height").value);
-  const age = parseInt(document.getElementById("age").value);
-  const gender = document.getElementById("gender").value;
-  const activity = parseFloat(document.getElementById("activity").value);
-  const goal = document.getElementById("goal").value;
-
-  if (!weight || !height || !age) {
-      alert("Please fill out all fields.");
-      return;
-  }
-
-  // BMI Calculation
-  const bmi = (weight / ((height / 100) ** 2)).toFixed(1);
-
-  // BMR Calculation (Mifflin-St Jeor Equation)
-  let bmr = (gender === "male")
-      ? 88.36 + (13.4 * weight) + (4.8 * height) - (5.7 * age)
-      : 447.6 + (9.2 * weight) + (3.1 * height) - (4.3 * age);
-  
-  bmr = bmr.toFixed(1);
-
-  // Estimated Daily Calorie Burn
-  let dailyCalories = bmr * activity;
-
-  // Adjust Calories Based on Goal
-  if (goal === "lose") {
-      dailyCalories *= 0.8;  // 20% deficit
-  } else if (goal === "gain") {
-      dailyCalories *= 1.15; // 15% surplus
-  }
-  dailyCalories = dailyCalories.toFixed(1);
-
-  // Generate a meal plan based on the goal
-  const mealPlan = generateMealPlan(goal);
-
-  // Display Results inside the pop-up
-  document.getElementById("results").innerHTML = `
-      <p><strong>BMI:</strong> ${bmi}</p>
-      <p><strong>BMR:</strong> ${bmr} kcal/day</p>
-      <p><strong>Estimated Daily Calories:</strong> ${dailyCalories} kcal/day</p>
-      <h3>Suggested Meal Plan 🍽️</h3>
-      ${mealPlan}
-  `;
+const mealPlans = {
+  lose: ["Scrambled egg whites & avocado 🥑", "Grilled chicken salad 🥗", "Greek yogurt & berries 🍓", "Salmon & quinoa 🐟"],
+  maintain: ["Oatmeal with peanut butter 🥜", "Brown rice & tuna 🍚", "Greek yogurt with nuts 🥣", "Grilled chicken wrap 🌯"],
+  gain: ["Egg omelette with toast 🍳", "Salmon with pasta 🍝", "Protein shake with oats 🥤", "Steak with potatoes 🥩"]
 };
 
-// Function to Generate Meal Plan
-function generateMealPlan(goal) {
-  const meals = {
-      lose: ["Scrambled Egg Whites & Avocado 🥑", "Grilled Chicken Salad 🥗", "Salmon & Quinoa 🐟", "Protein Shake 🥤"],
-      maintain: ["Oatmeal with Peanut Butter 🥜", "Brown Rice & Tuna 🍚", "Greek Yogurt with Nuts 🍓", "Grilled Chicken Wrap 🌯"],
-      gain: ["Steak with Mashed Potatoes 🥩", "Salmon with Pasta 🍝", "Protein Shake with Oats 🥤", "Egg Omelette with Toast 🍳"]
-  };
+const goalLabels = { lose: "Lose fat", maintain: "Maintain", gain: "Build muscle" };
 
-  let mealOptions = meals[goal];
-  return `
-      <p>🥣 <strong>Breakfast:</strong> ${mealOptions[0]}</p>
-      <p>🥗 <strong>Lunch:</strong> ${mealOptions[1]}</p>
-      <p>🍎 <strong>Snack:</strong> ${mealOptions[2]}</p>
-      <p>🍽️ <strong>Dinner:</strong> ${mealOptions[3]}</p>
+statsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const weight = parseFloat(document.getElementById("weight").value);
+  const height = parseFloat(document.getElementById("height").value);
+  const age = parseInt(document.getElementById("age").value, 10);
+  const gender = document.getElementById("gender").value;
+  const activity = parseFloat(document.getElementById("activity").value);
+  const goal = statsForm.querySelector('input[name="goal"]:checked').value;
+
+  if (!weight || !height || !age || weight <= 0 || height <= 0 || age <= 0) {
+    statsError.textContent = "Fill in your weight, height and age to calculate your stats.";
+    return;
+  }
+  statsError.textContent = "";
+
+  const bmi = weight / ((height / 100) ** 2);
+  const category = bmiCategory(bmi);
+
+  // Mifflin-St Jeor equation
+  const bmr = 10 * weight + 6.25 * height - 5 * age + (gender === "male" ? 5 : -161);
+  const maintenance = bmr * activity;
+
+  // Adjust calories for the goal
+  const goalFactor = { lose: 0.8, maintain: 1, gain: 1.1 }[goal];
+  const target = maintenance * goalFactor;
+
+  // Protein target in grams per kg bodyweight
+  const proteinPerKg = { lose: 2.0, maintain: 1.6, gain: 1.8 }[goal];
+  const protein = weight * proteinPerKg;
+
+  const meals = mealPlans[goal];
+  const round = (n) => Math.round(n).toLocaleString("en-US");
+
+  results.innerHTML = `
+    <h3>Your stats · ${goalLabels[goal]}</h3>
+    <div class="result-tiles">
+      <div class="tile">
+        <span class="tile-label">BMI</span>
+        <span class="tile-value">${bmi.toFixed(1)}</span>
+        <span class="tile-note ${category.warn ? "warn" : ""}">${category.label}</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">BMR</span>
+        <span class="tile-value">${round(bmr)}<small>kcal</small></span>
+        <span class="tile-note">At rest</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">Maintenance</span>
+        <span class="tile-value">${round(maintenance)}<small>kcal</small></span>
+        <span class="tile-note">Per day</span>
+      </div>
+      <div class="tile highlight">
+        <span class="tile-label">Daily target</span>
+        <span class="tile-value">${round(target)}<small>kcal</small></span>
+        <span class="tile-note">~${round(protein)} g protein</span>
+      </div>
+    </div>
+    <h3>Starter meal plan 🍽️</h3>
+    <ul class="meal-list">
+      <li><b>Breakfast</b><span>${meals[0]}</span></li>
+      <li><b>Lunch</b><span>${meals[1]}</span></li>
+      <li><b>Snack</b><span>${meals[2]}</span></li>
+      <li><b>Dinner</b><span>${meals[3]}</span></li>
+    </ul>
+    <p class="results-note">These are estimates. Want a plan built for you? <a href="#contact" class="text-link" data-subject="Customized Meal Plans">Ask for a custom meal plan</a>.</p>
   `;
-}
 
+  results.querySelector("[data-subject]").addEventListener("click", () => {
+    subjectSelect.value = "Customized Meal Plans";
+  });
 
-  
+  if (window.innerWidth < 960) results.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// ===== Footer year =====
+document.getElementById("year").textContent = new Date().getFullYear();
