@@ -111,6 +111,43 @@ function renderSessions() {
     </section>`;
 }
 
+// Trainer application: status, or a form to apply
+function renderApplication(player) {
+  if (player.trainerId) return "";
+  const app = player.application;
+  const form = (title) => `
+    <form class="apply-form" id="applyForm">
+      <p class="muted small-text">${title}</p>
+      <div class="field-row">
+        <label>Coaching title<input name="role" maxlength="60" placeholder="e.g. Cycling coach" value="${esc(app?.role || "")}"></label>
+        <label>What do you coach?<input name="specialties" maxlength="200" placeholder="e.g. Road cycling, endurance" value="${esc(app?.specialties || "")}"></label>
+      </div>
+      <label>About you (optional)<textarea name="bio" rows="3" maxlength="600">${esc(app?.bio || "")}</textarea></label>
+      <p class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-small btn-primary">Send application ▶</button>
+    </form>`;
+
+  if (app?.status === "pending") {
+    return `
+      <section class="panel panel-wide application-panel pending">
+        <div class="panel-head"><h2>Trainer application</h2><span class="status-chip pending">Pending review</span></div>
+        <p>Thanks for applying as <strong>${esc(app.role || "personal trainer")}</strong>. Pieter reviews your application and you'll get an email. Until then you can use LEVEL-UP as a player.</p>
+      </section>`;
+  }
+  if (app?.status === "rejected") {
+    return `
+      <section class="panel panel-wide application-panel">
+        <div class="panel-head"><h2>Trainer application</h2><span class="status-chip declined">Not approved</span></div>
+        ${form("Your last application wasn't approved. You can update it and apply again.")}
+      </section>`;
+  }
+  return `
+    <details class="panel panel-wide application-panel">
+      <summary><h2>Are you a personal trainer?</h2><span class="muted">Apply to coach on LEVEL-UP ▾</span></summary>
+      ${form("After approval you get a trainer card in the team, a Coach panel and coaching XP.")}
+    </details>`;
+}
+
 // Trainers: answer requests, see upcoming sessions and reward today's sessions
 function renderCoachPanel() {
   if (!LevelUp.isTrainer()) return "";
@@ -440,6 +477,7 @@ function render() {
     ${renderHeader(player, p)}
     ${renderSummary(player)}
     <div class="panel-grid">
+      ${renderApplication(player)}
       ${renderCoachPanel()}
       ${renderBodyStats(player)}
       ${renderSessions()}
@@ -489,6 +527,20 @@ function bindEvents(player) {
         button.closest(".session-row").querySelector(".form-error").textContent = err.message;
       }
     });
+  });
+
+  const applyForm = document.getElementById("applyForm");
+  applyForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = applyForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      await LevelUp.applyAsTrainer(Object.fromEntries(new FormData(applyForm)));
+      LevelUp.toast({ title: "Application sent", text: "Pieter reviews it soon. You'll get an email.", icon: "✉", tone: "green" });
+    } catch (err) {
+      applyForm.querySelector(".form-error").textContent = err.message;
+      submit.disabled = false;
+    }
   });
 
   const statsFormEl = document.getElementById("statsForm");

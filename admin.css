@@ -171,3 +171,10 @@
 }
 
 .admin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.application-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.application-item { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 14px; background: #000; border-left: 4px solid var(--gold); }
+.application-item p { margin: 0 0 4px; }
+.application-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.application-actions select { width: auto; min-height: 40px; padding: 8px 36px 8px 10px; font-size: 0.88rem; }
+@media (max-width: 760px) { .application-item { grid-template-columns: 1fr; } .application-actions { justify-content: flex-start; } }

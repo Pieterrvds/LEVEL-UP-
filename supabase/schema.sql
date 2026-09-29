@@ -52,13 +52,19 @@ create table if not exists public.trainers (
 -- A trainer's account (by email): coaching XP goes to that account, so the
 -- level on the team card and in the profile is the same
 alter table public.trainers add column if not exists email text;
-update public.trainers set email = 'pieterv-d-s@hotmail.com' where id = 'pieter' and email is null;
+alter table public.trainers add column if not exists role text;
+alter table public.trainers add column if not exists bio text;
+alter table public.trainers add column if not exists specialties text;
+alter table public.trainers add column if not exists color text;
+alter table public.trainers add column if not exists chart_color text;
+alter table public.trainers add column if not exists created_at timestamptz not null default now();
 
 insert into public.trainers (id, name) values
   ('pieter', 'Pieter'),
   ('filip', 'Filip De Meyst'),
   ('maxim', 'Maxim Buyl')
 on conflict (id) do nothing;
+update public.trainers set email = 'pieterv-d-s@hotmail.com' where id = 'pieter' and email is null;
 
 create table if not exists public.shop_items (
   id text primary key,
@@ -176,6 +182,19 @@ returns jsonb language sql stable security definer set search_path = public as $
   from public.profiles p where p.id = b.user_id;
 $$;
 
+-- People who signed up (or applied later) as personal trainer; an admin approves them
+create table if not exists public.trainer_applications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references public.profiles (id) on delete cascade,
+  role_title text not null default '',
+  specialties text not null default '',
+  bio text not null default '',
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  trainer_id text references public.trainers (id),
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz
+);
+
 create table if not exists public.calendar_cache (
   id integer primary key default 1 check (id = 1),
   ics text,
@@ -205,6 +224,10 @@ alter table public.body_stats enable row level security;
 alter table public.bookings enable row level security;
 alter table public.orders enable row level security;
 alter table public.calendar_cache enable row level security;
+alter table public.trainer_applications enable row level security;
+
+drop policy if exists "own application or admin" on public.trainer_applications;
+create policy "own application or admin" on public.trainer_applications for select using (user_id = auth.uid() or public.is_admin());
 
 drop policy if exists "trainers are public" on public.trainers;
 create policy "trainers are public" on public.trainers for select using (true);
@@ -339,6 +362,15 @@ begin
   )
   on conflict (id) do nothing;
   perform public._check_achievements(new.id);
+  -- Sign-up as personal trainer: an application for the admin to review
+  if new.raw_user_meta_data ? 'trainer_application' then
+    insert into public.trainer_applications (user_id, role_title, specialties, bio)
+    values (new.id,
+      left(coalesce(new.raw_user_meta_data -> 'trainer_application' ->> 'role', ''), 60),
+      left(coalesce(new.raw_user_meta_data -> 'trainer_application' ->> 'specialties', ''), 200),
+      left(coalesce(new.raw_user_meta_data -> 'trainer_application' ->> 'bio', ''), 600))
+    on conflict (user_id) do nothing;
+  end if;
   -- Character stats filled in during sign-up
   if new.raw_user_meta_data ? 'stats' then
     begin
@@ -371,6 +403,9 @@ returns jsonb language sql stable security definer set search_path = public as $
     'createdAt', p.created_at,
     'lastLogin', p.last_login,
     'showOnLeaderboard', p.show_on_leaderboard,
+    'application', (select jsonb_build_object('status', a.status, 'role', a.role_title, 'specialties', a.specialties,
+                      'bio', a.bio, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at)
+                    from public.trainer_applications a where a.user_id = p.id),
     'trainerId', (select t.id from public.trainers t where t.email is not null and lower(t.email) = lower(p.email)),
     'admin', lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')),
     'xpLog', coalesce((select jsonb_agg(jsonb_build_object('date', x.created_at, 'amount', x.amount, 'reason', x.reason) order by x.id desc)
@@ -733,6 +768,88 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
+-- Trainer applications and the public trainer list
+-- ---------------------------------------------------------
+create or replace function public.apply_as_trainer(p jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if exists (select 1 from public.trainers t join public.profiles pr on lower(pr.email) = lower(t.email) where pr.id = auth.uid()) then
+    raise exception 'You already have a trainer account.';
+  end if;
+  insert into public.trainer_applications (user_id, role_title, specialties, bio)
+  values (auth.uid(), left(coalesce(p ->> 'role', ''), 60), left(coalesce(p ->> 'specialties', ''), 200), left(coalesce(p ->> 'bio', ''), 600))
+  on conflict (user_id) do update
+    set role_title = excluded.role_title, specialties = excluded.specialties, bio = excluded.bio,
+        status = 'pending', created_at = now(), reviewed_at = null
+    where public.trainer_applications.status = 'rejected';
+  if not found then raise exception 'Your application is already being reviewed.'; end if;
+end $$;
+
+-- Admin approves (linking to an existing trainer card or creating a new one) or rejects
+create or replace function public.review_trainer_application(p_id uuid, p_approve boolean, p_trainer text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  a public.trainer_applications;
+  pr public.profiles;
+  new_id text;
+  n integer;
+  palette text[] := array['#4dd4a3', '#b3a8ff'];
+  chart_palette text[] := array['#199e70', '#9085e9'];
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select * into a from public.trainer_applications where id = p_id;
+  if not found then raise exception 'Application not found.'; end if;
+  if a.status <> 'pending' then raise exception 'This application has already been reviewed.'; end if;
+  select * into pr from public.profiles where id = a.user_id;
+
+  if not p_approve then
+    update public.trainer_applications set status = 'rejected', reviewed_at = now() where id = p_id;
+    return jsonb_build_object('status', 'rejected', 'name', pr.name, 'email', pr.email);
+  end if;
+
+  if p_trainer is not null and p_trainer <> '' then
+    -- link to an existing trainer card that has no account yet
+    update public.trainers set email = pr.email where id = p_trainer and email is null;
+    if not found then raise exception 'That trainer card is already linked to an account.'; end if;
+    new_id := p_trainer;
+  else
+    new_id := regexp_replace(lower(split_part(pr.name, ' ', 1)), '[^a-z0-9]', '', 'g');
+    if new_id = '' then new_id := 'coach'; end if;
+    n := 1;
+    while exists (select 1 from public.trainers where id = new_id) loop
+      n := n + 1;
+      new_id := regexp_replace(lower(split_part(pr.name, ' ', 1)), '[^a-z0-9]', '', 'g') || n;
+    end loop;
+    select count(*) - 3 into n from public.trainers; -- the first three have their own colours
+    insert into public.trainers (id, name, email, role, bio, specialties, color, chart_color)
+    values (new_id, pr.name, pr.email, nullif(a.role_title, ''), nullif(a.bio, ''), nullif(a.specialties, ''),
+            coalesce(palette[n + 1], '#a6b3a9'), coalesce(chart_palette[n + 1], '#7f8f84'));
+  end if;
+
+  update public.trainer_applications set status = 'approved', reviewed_at = now(), trainer_id = new_id where id = p_id;
+  return jsonb_build_object('status', 'approved', 'trainerId', new_id, 'name', pr.name, 'email', pr.email);
+end $$;
+
+-- Every active trainer for the website (never emails)
+create or replace function public.trainer_list()
+returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean)
+language sql stable security definer set search_path = public as $$
+  select t.id, t.name, t.role, t.bio, t.specialties, t.color, t.chart_color, t.email is not null
+  from public.trainers t where t.active order by t.created_at, t.id;
+$$;
+
+-- Pending applications, for the admin pop-up
+create or replace function public.admin_inbox()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then return '[]'::jsonb; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', p.name, 'role', a.role_title, 'createdAt', a.created_at) order by a.created_at)
+                   from public.trainer_applications a join public.profiles p on p.id = a.user_id
+                   where a.status = 'pending'), '[]'::jsonb);
+end $$;
+
+-- ---------------------------------------------------------
 -- Admin dashboard data
 -- ---------------------------------------------------------
 create or replace function public.admin_data()
@@ -742,7 +859,12 @@ begin
   return jsonb_build_object(
     'players', coalesce((select jsonb_agg(public._player_json(p.id)) from public.profiles p), '[]'::jsonb),
     'bookings', coalesce((select jsonb_agg(public._booking_json(b) order by b.day, b.hour)
-                         from public.bookings b), '[]'::jsonb)
+                         from public.bookings b), '[]'::jsonb),
+    'applications', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', p.name, 'email', p.email,
+                           'role', a.role_title, 'specialties', a.specialties, 'bio', a.bio, 'status', a.status,
+                           'trainerId', a.trainer_id, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at) order by a.created_at desc)
+                         from public.trainer_applications a join public.profiles p on p.id = a.user_id), '[]'::jsonb),
+    'unlinkedTrainers', coalesce((select jsonb_agg(t.id) from public.trainers t where t.email is null and t.active), '[]'::jsonb)
   );
 end $$;
 
@@ -765,6 +887,13 @@ revoke execute on function public.coach_bookings() from public, anon;
 grant execute on function public.respond_booking(uuid, boolean) to authenticated;
 grant execute on function public.reward_session(uuid) to authenticated;
 grant execute on function public.coach_bookings() to authenticated;
+revoke execute on function public.apply_as_trainer(jsonb) from public, anon;
+revoke execute on function public.review_trainer_application(uuid, boolean, text) from public, anon;
+revoke execute on function public.admin_inbox() from public, anon;
+grant execute on function public.apply_as_trainer(jsonb) to authenticated;
+grant execute on function public.review_trainer_application(uuid, boolean, text) to authenticated;
+grant execute on function public.admin_inbox() to authenticated;
+grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard() to anon, authenticated;

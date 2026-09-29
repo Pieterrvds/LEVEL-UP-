@@ -309,7 +309,9 @@ const LevelUp = (() => {
       workouts: data.workouts || [],
       bodyStats: (data.bodyStats || []).map((s) => ({ ...s, weight: Number(s.weight), height: Number(s.height), bmi: Number(s.bmi) })),
       purchases: (data.purchases || []).map((o) => ({ ...o, total: Number(o.total) })),
-      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) }))
+      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) })),
+      applications: data.applications || [],
+      unlinkedTrainers: data.unlinkedTrainers || []
     };
   }
 
@@ -375,6 +377,32 @@ const LevelUp = (() => {
       }]));
     } catch (err) {
       console.error("Loading trainer stats failed:", err);
+    }
+  }
+
+  // Trainers approved through the admin dashboard get added to the site automatically
+  async function loadTrainerList() {
+    try {
+      const rows = await call("trainer_list");
+      (rows || []).forEach((r) => {
+        if (TRAINERS.some((t) => t.id === r.id)) return;
+        TRAINERS.push({
+          id: r.id,
+          name: r.name,
+          short: String(r.name).trim().split(/\s+/)[0],
+          role: r.role || "Personal trainer",
+          bio: r.bio || "",
+          specialties: r.specialties || "",
+          img: "img/pfdefault.png",
+          color: r.color || "#a6b3a9",
+          chartColor: r.chart_color || "#7f8f84",
+          availability: {},
+          stats: { sessions: 0, clients: 0 },
+          dynamic: true
+        });
+      });
+    } catch (err) {
+      console.error("Loading trainers failed:", err);
     }
   }
 
@@ -708,14 +736,16 @@ const LevelUp = (() => {
     const data = await call("admin_data");
     return {
       players: (data.players || []).map(normalisePlayer),
-      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) }))
+      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) })),
+      applications: data.applications || [],
+      unlinkedTrainers: data.unlinkedTrainers || []
     };
   }
 
   // ---------- Accounts ----------
   const pageUrl = (page) => new URL(page, window.location.href).href.split("#")[0];
 
-  async function signUp({ name, email, password, stats }) {
+  async function signUp({ name, email, password, stats, trainerApplication }) {
     name = String(name || "").trim();
     email = String(email || "").trim().toLowerCase();
     if (!name) throw new Error("Choose a player name.");
@@ -726,12 +756,20 @@ const LevelUp = (() => {
     const { data, error } = await sb.auth.signUp({
       email,
       password,
-      options: { data: { name: name.slice(0, 24), ...(stats ? { stats } : {}) }, emailRedirectTo: pageUrl("profile.html") }
+      options: {
+        data: {
+          name: name.slice(0, 24),
+          ...(stats ? { stats } : {}),
+          ...(trainerApplication ? { trainer_application: trainerApplication } : {})
+        },
+        emailRedirectTo: pageUrl("profile.html")
+      }
     });
     if (error) throw new Error(/registered|exists/i.test(error.message) ? "An account with this email already exists. Log in instead." : friendly(error));
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
       throw new Error("An account with this email already exists. Log in instead.");
     }
+    if (trainerApplication) notifyApplication({ name, email, ...trainerApplication });
     return { needsConfirmation: !data.session };
   }
 
@@ -787,6 +825,7 @@ const LevelUp = (() => {
       call("touch_login").catch(() => {});
       claimGuestOrders();
       setTimeout(showCoachInbox, 900);
+      setTimeout(showAdminInbox, 1500);
       if (event === "SIGNED_IN") {
         const fresh = Date.now() - new Date(player.createdAt).getTime() < 10 * 60e3;
         toast(fresh
@@ -795,6 +834,95 @@ const LevelUp = (() => {
       }
     }
     emit();
+  }
+
+  // ---------- Trainer applications ----------
+  function cleanApplication({ role, specialties, bio }) {
+    const app = {
+      role: String(role || "").trim().slice(0, 60),
+      specialties: String(specialties || "").trim().slice(0, 200),
+      bio: String(bio || "").trim().slice(0, 600)
+    };
+    if (!app.role) throw new Error("Fill in your coaching title, e.g. Cycling coach.");
+    if (!app.specialties) throw new Error("Tell us what you coach.");
+    return app;
+  }
+
+  function notifyApplication(app) {
+    fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: `New trainer application: ${app.name}`,
+        _template: "table",
+        _autoresponse: `Hi ${app.name}, thanks for applying as a personal trainer on LEVEL-UP! We'll review your application soon and let you know by email. You can already use your account as a player.\n\nThe LEVEL-UP team`,
+        name: app.name,
+        email: app.email,
+        role: app.role,
+        specialties: app.specialties,
+        about: app.bio || "-",
+        next_step: "Review it in the LEVEL-UP admin dashboard under Trainer applications."
+      })
+    }).catch((error) => console.error("Application email failed:", error));
+  }
+
+  async function applyAsTrainer(input) {
+    const app = cleanApplication(input);
+    await call("apply_as_trainer", { p: app });
+    notifyApplication({ ...app, name: player.name, email: player.email });
+    await refreshPlayer();
+    emit();
+  }
+
+  async function reviewApplication(id, approve, trainerId = null) {
+    const result = await call("review_trainer_application", { p_id: id, p_approve: Boolean(approve), p_trainer: trainerId || null });
+    fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: `Trainer application ${approve ? "approved" : "not approved"}: ${result.name}`,
+        _template: "table",
+        _autoresponse: approve
+          ? `Hi ${result.name}, welcome to the LEVEL-UP team! Your trainer account is active. Log in to find your Coach panel in your profile. Add your open hours to the LEVEL-UP calendar as "${String(result.name).split(" ")[0]} available" and players can book you.\n\nThe LEVEL-UP team`
+          : `Hi ${result.name}, thanks for your interest in coaching on LEVEL-UP. We can't approve your trainer application right now. You can keep using your account as a player.\n\nThe LEVEL-UP team`,
+        name: result.name,
+        email: result.email,
+        decision: approve ? `Approved (trainer card: ${result.trainerId})` : "Not approved"
+      })
+    }).catch((error) => console.error("Decision email failed:", error));
+    await loadTrainerList();
+    emit();
+    return result;
+  }
+
+  // Admin pop-up: new trainer applications
+  async function showAdminInbox() {
+    if (!isAdmin()) return;
+    let pending = [];
+    try { pending = (await call("admin_inbox")) || []; } catch { return; }
+    if (!pending.length) return;
+    const signature = pending.map((a) => a.id).join(",");
+    try {
+      if (sessionStorage.getItem("levelup.adminInbox") === signature) return;
+      sessionStorage.setItem("levelup.adminInbox", signature);
+    } catch { /* storage unavailable */ }
+    if (document.querySelector(".coach-dialog[open]")) return; // don't stack pop-ups
+    const box = document.createElement("dialog");
+    box.className = "auth-dialog coach-dialog";
+    box.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <p class="section-kicker">Game master inbox</p>
+      <h2 class="auth-title">${pending.length} new trainer application${pending.length === 1 ? "" : "s"}</h2>
+      <ul class="coach-list">${pending.map((a) => `
+        <li class="coach-item"><div><p class="coach-who">${esc(a.name)}</p><p class="muted">${esc(a.role || "Personal trainer")}</p></div></li>`).join("")}
+      </ul>
+      <div class="btn-row"><a href="admin.html#applications" class="btn btn-primary btn-small">Review in admin ▶</a></div>`;
+    document.body.appendChild(box);
+    box.addEventListener("click", (event) => {
+      if (event.target === box || event.target.closest("[data-close]")) box.close();
+    });
+    box.addEventListener("close", () => box.remove());
+    box.showModal();
   }
 
   // ---------- Trainer pop-up: requests to answer, sessions to reward ----------
@@ -866,12 +994,14 @@ const LevelUp = (() => {
       try {
         const { data } = await sb.auth.getSession();
         session = data.session;
+        await loadTrainerList(); // before the calendar, so new trainers' open hours are recognised
         await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar(), loadLeaderboard()]);
         if (player) {
           welcomed = true;
           call("touch_login").catch(() => {});
           claimGuestOrders();
           setTimeout(showCoachInbox, 600);
+          setTimeout(showAdminInbox, 1200);
         }
       } catch (err) {
         serverError = friendly(err);
@@ -1005,9 +1135,20 @@ const LevelUp = (() => {
         <button type="button" role="tab" data-mode="signup">New player</button>
       </div>
       <form class="auth-form" novalidate>
-        <label class="signup-only">Player name<input name="name" autocomplete="nickname" maxlength="24"></label>
+        <fieldset class="signup-only role-picker">
+          <legend>I am a…</legend>
+          <label><input type="radio" name="kind" value="player" checked><span><b>Player</b><small>I want to train and level up</small></span></label>
+          <label><input type="radio" name="kind" value="trainer"><span><b>Personal trainer</b><small>I want to coach players</small></span></label>
+        </fieldset>
+        <label class="signup-only">Name<input name="name" autocomplete="nickname" maxlength="24"></label>
         <label class="email-field">Email<input name="email" type="email" autocomplete="email" required></label>
         <label class="password-field">Password<input name="password" type="password" minlength="6" required></label>
+        <div class="signup-trainer">
+          <p class="stats-intro">Step 2 of 2 · <strong>Trainer application.</strong> Pieter reviews it and unlocks your trainer account. Meanwhile you can use LEVEL-UP as a player.</p>
+          <label>Coaching title<input name="role" maxlength="60" placeholder="e.g. Cycling coach"></label>
+          <label>What do you coach?<input name="specialties" maxlength="200" placeholder="e.g. Road cycling, endurance, bike fitness"></label>
+          <label>About you (optional)<textarea name="bio" rows="3" maxlength="600" placeholder="Experience, certificates, where you train…"></textarea></label>
+        </div>
         <div class="signup-stats">
           <p class="stats-intro">Step 2 of 2 · <strong>Character stats.</strong> We use these for your BMI, daily calories and progress. Only you and your coach can see them.</p>
           <div class="field-row">
@@ -1042,6 +1183,7 @@ const LevelUp = (() => {
       tab.addEventListener("click", () => setMode(tab.dataset.mode));
     });
     dialog.querySelector(".auth-back").addEventListener("click", () => setStep(1));
+    dialog.querySelectorAll('[name="kind"]').forEach((r) => r.addEventListener("change", () => setStep(1)));
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1058,12 +1200,15 @@ const LevelUp = (() => {
           if (!/^\S+@\S+\.\S+$/.test(String(data.email || "").trim())) throw new Error("Enter a valid email address.");
           if (!data.password || data.password.length < 6) throw new Error("Your password needs at least 6 characters.");
           setStep(2);
-          form.elements.weight.focus();
+          (dialog.dataset.kind === "trainer" ? form.elements.role : form.elements.weight).focus();
           return;
         }
         if (mode === "signup") {
-          const stats = computeStats(data);
-          const result = await signUp({ ...data, stats });
+          const trainer = data.kind === "trainer";
+          const result = trainer
+            ? await signUp({ ...data, trainerApplication: cleanApplication(data) })
+            : await signUp({ ...data, stats: computeStats(data) });
+          if (trainer) toast({ title: "Application sent", text: "Pieter reviews it soon. You'll get an email.", icon: "✉", tone: "green" });
           if (result.needsConfirmation) {
             form.reset();
             setMode("login");
@@ -1094,9 +1239,13 @@ const LevelUp = (() => {
   }
 
   function setStep(step) {
+    const trainer = dialog.querySelector('[name="kind"]:checked')?.value === "trainer";
     dialog.dataset.step = String(step);
-    dialog.querySelector(".auth-submit").textContent = step === 2 ? "Create player ▶" : "Next: character stats ▶";
-    dialog.querySelector(".auth-title").textContent = step === 2 ? "Character creation" : MODES.signup.title;
+    dialog.dataset.kind = trainer ? "trainer" : "player";
+    dialog.querySelector(".auth-submit").textContent = step === 2
+      ? (trainer ? "Send application ▶" : "Create player ▶")
+      : (trainer ? "Next: trainer application ▶" : "Next: character stats ▶");
+    dialog.querySelector(".auth-title").textContent = step === 2 ? (trainer ? "Trainer application" : "Character creation") : MODES.signup.title;
     dialog.querySelector(".form-error").textContent = "";
   }
 
@@ -1116,6 +1265,9 @@ const LevelUp = (() => {
 
   function openAuth(mode = "login") {
     if (!dialog) buildDialog();
+    const asTrainer = mode === "signup-trainer";
+    if (asTrainer) mode = "signup";
+    dialog.querySelector(`[name="kind"][value="${asTrainer ? "trainer" : "player"}"]`).checked = true;
     setMode(mode);
     dialog.returnValue = "";
     if (!dialog.open) dialog.showModal();
@@ -1191,6 +1343,7 @@ const LevelUp = (() => {
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
+    applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };
 })();

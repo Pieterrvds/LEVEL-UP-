@@ -375,6 +375,33 @@ document.addEventListener("click", (event) => {
   renderBoard();
 });
 
+// ---------- Team: cards for trainers approved via the admin dashboard ----------
+function renderDynamicTeam() {
+  const grid = document.querySelector("#team .team-grid");
+  const recruit = grid?.querySelector(".team-card-recruit");
+  if (!grid || !recruit) return;
+  TRAINERS.filter((t) => t.dynamic && !document.getElementById(`team-${t.id}`)).forEach((t) => {
+    const card = document.createElement("article");
+    card.className = "team-card";
+    card.id = `team-${t.id}`;
+    card.style.setProperty("--c", t.color);
+    card.innerHTML = `
+      <div class="team-photo team-photo-new" aria-hidden="true"><span>${esc(t.short.charAt(0).toUpperCase())}</span></div>
+      <div class="team-body">
+        <p class="team-role">${esc(t.role)}</p>
+        <h3>${esc(t.name)}</h3>
+        <p>${esc(t.bio || (t.specialties ? `Coaches ${t.specialties}.` : "New on the LEVEL-UP team."))}</p>
+        <div class="trainer-stats" data-trainer-stats="${t.id}"></div>
+        <div class="btn-row team-actions">
+          <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${t.id}">Book ${esc(t.short)}</a>
+        </div>
+      </div>`;
+    grid.insertBefore(card, recruit);
+  });
+  document.getElementById("recruitTitle").textContent = `Player ${TRAINERS.length + 1}?`;
+  document.getElementById("trainerCount").textContent = TRAINERS.length;
+}
+
 // ---------- High scores ----------
 function renderHighScores() {
   const list = document.getElementById("hsList");
@@ -416,6 +443,7 @@ function renderHighScores() {
 }
 
 function renderAll() {
+  renderDynamicTeam();
   renderHighScores();
   renderBoard();
   renderQuestBoard();
@@ -423,6 +451,7 @@ function renderAll() {
 }
 
 document.addEventListener("levelup:change", () => {
+  renderFilter();
   renderAll();
   if (reopenAfterLogin && LevelUp.getPlayer() && pendingSlot) {
     reopenAfterLogin = false;

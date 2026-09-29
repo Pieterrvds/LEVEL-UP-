@@ -140,6 +140,16 @@
 .session-row p { margin: 0; }
 .session-trainer { font-weight: 700; margin-bottom: 2px !important; }
 
+/* Trainer application */
+.application-panel.pending { border-color: var(--gold); }
+.application-panel p { margin: 0 0 8px; }
+details.application-panel summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; }
+details.application-panel summary::-webkit-details-marker { display: none; }
+details.application-panel summary h2 { font-family: var(--pixel); font-size: 0.8rem; text-transform: uppercase; }
+details.application-panel[open] summary { margin-bottom: 16px; }
+.apply-form { display: grid; gap: 14px; }
+.apply-form .btn { justify-self: start; }
+
 /* Coach panel */
 .coach-panel { border-color: var(--gold); }
 .coach-row { grid-template-columns: 34px 1fr auto; }

@@ -32,7 +32,7 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const { players, bookings } = await LevelUp.adminData();
+  const { players, bookings, applications, unlinkedTrainers } = await LevelUp.adminData();
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -45,6 +45,8 @@ async function loadData() {
     };
   });
   return {
+    applications,
+    unlinkedTrainers,
     players: rows,
     members: rows.filter((p) => !p.admin),
     active: bookings.filter((b) => b.status !== "declined"),
@@ -102,6 +104,8 @@ async function render() {
       <p class="data-note"><strong>Live data</strong> from the LEVEL-UP server. Schedule: ${LevelUp.calendarStatus() === "ok" ? "open hours come from the Google Calendar." : "the Google Calendar couldn't be read, so the fallback hours are used."}</p>
     </header>
 
+    <section class="panel admin-panel applications" id="applications"></section>
+
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
 
     <section class="chart-grid">
@@ -154,6 +158,11 @@ async function render() {
       <div id="memberContent"></div>
     </dialog>`;
 
+  renderApplications();
+  if (location.hash === "#applications" && !render.scrolled) {
+    render.scrolled = true;
+    document.getElementById("applications").scrollIntoView({ block: "start" });
+  }
   renderKpis();
   renderCharts();
   renderTrainerCards();
@@ -174,6 +183,44 @@ function chartCard(key, title, subtitle, legend = false) {
       ${legend ? `<ul class="chart-legend">${TRAINERS.map((t) => `<li><span class="swatch" style="--c:${t.chartColor}"></span>${esc(t.short)}</li>`).join("")}</ul>` : ""}
       <div class="chart-body" data-chart="${key}"></div>
     </figure>`;
+}
+
+// ---------- Trainer applications ----------
+function renderApplications() {
+  const el = document.getElementById("applications");
+  const pending = data.applications.filter((a) => a.status === "pending");
+  const reviewed = data.applications.filter((a) => a.status !== "pending").slice(0, 5);
+  const options = [
+    `<option value="">New trainer card</option>`,
+    ...data.unlinkedTrainers.map((id) => `<option value="${esc(id)}">Link to ${esc(LevelUp.trainerById(id)?.name || id)}'s card</option>`)
+  ].join("");
+  const suggested = (a) => data.unlinkedTrainers.find((id) => {
+    const t = LevelUp.trainerById(id);
+    return t && a.name.toLowerCase().includes(t.short.toLowerCase());
+  });
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Trainer applications ${pending.length ? `<span class="count-chip">${pending.length}</span>` : ""}</h2>
+      <span class="muted">People who signed up as personal trainer</span>
+    </div>
+    ${pending.length ? `<ul class="application-list">${pending.map((a) => `
+      <li class="application-item">
+        <div>
+          <p class="coach-who">${esc(a.name)} <span class="muted small">· ${esc(a.email)}</span></p>
+          <p><strong>${esc(a.role || "Personal trainer")}</strong>${a.specialties ? ` · ${esc(a.specialties)}` : ""}</p>
+          ${a.bio ? `<p class="muted">${esc(a.bio)}</p>` : ""}
+          <p class="muted small">Applied ${fmtDate(a.createdAt)}</p>
+        </div>
+        <div class="application-actions">
+          <label class="sr-only" for="card-${a.id}">Trainer card</label>
+          <select id="card-${a.id}" data-card-for="${a.id}">${options.replace(`value="${suggested(a) || "__none__"}"`, `value="${suggested(a)}" selected`)}</select>
+          <button type="button" class="btn btn-small btn-primary" data-review="approve" data-id="${a.id}">Approve</button>
+          <button type="button" class="btn btn-small btn-ghost" data-review="reject" data-id="${a.id}">Reject</button>
+        </div>
+      </li>`).join("")}</ul>` : `<p class="muted">No open applications. New trainer sign-ups appear here and you get an email.</p>`}
+    ${reviewed.length ? `<h3 class="panel-sub">Recently reviewed</h3><ul class="detail-list">${reviewed.map((a) => `
+      <li><span>${esc(a.name)} · ${esc(a.role || "Personal trainer")} <span class="status-chip ${a.status === "approved" ? "confirmed" : "declined"}">${a.status}</span></span><span class="muted small">${a.reviewedAt ? fmtDate(a.reviewedAt) : ""}${a.trainerId ? ` · card: ${esc(a.trainerId)}` : ""}</span></li>`).join("")}</ul>` : ""}`;
 }
 
 // ---------- KPI tiles ----------
@@ -757,6 +804,17 @@ root.addEventListener("click", (event) => {
     state.bookingTrainer = trainer.dataset.bookingTrainer;
     root.querySelectorAll("[data-booking-trainer]").forEach((b) => b.setAttribute("aria-selected", String(b === trainer)));
     renderBookings();
+    return;
+  }
+  const review = event.target.closest("[data-review]");
+  if (review) {
+    const approve = review.dataset.review === "approve";
+    const card = root.querySelector(`[data-card-for="${review.dataset.id}"]`)?.value || null;
+    const app = data.applications.find((a) => a.id === review.dataset.id);
+    const what = approve ? (card ? `link ${app.name} to ${LevelUp.trainerById(card)?.name}'s trainer card` : `create a new trainer card for ${app.name}`) : `reject ${app.name}'s application`;
+    if (!confirm(`Are you sure you want to ${what}? They get an email.`)) return;
+    review.disabled = true;
+    LevelUp.reviewApplication(review.dataset.id, approve, card).catch((err) => { review.disabled = false; alert(err.message); });
     return;
   }
   const respond = event.target.closest("[data-admin-respond]");

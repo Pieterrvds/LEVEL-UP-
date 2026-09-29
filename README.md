@@ -48,8 +48,10 @@ A trainer without any "available" events falls back to the hours in `TRAINERS` i
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`
 table in Supabase. Sessions are 1 hour, need at least 12 hours notice and can be booked up to 4 weeks ahead.
 Clients earn 75 XP per booking and 25 XP for the first stats check-in each week; trainers earn 100 XP per session and 50 XP per unique client.
-Link a trainer to their account by filling in `email` in the `trainers` table (Pieter is linked by default): their coaching
-XP then goes to that account, so the level on the team card and in the profile is the same.
+Trainers sign up as "Personal trainer" (or apply later from their profile). The admin gets an email and a pop-up,
+and approves the application in the admin dashboard: either linked to an existing trainer card (Filip, Maxim) or as a
+new trainer card, which then appears in the team, the schedule filter and the booking board automatically. Coaching
+XP goes to the trainer's own account, so the level on the team card and in the profile is the same.
 
 ## Booking flow (anti-cheat)
 1. A player sends a booking request: status **pending**, the hour is reserved, no XP yet.
