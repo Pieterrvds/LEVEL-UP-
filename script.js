@@ -80,6 +80,20 @@ classToggle.addEventListener("click", () => {
   if (!open) document.getElementById("programs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+// ===== Phones: XP table and map open on request (always open on bigger screens) =====
+function foldToggle(buttonId, targetId, openText, closedText) {
+  const button = document.getElementById(buttonId);
+  const target = document.getElementById(targetId);
+  if (!button || !target) return;
+  button.addEventListener("click", () => {
+    const open = target.classList.toggle("open");
+    button.setAttribute("aria-expanded", String(open));
+    button.textContent = open ? openText : closedText;
+  });
+}
+foldToggle("xpToggle", "levels", "Hide the XP table ▲", "How does XP work? ▼");
+foldToggle("mapToggle", "hqMap", "📍 Hide map", "📍 Show map");
+
 // ===== Level 01: one call to action, depending on who is visiting =====
 const aboutCta = document.getElementById("aboutCta");
 

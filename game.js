@@ -1698,7 +1698,69 @@ const LevelUp = (() => {
     const year = document.getElementById("year");
     if (year) year.textContent = new Date().getFullYear();
 
+    initTabBar(menuToggle);
     renderHud();
+  }
+
+  // ---------- Phones: app-style bar at the bottom (Home · Book · Contact · Profile · Menu) ----------
+  const TAB_ICONS = {
+    home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    book: '<rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/>',
+    contact: '<path d="M4 5h16v11H9l-5 4z"/>',
+    profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.5-6 8-6s7 1.5 8 6"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
+  };
+  const tabIcon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square">${TAB_ICONS[name]}</svg>`;
+
+  function initTabBar(menuToggle) {
+    const page = location.pathname.split("/").pop() || "index.html";
+    const home = page === "index.html" || page === "";
+    const link = (hash) => home ? `#${hash}` : `index.html#${hash}`;
+    const bar = document.createElement("nav");
+    bar.className = "tabbar";
+    bar.setAttribute("aria-label", "Quick menu");
+    bar.innerHTML = `
+      <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
+      <a href="${link("schedule")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
+      <a href="${link("contact")}" data-tab="contact">${tabIcon("contact")}<span>Contact</span></a>
+      <a href="profile.html" data-tab="profile">${tabIcon("profile")}<span data-tab-label>Profile</span></a>
+      <button type="button" data-tab="menu" aria-controls="nav" aria-expanded="false">${tabIcon("menu")}<span>Menu</span></button>`;
+    document.body.appendChild(bar);
+    document.body.classList.add("has-tabbar");
+
+    const setActive = (tab) => bar.querySelectorAll("[data-tab]").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
+    if (page === "profile.html") setActive("profile");
+    else if (home) {
+      // Highlight the tab of the section on screen
+      const sections = { home: "home", about: "home", programs: "home", team: "home", schedule: "book", contact: "contact" };
+      const onScreen = () => {
+        let current = "home";
+        Object.keys(sections).forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && el.getBoundingClientRect().top < window.innerHeight * 0.45) current = sections[id];
+        });
+        setActive(current);
+      };
+      window.addEventListener("scroll", onScreen, { passive: true });
+      onScreen();
+    }
+
+    bar.addEventListener("click", (event) => {
+      const tab = event.target.closest("[data-tab]");
+      if (!tab) return;
+      if (tab.dataset.tab === "menu") {
+        event.stopPropagation();
+        menuToggle?.click(); // same menu as the ☰ button
+        bar.querySelector('[data-tab="menu"]').setAttribute("aria-expanded", String(document.getElementById("nav")?.classList.contains("open")));
+      } else if (tab.dataset.tab === "profile" && !player) {
+        event.preventDefault();
+        openAuth("login");
+      }
+    });
+    document.addEventListener("levelup:change", () => {
+      const label = bar.querySelector("[data-tab-label]");
+      if (label) label.textContent = player ? "Profile" : "Log in";
+    });
   }
 
   initChrome();

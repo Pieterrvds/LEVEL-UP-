@@ -28,6 +28,8 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 html {
+  overflow-x: hidden;
+  overflow-x: clip; /* iOS Safari: nothing outside the screen can make the page wider */
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--hud-h) + 12px);
 }
@@ -40,6 +42,7 @@ body {
   color: var(--text);
   background: var(--bg);
   overflow-x: hidden;
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1463,10 +1466,11 @@ textarea { resize: vertical; min-height: 130px; }
     background: var(--bg);
     border-left: 2px solid var(--line);
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    visibility: hidden; /* closed menu can't be swiped into view */
+    transition: transform 0.3s ease, visibility 0s linear 0.3s;
     overflow-y: auto;
   }
-  .nav.open { transform: none; }
+  .nav.open { transform: none; visibility: visible; transition: transform 0.3s ease; }
   .nav a { font-size: 0.7rem; padding: 18px 12px; border: 0; border-bottom: 2px solid var(--line); }
   .nav a.active { border-color: var(--line); }
   .nav .nav-shop { margin: 20px 0 0; justify-content: center; border: 2px solid #000; }
@@ -1658,3 +1662,116 @@ textarea { resize: vertical; min-height: 130px; }
 .hours-date-actions { display: flex; gap: 8px; }
 .hours-editor .hours-form { background: #000; }
 .hours-preview mark { padding: 0 4px; color: #000; background: var(--gold); }
+
+/* ==========================================================================
+   Phones: less on the screen, the essentials first
+   ========================================================================== */
+.xp-toggle, .map-toggle, .class-swipe-hint, .board-week-empty { display: none; }
+
+@media (max-width: 640px) {
+  /* Hero: one clear action, two upcoming sessions */
+  .hero { padding-bottom: 32px; }
+  .hero-actions .btn-ghost, .hero-stats { display: none; }
+  .hero .lead { font-size: 1.05rem; }
+  .quest-list > li:nth-child(n + 3) { display: none; }
+
+  /* Level 01: one paragraph, the steps as a swipe row, the XP table on request */
+  .about-more { display: none; }
+  .quest-steps {
+    display: flex; gap: 12px; margin: 0 -20px; padding: 4px 20px 14px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none;
+  }
+  .quest-steps::-webkit-scrollbar { display: none; }
+  .quest-steps > li { flex: 0 0 72%; scroll-snap-align: start; }
+  .xp-toggle { display: flex; justify-content: center; margin-top: 20px; }
+  .xp-board { display: none; }
+  .xp-board.open { display: block; margin-top: 16px; }
+
+  /* Classes: a swipe row with every class instead of a long list */
+  .class-grid, .class-grid.collapsed {
+    display: flex; gap: 14px; margin: 0 -20px; padding: 4px 20px 18px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none;
+  }
+  .class-grid::-webkit-scrollbar { display: none; }
+  .class-grid > .class-card, .class-grid.collapsed > .class-card:nth-child(n + 4) { display: flex; flex: 0 0 84%; scroll-snap-align: start; }
+  .class-swipe-hint { display: block; }
+  .see-more { display: none; }
+  #programs .section-intro { font-size: 0.95rem; }
+
+  /* Schedule: compact week, only days with open hours, times as small buttons */
+  .price-list { gap: 8px; margin-bottom: 1rem; }
+  .price-card { padding: 10px 12px; gap: 2px; }
+  .price-card strong { font-size: 1.2rem; }
+  .price-card span:last-child { font-size: 0.75rem; }
+  .board-col { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 12px; }
+  .board-col.board-hours, .board-col.closed, .board-col.all-past { display: none; }
+  .board-col .board-head { flex: 0 0 calc(100% + 20px); margin: 0 -10px; padding: 10px 14px; }
+  .board-cell, .board-cell:not(.empty) { display: contents; }
+  .board-col .board-cell:last-of-type { padding: 0; }
+  .slot, .slot:disabled { flex: 0 0 calc((100% - 12px) / 3); min-width: 0; flex-direction: column; align-items: flex-start; gap: 0; padding: 8px 10px; }
+  .slot.past { display: none; }
+  .slot .slot-time { font-size: 0.95rem; font-weight: 700; }
+  .slot .slot-name { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .slot .slot-state { display: none; }
+  .slot.mine .slot-state, .slot.requested .slot-state, .slot.taken .slot-state { display: block; margin: 2px 0 0; font-size: 0.6rem; }
+  .slot.group { flex-basis: 100%; }
+  .slot.group .slot-state { display: block; margin: 2px 0 0; }
+  .board-week-empty { display: block; margin: 0; padding: 28px 16px; text-align: center; color: var(--muted); }
+  .board-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.75rem; }
+  .board-legend li:last-child { display: none; }
+
+  /* Contact: call / WhatsApp first, socials as a row of icons, the map on request */
+  .contact-intro { font-size: 0.98rem; }
+  .hq-card { display: flex; flex-direction: column; }
+  .hq-card .hq-actions { order: -1; }
+  .contact-sub { display: none; }
+  .hq-note { display: none; }
+  .hq-list > div { padding: 10px 0; }
+  .contact-links { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .contact-links a { flex-direction: column; justify-content: center; gap: 6px; padding: 10px 6px; text-align: center; }
+  .contact-links small { display: none; }
+  .contact-links strong { font-size: 0.8rem; }
+  .map-toggle { display: flex; justify-content: center; }
+  .hq-map { display: none; }
+  .hq-map.open { display: block; }
+}
+
+/* Smoother on phones: no blur behind the header, no looping animations */
+@media (max-width: 760px) {
+  .hud::before { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(5, 8, 7, 0.97); }
+  .tag.live, .hs-head h3, .cursor, .quest-loading, .board-message, .whatsapp-float, .swipe-hint { animation: none; }
+  .reveal { transition-duration: 0.35s; }
+}
+
+/* ---------- Phones: app-style bar at the bottom ---------- */
+.tabbar { display: none; }
+@media (max-width: 760px) {
+  :root { --tabbar-h: 62px; }
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(5, 8, 7, 0.98);
+    border-top: 2px solid var(--line);
+  }
+  .tabbar > a, .tabbar > button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    padding: 0; font: inherit; font-family: var(--pixel); font-size: 0.42rem; text-transform: uppercase; letter-spacing: 0.02em;
+    color: var(--muted); text-decoration: none; background: none; border: 0; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabbar svg { width: 22px; height: 22px; }
+  .tabbar .active { color: var(--green-bright); }
+  .tabbar .active svg { filter: drop-shadow(0 0 6px rgba(126, 224, 106, 0.45)); }
+  .tabbar .tab-book { color: #000; background: var(--green-bright); margin: 8px 4px; border: 2px solid #000; box-shadow: 3px 3px 0 #000; }
+  .tabbar .tab-book.active { color: #000; }
+  .tabbar .tab-book svg { filter: none; }
+
+  body.has-tabbar { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
+  body.has-tabbar .menu-toggle { display: none; }
+  body.has-tabbar .nav { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
+  body.has-tabbar .whatsapp-float { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); }
+  body.has-tabbar .toast { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
+  body.has-tabbar .footer-inner { padding-bottom: 32px; }
+}

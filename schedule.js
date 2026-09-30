@@ -96,12 +96,15 @@ function renderBoard() {
       ${hours.map((h) => `<div class="board-hour">${pad(h)}:00</div>`).join("")}
     </div>`;
 
+  let anyOpen = false; // phones hide days without anything still bookable
   const dayColumns = days.map((day) => {
     let itemCount = 0;
+    let openCount = 0;
     const groups = activeTrainer === "all" ? LevelUp.groupSessions(day.key) : [];
     const cells = hours.map((hour) => {
       const group = groups.filter((g) => g.start.getHours() === hour).map((g) => {
         itemCount++;
+        openCount++;
         return `
           <div class="slot group" title="${esc(g.title)}">
             <span class="slot-time">${timeText(g.start)}</span>
@@ -115,6 +118,7 @@ function renderBoard() {
         .map((t) => {
           itemCount++;
           const { state } = slotState(t, day.key, hour, now);
+          if (state !== "past") openCount++;
           const label = { free: `Book ${t.short}`, requested: "Requested…", mine: "Confirmed ✓", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
           return `
             <button type="button" class="slot ${state === "requested" ? "mine requested" : state}" style="--c:${t.color}"
@@ -131,8 +135,9 @@ function renderBoard() {
       return `<div class="board-cell ${content ? "" : "empty"}">${content}</div>`;
     }).join("");
 
+    if (openCount) anyOpen = true;
     return `
-      <div class="board-col ${day.key === todayKey ? "today" : ""} ${itemCount ? "" : "closed"}">
+      <div class="board-col ${day.key === todayKey ? "today" : ""} ${itemCount ? "" : "closed"} ${itemCount && !openCount ? "all-past" : ""}">
         <div class="board-head">
           <span class="board-day">${day.name}</span>
           <span class="board-date">${day.date.getDate()}</span>
@@ -142,7 +147,8 @@ function renderBoard() {
       </div>`;
   }).join("");
 
-  weekBoard.innerHTML = hourColumn + dayColumns;
+  weekBoard.innerHTML = hourColumn + dayColumns
+    + (anyOpen ? "" : `<p class="board-week-empty">No open hours left this week.${weekOffset < LevelUp.BOOKING_WEEKS_AHEAD - 1 ? " Tap ▶ for next week." : ""}</p>`);
   weekBoard.classList.toggle("signed-in", Boolean(player));
 }
 

@@ -10,7 +10,7 @@ const WORKOUT_TYPES = [
 
 let workoutMessage = "";
 let lastWorkout = { type: "CrossFit", minutes: 60 };
-const state = { hoursOpen: false }; // "My opening hours" stays open between renders
+const state = { hoursOpen: false, achOpen: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -476,8 +476,8 @@ function renderAchievements(player) {
         <h2>Achievements</h2>
         <span class="muted">${Object.keys(player.achievements).length} of ${ACHIEVEMENTS.length} unlocked</span>
       </div>
-      <div class="bonus-grid">
-        ${ACHIEVEMENTS.map((a) => {
+      <div class="bonus-grid ${state.achOpen ? "" : "collapsed"}" id="achGrid">
+        ${[...ACHIEVEMENTS].sort((a, b) => Boolean(player.achievements[b.id]) - Boolean(player.achievements[a.id])).map((a) => {
           const unlocked = player.achievements[a.id];
           return `
             <div class="bonus-card ${unlocked ? "unlocked" : ""}">
@@ -490,6 +490,7 @@ function renderAchievements(player) {
             </div>`;
         }).join("")}
       </div>
+      <button type="button" class="btn btn-ghost btn-block ach-more" id="achMore" aria-controls="achGrid" aria-expanded="${Boolean(state.achOpen)}">${state.achOpen ? "Show fewer ▲" : `See all ${ACHIEVEMENTS.length} achievements ▼`}</button>
     </section>`;
 }
 
@@ -631,6 +632,13 @@ function bindEvents(player) {
     });
     document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
   }
+
+  document.getElementById("achMore")?.addEventListener("click", (event) => {
+    state.achOpen = !state.achOpen;
+    document.getElementById("achGrid").classList.toggle("collapsed", !state.achOpen);
+    event.target.setAttribute("aria-expanded", String(state.achOpen));
+    event.target.textContent = state.achOpen ? "Show fewer ▲" : `See all ${ACHIEVEMENTS.length} achievements ▼`;
+  });
 
   root.querySelectorAll("[data-coach]").forEach((button) => {
     button.addEventListener("click", async () => {

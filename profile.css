@@ -231,3 +231,10 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .my-hours[open] > summary .panel-sub::before { content: "▼ "; }
 .my-hours[open] > summary { margin-bottom: 8px; }
 .hours-editor .small { font-size: 0.8rem; }
+
+/* Phones: first 4 achievements (unlocked first), the rest on request */
+.ach-more { display: none; }
+@media (max-width: 640px) {
+  .bonus-grid.collapsed > :nth-child(n + 5) { display: none; }
+  .ach-more { display: flex; justify-content: center; margin-top: 14px; }
+}

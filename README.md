@@ -9,6 +9,14 @@ Personal training platform with a retro game theme: players and personal trainer
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
 
+## Phones
+- A bar at the bottom (Home · Book · Contact · Profile · Menu) replaces the ☰ button; Menu opens the same menu.
+- Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
+  the map behind a button, the schedule as a compact week (only days with open hours, times as small buttons).
+- In the profile the first 4 achievements show (unlocked first), the rest behind "See all".
+- The closed menu and shopping bag are hidden, so nothing can make the page wider than the screen.
+Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 760px)` blocks at the end of `style.css`.
+
 ## Code
 - `game.js`: shared core on every page: Supabase login, player data, XP and levels, bookings, the Google Calendar schedule, the header player chip, login dialog and toasts. The shop catalog (`ITEMS`) and trainers (`TRAINERS`) live here too.
 - `supabase/schema.sql`: database tables, security rules and server functions
