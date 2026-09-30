@@ -97,7 +97,7 @@ function renderSessions() {
       : `Free cancellation until ${fmtDeadline(b.freeCancelUntil || LevelUp.slotStart(b.date, b.hour) - LevelUp.FREE_CANCEL_HOURS * 3600e3)}`;
     else if (CHARGED.includes(b.status)) note = "Charged in full";
     else if (b.status === "expired") note = "Not confirmed in time · no costs";
-    const price = ["declined", "expired"].includes(b.status) ? "" : ` · ${LevelUp.euro(b.price ?? LevelUp.SESSION_PRICE)}`;
+    const price = ["declined", "expired"].includes(b.status) ? "" : ` · ${esc(LevelUp.priceLabel(b))}`;
     return `
       <li class="session-row" style="--c:${trainer.color}">
         <img src="${trainer.img}" alt="">
@@ -115,7 +115,7 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
-      <p class="muted small-text">A 1-hour session costs <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong>. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.
+      <p class="muted small-text">A 1-hour 1:1 session costs <strong>${LevelUp.euro(LevelUp.getPricing().price)}</strong> (your first one ${LevelUp.euro(LevelUp.getPricing().introPrice)}), a duo ${LevelUp.euro(LevelUp.getPricing().duoPrice)}. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.
         Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
@@ -159,6 +159,40 @@ function renderApplication(player) {
       <summary><h2>Are you a personal trainer?</h2><span class="muted">Apply to coach on LEVEL-UP ▾</span></summary>
       ${form("After approval you get a trainer card in the team, a Coach panel and coaching XP.")}
     </details>`;
+}
+
+// Session packs: credits for 1:1 sessions, active once LEVEL-UP has the payment
+function renderPacks(player) {
+  const euro = LevelUp.euro;
+  const credits = LevelUp.packCredits();
+  const open = LevelUp.openPackRequest();
+  const history = player.packs.filter((pk) => pk.status !== "cancelled");
+  const options = LevelUp.getPricing().packs;
+  const single = LevelUp.getPricing().price;
+  return `
+    <section class="panel panel-wide" id="packs">
+      <div class="panel-head">
+        <h2>Session packs</h2>
+        <span class="xp-chip">${credits} credit${credits === 1 ? "" : "s"} left</span>
+      </div>
+      <p class="muted small-text">Buy a pack, save per session. Every 1:1 booking uses one credit automatically; a declined request gives it back. Late cancellations and no-shows use the credit.</p>
+      ${open ? `
+        <div class="pack-open">
+          <p><strong>${open.size}-session pack · ${euro(open.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
+          <p class="muted small-text">LEVEL-UP sends you the payment details. Your credits become active once the payment is in.</p>
+          <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${open.id}">Cancel request</button>
+        </div>` : `
+        <div class="pack-options">${options.map((o) => `
+          <button type="button" class="pack-option" data-pack-size="${o.size}">
+            <span class="price-tag">${o.size} sessions</span>
+            <strong>${euro(o.price)}</strong>
+            <span>${euro(o.price / o.size)} per session · save ${euro(single * o.size - o.price)}</span>
+          </button>`).join("")}
+        </div>`}
+      <p class="form-error" role="alert" id="packError"></p>
+      ${history.some((pk) => pk.status === "paid") ? `<h3 class="panel-sub">My packs</h3><ul class="detail-list">${history.filter((pk) => pk.status === "paid").map((pk) => `
+        <li><span>${pk.size}-session pack · ${euro(pk.price)}</span><span class="muted small">${pk.used}/${pk.size} used · ${pk.remaining} left</span></li>`).join("")}</ul>` : ""}
+    </section>`;
 }
 
 // What the trainer earned: rewarded sessions count, confirmed ones are expected
@@ -519,6 +553,7 @@ function render() {
       ${player.application?.status === "pending" ? renderApplication(player) : ""}
       ${renderCoachPanel()}
       ${renderSessions()}
+      ${renderPacks(player)}
       ${renderWorkouts(player)}
       ${renderInventory(player)}
       ${renderBodyStats(player)}
@@ -604,6 +639,28 @@ function bindEvents(player) {
       submit.disabled = false;
       submit.textContent = "Try again";
     }
+  });
+
+  root.querySelectorAll("[data-pack-size]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const size = Number(button.dataset.packSize);
+      const o = LevelUp.getPricing().packs.find((x) => x.size === size);
+      if (!confirm(`Request a ${size}-session pack for ${LevelUp.euro(o.price)}? LEVEL-UP sends you the payment details; your credits become active once you've paid.`)) return;
+      button.disabled = true;
+      try {
+        await LevelUp.requestPack(size);
+        LevelUp.toast({ title: "Pack requested", text: "Payment details follow by email", icon: "✉", tone: "green" });
+      } catch (err) {
+        button.disabled = false;
+        document.getElementById("packError").textContent = err.message;
+      }
+    });
+  });
+  root.querySelector("[data-pack-cancel]")?.addEventListener("click", async (event) => {
+    if (!confirm("Cancel this pack request?")) return;
+    event.target.disabled = true;
+    try { await LevelUp.cancelPackRequest(event.target.dataset.packCancel); }
+    catch (err) { event.target.disabled = false; document.getElementById("packError").textContent = err.message; }
   });
 
   root.querySelectorAll("[data-cancel-booking]").forEach((button) => {

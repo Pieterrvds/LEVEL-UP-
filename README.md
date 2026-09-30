@@ -75,15 +75,25 @@ The numbers are rows in `app_config`: `free_cancel_hours`, `reward_window_days`,
 (the texts on the site say 24 hours / 7 days, so update `FREE_CANCEL_HOURS` and `REWARD_WINDOW_DAYS` in `game.js` too).
 
 ## Prices and payouts
-A 1:1 session costs **€60 per hour**. The client pays LEVEL-UP (the venue); the trainer gets **€40** per session and the
-venue keeps €20. Sessions with Pieter (the owner) keep the full €60. The amounts are rows in `app_config`
-(`session_price`, `trainer_fee`, `owner_trainer_id`) and are saved on every booking, so a later price change never
-alters past sessions.
+| What | Client pays | Trainer gets | Venue keeps |
+|---|---|---|---|
+| 1:1 session | €60 (or the trainer's own price) | €40 (or the trainer's own fee) | the rest |
+| First session (a player's very first booking) | €30 | full fee (€40) | €30 − fee (you cover the discount) |
+| Duo (2 people, 1 trainer, 1 hour) | €80 in total | €50 | €30 |
+| Pack credit (5 for €280, 10 for €540) | €56 / €54 per session, paid up front | full fee (€40) | the rest |
+Sessions with Pieter (the owner) keep the full price. Price, fee, how the price was set (standard, intro, pack or duo)
+and the pack are saved on every booking, so later price changes never alter past sessions.
+- **Packs:** a player requests a pack in their profile (you get an email), you send payment details and press
+  **Mark paid** in the admin dashboard; the credits become active and the player gets an email. Every 1:1 booking
+  uses a credit automatically; a declined or expired request or a free cancellation gives it back.
+- **Price per trainer:** admin dashboard → Finances → Prices per trainer. Empty = the default.
+- The numbers are rows in `app_config`: `session_price`, `trainer_fee`, `intro_price`, `duo_price`,
+  `duo_trainer_fee`, `packs` (JSON list of `{size, price}`) and `owner_trainer_id`. The site reads them live.
 - A session counts as earned once it is rewarded (completed), marked as no-show, or cancelled late by the client.
 - Trainers see their earnings in their profile (Coach panel): earned, still to receive, paid out and expected.
-- The admin dashboard has a **Finances** panel: session revenue, your share, what you owe each trainer, and a
-  **Mark paid** button that records a payout after you paid the trainer.
-- Online payment is not built yet; clients are told payment details follow from LEVEL-UP.
+- The admin dashboard has a **Finances** panel (revenue, your share, owed per trainer with **Mark paid**,
+  packs sold) and a **Session packs** panel for pack requests.
+- Online payment is not built yet; players are told payment details follow from LEVEL-UP.
 
 ## High scores
 Under the team cards: the top 10 players by XP (player name and level only, never email). Trainers are left out

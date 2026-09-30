@@ -201,3 +201,15 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .log-list li .log-xp { grid-row: 1 / span 2; grid-column: 2; }
   .rank-ladder li { grid-template-columns: 96px 1fr auto; }
 }
+
+/* Session packs */
+.pack-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
+.pack-option { display: grid; gap: 4px; justify-items: start; padding: 14px 16px; text-align: left; color: var(--text); background: #000; border: 2px solid var(--line); cursor: pointer; font: inherit; transition: border-color 0.15s, transform 0.15s; }
+.pack-option:hover { border-color: var(--green-bright); transform: translateY(-2px); }
+.pack-option .price-tag { font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.pack-option strong { font-size: 1.4rem; color: var(--gold); }
+.pack-option span:last-child { font-size: 0.85rem; color: var(--muted); }
+.pack-open { display: grid; gap: 6px; justify-items: start; margin: 12px 0; padding: 14px; background: #000; border-left: 4px solid var(--gold); }
+.pack-open p { margin: 0; }
+#packs .detail-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+#packs .detail-list li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: #000; border-left: 4px solid var(--green-dark); }

@@ -1588,3 +1588,26 @@ textarea { resize: vertical; min-height: 130px; }
   .reveal { opacity: 1; transform: none; }
   .bar i { width: var(--v); }
 }
+
+/* Booking: 1:1 or duo */
+.kind-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; padding: 0; border: 0; }
+.kind-picker legend { margin-bottom: 8px; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.kind-option { display: block; cursor: pointer; }
+.kind-option input { position: absolute; opacity: 0; pointer-events: none; }
+.kind-option > span { font-family: var(--sans); font-size: 0.95rem; text-transform: none; letter-spacing: normal; color: var(--text); display: grid; gap: 4px; height: 100%; padding: 12px; background: #000; border: 2px solid var(--line); transition: border-color 0.15s; }
+.kind-option input:checked + span { border-color: var(--green-bright); box-shadow: 3px 3px 0 var(--green-dark); }
+.kind-option input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+.kind-option strong { font-family: var(--pixel); font-size: 0.6rem; }
+.kind-price { color: var(--gold); font-weight: 700; font-size: 1.1rem; }
+.kind-price small { display: block; color: var(--muted); font-weight: 400; font-size: 0.78rem; }
+.kind-tip { margin: -4px 0 0; font-size: 0.85rem; color: var(--muted); }
+.kind-tip a { color: var(--green-bright); }
+
+/* Price list on the schedule */
+.price-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 1.5rem; padding: 0; list-style: none; }
+.price-card { display: grid; gap: 4px; align-content: start; padding: 14px 16px; background: var(--panel); border: 2px solid var(--line); }
+.price-card.featured { border-color: var(--gold); }
+.price-card .price-tag { font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.price-card strong { font-size: 1.5rem; color: var(--text); }
+.price-card span:last-child { font-size: 0.85rem; color: var(--muted); }
+@media (max-width: 760px) { .price-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

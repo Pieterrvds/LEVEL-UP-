@@ -36,7 +36,7 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const { players, bookings, applications, unlinkedTrainers, pricing } = await LevelUp.adminData();
+  const { players, bookings, applications, unlinkedTrainers, pricing, packs } = await LevelUp.adminData();
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -52,6 +52,7 @@ async function loadData() {
     applications,
     unlinkedTrainers,
     pricing,
+    packs,
     rawBookings: bookings,
     players: rows,
     members: rows.filter((p) => !p.admin),
@@ -116,6 +117,8 @@ async function render() {
 
     <section class="panel admin-panel finances" id="finances"></section>
 
+    <section class="panel admin-panel" id="packsPanel"></section>
+
     <section class="chart-grid">
       ${chartCard("weekly", "Sessions per week", "Last 4 weeks and the next 4, by trainer", true)}
       ${chartCard("trainers", "Sessions by trainer", "All-time sessions, including sessions from before the online schedule")}
@@ -173,6 +176,7 @@ async function render() {
   }
   renderKpis();
   renderFinances();
+  renderPacks();
   renderCharts();
   renderTrainerCards();
   renderBookings();
@@ -273,6 +277,9 @@ function renderFinances() {
   const trainerShare = rows.filter((r) => !r.isOwner).reduce((s, r) => s + r.earned, 0);
   const owed = rows.reduce((s, r) => s + r.owed, 0);
   const pipeline = rows.reduce((s, r) => s + r.pipeline, 0);
+  const paidPacks = data.packs.filter((pk) => pk.status === "paid");
+  const packSales = paidPacks.reduce((s, pk) => s + pk.price, 0);
+  const unusedCredits = paidPacks.reduce((n, pk) => n + pk.remaining, 0);
   const tile = (label, value, note, cls = "") => `
     <div class="kpi ${cls}"><span class="kpi-label">${label}</span><span class="kpi-value">${value}</span><span class="kpi-note">${note}</span></div>`;
 
@@ -286,6 +293,7 @@ function renderFinances() {
       ${tile("Your share", money(revenue - trainerShare), "Venue share + your own sessions", "good")}
       ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
       ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
+      ${tile("Packs sold", money(packSales), `${plural(paidPacks.length, "pack")} · ${plural(unusedCredits, "credit")} not used yet`)}
     </div>
     <div class="table-wrap">
       <table class="data-table finance-table">
@@ -310,7 +318,50 @@ function renderFinances() {
       const open = data.rawBookings.filter(toSettle);
       return open.length ? `<p class="settle-note">⚠ ${plural(open.length, "confirmed session")} still to settle (reward or no-show). Trainers have ${LevelUp.REWARD_WINDOW_DAYS} days; you can settle any time under Bookings → past.</p>` : "";
     })()}
-    <p class="muted small">A session counts once it is rewarded, marked as no-show or cancelled late by the client (those two are charged in full). "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
+    <details class="price-editor">
+      <summary>Prices per trainer</summary>
+      <p class="muted small">Leave a field empty to use the default (${money(pricing.price)} per session, trainer gets ${money(pricing.fee)}). First session ${money(pricing.introPrice)}, duo ${money(pricing.duoPrice)} (trainer ${money(pricing.duoFee)}) and packs are the same for every trainer. New prices only apply to new bookings.</p>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Trainer</th><th>Price per session</th><th>Trainer gets</th><th></th></tr></thead>
+        <tbody>${TRAINERS.map((t) => {
+          const own = pricing.trainers[t.id] || {};
+          const isOwner = t.id === pricing.ownerTrainerId;
+          return `<tr data-price-row="${esc(t.id)}">
+            <td class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.name)}</td>
+            <td><input type="number" min="0" max="500" step="1" class="price-input" name="price" value="${own.price ?? ""}" placeholder="${pricing.price}" aria-label="Price for ${esc(t.short)}"></td>
+            <td>${isOwner ? `<span class="muted">you keep it all</span>` : `<input type="number" min="0" max="500" step="1" class="price-input" name="fee" value="${own.fee ?? ""}" placeholder="${pricing.fee}" aria-label="Fee for ${esc(t.short)}">`}</td>
+            <td><button type="button" class="btn btn-small btn-ghost" data-save-price="${esc(t.id)}">Save</button></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+    </details>
+    <p class="muted small">A session counts once it is rewarded, marked as no-show or cancelled late by the client (those two are charged in full). First sessions (${money(pricing.introPrice)}) still pay the trainer their full fee; the difference comes out of your share. Pack sessions count at their pack price per session. "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
+}
+
+// ---------- Session packs ----------
+function renderPacks() {
+  const el = document.getElementById("packsPanel");
+  const requested = data.packs.filter((pk) => pk.status === "requested");
+  const paid = data.packs.filter((pk) => pk.status === "paid");
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Session packs ${requested.length ? `<span class="count-chip">${requested.length}</span>` : ""}</h2>
+      <span class="muted">${LevelUp.getPricing().packs.map((o) => `${o.size} for ${money(o.price)}`).join(" · ")}</span>
+    </div>
+    ${requested.length ? `<ul class="application-list">${requested.map((pk) => `
+      <li class="application-item">
+        <div>
+          <p class="coach-who">${esc(pk.name)} <span class="muted small">· ${esc(pk.email)}</span></p>
+          <p><strong>${pk.size}-session pack · ${money(pk.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
+          <p class="muted small">Requested ${fmtDate(pk.createdAt)}. Send the payment details, then mark it as paid.</p>
+        </div>
+        <div class="application-actions">
+          <button type="button" class="btn btn-small btn-primary" data-pack-paid="${pk.id}">Mark paid</button>
+          <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${pk.id}">Cancel</button>
+        </div>
+      </li>`).join("")}</ul>` : `<p class="muted">No pack requests waiting. Players request packs in their profile; you get an email.</p>`}
+    ${paid.length ? `<h3 class="panel-sub">Active and used packs</h3><ul class="detail-list">${paid.map((pk) => `
+      <li><span>${esc(pk.name)} · ${pk.size}-session pack · ${money(pk.price)}</span><span class="muted small">Paid ${fmtDate(pk.paidAt)} · ${pk.used}/${pk.size} used · ${pk.remaining} left</span></li>`).join("")}</ul>` : ""}`;
 }
 
 // ---------- KPI tiles ----------
@@ -769,7 +820,7 @@ function renderBookings() {
     return;
   }
   el.innerHTML = tableView(
-    ["When", "Trainer", "Player", "Status", "Note", ""],
+    ["When", "Trainer", "Player", "Status", "Price", "Note", ""],
     list.map((b) => {
       const t = LevelUp.trainerById(b.trainerId);
       return [
@@ -777,6 +828,7 @@ function renderBookings() {
         `<span class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.short)}</span>`,
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
         `<span class="status-chip ${STATUS_CLASS[b.status] || b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
+        `<span class="nowrap">${esc(LevelUp.priceLabel(b))}</span>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
         `<span class="admin-actions">${[
           b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
@@ -925,6 +977,30 @@ root.addEventListener("click", (event) => {
     btn.disabled = true;
     const action = reward ? LevelUp.rewardSession(btn.dataset.adminReward) : LevelUp.respondBooking(btn.dataset.id, btn.dataset.adminRespond === "confirm");
     action.catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const packPaid = event.target.closest("[data-pack-paid]");
+  const packCancel = event.target.closest("[data-pack-cancel]");
+  if (packPaid || packCancel) {
+    const pk = data.packs.find((x) => x.id === (packPaid || packCancel).dataset[packPaid ? "packPaid" : "packCancel"]);
+    const btn = packPaid || packCancel;
+    if (!pk || !confirm(packPaid
+      ? `Did ${pk.name} pay ${money(pk.price)}? Their ${pk.size} credits become active and they get an email.`
+      : `Cancel ${pk.name}'s request for a ${pk.size}-session pack?`)) return;
+    btn.disabled = true;
+    (packPaid ? LevelUp.markPackPaid(pk.id) : LevelUp.cancelPackRequest(pk.id))
+      .then(() => { if (packCancel) render(); })
+      .catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const savePrice = event.target.closest("[data-save-price]");
+  if (savePrice) {
+    const row = savePrice.closest("tr");
+    const num = (name) => { const v = row.querySelector(`[name=${name}]`)?.value.trim(); return v ? Number(v) : null; };
+    savePrice.disabled = true;
+    LevelUp.setTrainerPricing(savePrice.dataset.savePrice, num("price"), num("fee"))
+      .then(() => LevelUp.toast({ title: "Price saved", text: `${LevelUp.trainerById(savePrice.dataset.savePrice).short}: applies to new bookings`, icon: "€", tone: "green" }))
+      .catch((err) => { savePrice.disabled = false; alert(err.message); });
     return;
   }
   const noShow = event.target.closest("[data-admin-noshow]");

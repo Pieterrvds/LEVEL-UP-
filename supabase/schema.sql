@@ -39,7 +39,11 @@ insert into public.app_config (key, value) values
   ('free_cancel_hours', '24'),    -- players cancel for free up to this many hours before; later = charged in full
   ('reward_window_days', '7'),    -- trainers can reward / mark a no-show up to this many days after the session
   ('confirm_hours', '48'),        -- a request nobody answers expires after this many hours...
-  ('confirm_cutoff_hours', '12')  -- ...or this many hours before the session, whichever comes first
+  ('confirm_cutoff_hours', '12'), -- ...or this many hours before the session, whichever comes first
+  ('intro_price', '30'),          -- a player's very first 1:1 session (the trainer still gets their full fee)
+  ('duo_price', '80'),            -- one trainer, two people, one hour (total)
+  ('duo_trainer_fee', '50'),      -- the trainer's share of a duo session
+  ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]') -- session packs: credits for 1:1 sessions
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -158,6 +162,26 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+-- Session packs: a player requests a pack, an admin marks it as paid, then each 1:1
+-- booking uses one credit. A declined, expired or freely cancelled booking gives it back.
+create table if not exists public.session_packs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  size integer not null check (size > 0),
+  price numeric(8, 2) not null,
+  status text not null default 'requested' check (status in ('requested', 'paid', 'cancelled')),
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
+create index if not exists session_packs_user_idx on public.session_packs (user_id);
+
+-- Per-trainer price and fee (empty = the defaults in app_config). Not public.
+create table if not exists public.trainer_pricing (
+  trainer_id text primary key references public.trainers (id) on delete cascade,
+  price numeric(8, 2),
+  fee numeric(8, 2)
+);
+
 -- Booking flow: pending → confirmed / declined (by the trainer) → completed
 -- (the trainer rewards the session on the day itself). XP is only awarded
 -- when a session is completed.
@@ -171,6 +195,13 @@ alter table public.bookings drop constraint if exists bookings_status_check;
 alter table public.bookings add constraint bookings_status_check
   check (status in ('pending', 'confirmed', 'declined', 'completed', 'late_cancel', 'no_show', 'expired'));
 alter table public.bookings add column if not exists notice_sent_at timestamptz; -- expiry email sent
+-- What kind of session and how the price was set: standard, intro (first session), pack (credit) or duo
+alter table public.bookings add column if not exists kind text not null default 'solo';
+alter table public.bookings add column if not exists partner text not null default '';
+alter table public.bookings add column if not exists price_type text not null default 'standard';
+alter table public.bookings add column if not exists pack_id uuid references public.session_packs (id) on delete set null;
+alter table public.bookings drop constraint if exists bookings_kind_check;
+alter table public.bookings add constraint bookings_kind_check check (kind in ('solo', 'duo'));
 -- A declined request frees the hour again, so uniqueness only counts active bookings
 alter table public.bookings drop constraint if exists bookings_trainer_id_day_hour_key;
 alter table public.bookings drop constraint if exists bookings_user_id_day_hour_key;
@@ -192,12 +223,29 @@ returns jsonb language sql stable security definer set search_path = public as $
     'id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp,
     'status', b.status, 'createdAt', b.created_at, 'respondedAt', b.responded_at, 'rewardedAt', b.rewarded_at,
     'price', b.price, 'trainerFee', b.trainer_fee, 'payoutAt', b.payout_at,
+    'kind', b.kind, 'partner', b.partner, 'priceType', b.price_type, 'packId', b.pack_id,
     'freeCancelUntil', ((b.day + make_interval(hours => b.hour)) at time zone 'Europe/Brussels')
                        - make_interval(hours => public._config('free_cancel_hours')::int),
     'name', p.name, 'email', p.email,
     'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id)
   )
   from public.profiles p where p.id = b.user_id;
+$$;
+
+-- Credits used by a pack: bookings that kept their credit (a declined or expired one gives it back;
+-- a free cancellation deletes the booking)
+create or replace function public._pack_used(p_pack uuid)
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.bookings where pack_id = p_pack and status not in ('declined', 'expired');
+$$;
+
+create or replace function public._pack_json(sp public.session_packs)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', sp.id, 'size', sp.size, 'price', sp.price, 'status', sp.status,
+    'createdAt', sp.created_at, 'paidAt', sp.paid_at,
+    'used', public._pack_used(sp.id), 'remaining', sp.size - public._pack_used(sp.id),
+    'name', p.name, 'email', p.email)
+  from public.profiles p where p.id = sp.user_id;
 $$;
 
 -- People who signed up (or applied later) as personal trainer; an admin approves them
@@ -243,6 +291,11 @@ alter table public.bookings enable row level security;
 alter table public.orders enable row level security;
 alter table public.calendar_cache enable row level security;
 alter table public.trainer_applications enable row level security;
+alter table public.session_packs enable row level security;
+alter table public.trainer_pricing enable row level security;
+
+drop policy if exists "own packs or admin" on public.session_packs;
+create policy "own packs or admin" on public.session_packs for select using (user_id = auth.uid() or public.is_admin());
 
 drop policy if exists "own application or admin" on public.trainer_applications;
 create policy "own application or admin" on public.trainer_applications for select using (user_id = auth.uid() or public.is_admin());
@@ -437,7 +490,11 @@ returns jsonb language sql stable security definer set search_path = public as $
     'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total) order by o.created_at desc)
                            from public.orders o where o.user_id = p.id), '[]'::jsonb),
     'bookings', coalesce((select jsonb_agg(public._booking_json(k) order by k.day, k.hour)
-                          from public.bookings k where k.user_id = p.id), '[]'::jsonb)
+                          from public.bookings k where k.user_id = p.id), '[]'::jsonb),
+    'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
+                       from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
+    'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
+                                 and k.status in ('pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
   )
   from public.profiles p
   where p.id = p_user;
@@ -529,10 +586,46 @@ begin
   end if;
 end $$;
 
-create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '')
+-- Price of the next booking for a player: duo, a pack credit, the intro price for a first
+-- session, or the trainer's standard price. The owner's own sessions keep the full price.
+create or replace function public._quote(p_user uuid, p_trainer text, p_kind text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  owner boolean := p_trainer = public._config('owner_trainer_id');
+  tp public.trainer_pricing;
+  std numeric;
+  fee numeric;
+  pk public.session_packs;
+begin
+  select * into tp from public.trainer_pricing where trainer_id = p_trainer;
+  std := coalesce(tp.price, public._config('session_price')::numeric);
+  fee := coalesce(tp.fee, public._config('trainer_fee')::numeric);
+  if p_kind = 'duo' then
+    return jsonb_build_object('type', 'duo', 'price', public._config('duo_price')::numeric,
+      'fee', case when owner then public._config('duo_price')::numeric else public._config('duo_trainer_fee')::numeric end);
+  end if;
+  select * into pk from public.session_packs sp
+    where sp.user_id = p_user and sp.status = 'paid' and public._pack_used(sp.id) < sp.size
+    order by sp.paid_at, sp.created_at limit 1;
+  if found then
+    return jsonb_build_object('type', 'pack', 'packId', pk.id, 'price', round(pk.price / pk.size, 2),
+      'fee', case when owner then round(pk.price / pk.size, 2) else fee end);
+  end if;
+  if not exists (select 1 from public.bookings k where k.user_id = p_user
+                 and k.status in ('pending', 'confirmed', 'completed', 'no_show', 'late_cancel')) then
+    return jsonb_build_object('type', 'intro', 'price', public._config('intro_price')::numeric,
+      'fee', case when owner then public._config('intro_price')::numeric else fee end);
+  end if;
+  return jsonb_build_object('type', 'standard', 'price', std, 'fee', case when owner then std else fee end);
+end $$;
+
+drop function if exists public.book_session(text, date, integer, text);
+create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '',
+                                               p_kind text default 'solo', p_partner text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := auth.uid();
+  q jsonb;
   t public.trainers;
   horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
                    + 7 * public._config('booking_weeks_ahead')::int);
@@ -543,6 +636,8 @@ begin
   select * into t from public.trainers where id = p_trainer and active;
   if not found then raise exception 'This trainer is not available.'; end if;
   if p_hour < 0 or p_hour > 23 then raise exception 'Invalid time.'; end if;
+  if p_kind not in ('solo', 'duo') then raise exception 'Invalid session type.'; end if;
+  if p_kind = 'duo' and trim(coalesce(p_partner, '')) = '' then raise exception 'Enter the name of the person you train with.'; end if;
   if public._slot_start(p_day, p_hour) <= now() then raise exception 'This time slot has already passed.'; end if;
   if public._slot_start(p_day, p_hour) < now() + make_interval(hours => public._config('booking_notice_hours')::int) then
     raise exception 'Sessions must be booked at least % hours in advance.', public._config('booking_notice_hours');
@@ -559,12 +654,16 @@ begin
     raise exception 'You already have a session at this time.';
   end if;
 
+  -- one booking at a time per player, so two tabs can't spend the same pack credit
+  perform 1 from public.profiles where id = uid for update;
+  q := public._quote(uid, p_trainer, p_kind);
   begin
-    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee)
+    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee,
+                                 kind, partner, price_type, pack_id)
     values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int, 'pending',
-            public._config('session_price')::numeric,
-            case when p_trainer = public._config('owner_trainer_id') then public._config('session_price')::numeric
-                 else public._config('trainer_fee')::numeric end)
+            (q ->> 'price')::numeric, (q ->> 'fee')::numeric,
+            p_kind, case when p_kind = 'duo' then left(trim(p_partner), 40) else '' end,
+            q ->> 'type', (q ->> 'packId')::uuid)
     returning * into b;
   exception when unique_violation then
     raise exception 'Someone just booked this slot. Pick another hour.';
@@ -702,9 +801,10 @@ returns jsonb language sql stable security definer set search_path = public as $
   select jsonb_build_object(
     'trainerId', t.id,
     'isOwner', t.id = public._config('owner_trainer_id'),
-    'price', public._config('session_price')::numeric,
-    'fee', case when t.id = public._config('owner_trainer_id') then public._config('session_price')::numeric
-                else public._config('trainer_fee')::numeric end,
+    'price', coalesce((select tp.price from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('session_price')::numeric),
+    'fee', case when t.id = public._config('owner_trainer_id')
+                then coalesce((select tp.price from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('session_price')::numeric)
+                else coalesce((select tp.fee from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('trainer_fee')::numeric) end,
     'sessions', count(b.id) filter (where public._billable(b.status)),
     'charged', count(b.id) filter (where b.status in ('no_show', 'late_cancel')),
     'earned', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status)), 0),
@@ -995,6 +1095,79 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
+-- Prices, packs and per-trainer pricing
+-- ---------------------------------------------------------
+-- Public price list for the website
+create or replace function public.pricing_info()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'price', public._config('session_price')::numeric,
+    'fee', public._config('trainer_fee')::numeric,
+    'introPrice', public._config('intro_price')::numeric,
+    'duoPrice', public._config('duo_price')::numeric,
+    'packs', public._config('packs')::jsonb,
+    'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
+  );
+$$;
+
+-- A player asks for a pack; it gives credits once an admin marks it as paid
+create or replace function public.request_pack(p_size integer)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  opt jsonb;
+  sp public.session_packs;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select o into opt from jsonb_array_elements(public._config('packs')::jsonb) o where (o ->> 'size')::int = p_size;
+  if opt is null then raise exception 'This pack is not available.'; end if;
+  if exists (select 1 from public.session_packs where user_id = auth.uid() and status = 'requested') then
+    raise exception 'You already have a pack waiting for payment.';
+  end if;
+  insert into public.session_packs (user_id, size, price) values (auth.uid(), p_size, (opt ->> 'price')::numeric)
+    returning * into sp;
+  return public._pack_json(sp);
+end $$;
+
+-- The player withdraws a pack request that isn't paid yet
+create or replace function public.cancel_pack_request(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare sp public.session_packs;
+begin
+  select * into sp from public.session_packs where id = p_id;
+  if not found or (sp.user_id <> auth.uid() and not public.is_admin()) then raise exception 'Pack not found.'; end if;
+  if sp.status <> 'requested' then raise exception 'Only an unpaid pack request can be cancelled.'; end if;
+  update public.session_packs set status = 'cancelled' where id = p_id returning * into sp;
+  return public._pack_json(sp);
+end $$;
+
+-- Admin: the player paid, the credits become usable
+create or replace function public.mark_pack_paid(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare sp public.session_packs;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select * into sp from public.session_packs where id = p_id;
+  if not found then raise exception 'Pack not found.'; end if;
+  if sp.status <> 'requested' then raise exception 'This pack has already been handled.'; end if;
+  update public.session_packs set status = 'paid', paid_at = now() where id = p_id returning * into sp;
+  return public._pack_json(sp);
+end $$;
+
+-- Admin: set a trainer's own price and fee (null = the default)
+create or replace function public.set_trainer_pricing(p_trainer text, p_price numeric, p_fee numeric)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if not exists (select 1 from public.trainers where id = p_trainer) then raise exception 'Trainer not found.'; end if;
+  if p_price is not null and (p_price < 0 or p_price > 500) then raise exception 'Enter a price between 0 and 500.'; end if;
+  if p_fee is not null and (p_fee < 0 or p_fee > coalesce(p_price, public._config('session_price')::numeric)) then
+    raise exception 'The trainer fee can''t be more than the price.';
+  end if;
+  insert into public.trainer_pricing (trainer_id, price, fee) values (p_trainer, p_price, p_fee)
+  on conflict (trainer_id) do update set price = excluded.price, fee = excluded.fee;
+end $$;
+
+-- ---------------------------------------------------------
 -- Admin dashboard data
 -- ---------------------------------------------------------
 create or replace function public.admin_data()
@@ -1012,7 +1185,12 @@ begin
                          from public.trainer_applications a join public.profiles p on p.id = a.user_id), '[]'::jsonb),
     'unlinkedTrainers', coalesce((select jsonb_agg(t.id) from public.trainers t where t.email is null and t.active), '[]'::jsonb),
     'pricing', jsonb_build_object('price', public._config('session_price')::numeric, 'fee', public._config('trainer_fee')::numeric,
-                                  'ownerTrainerId', public._config('owner_trainer_id'))
+                                  'ownerTrainerId', public._config('owner_trainer_id'),
+                                  'introPrice', public._config('intro_price')::numeric,
+                                  'duoPrice', public._config('duo_price')::numeric, 'duoFee', public._config('duo_trainer_fee')::numeric,
+                                  'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, jsonb_build_object('price', tp.price, 'fee', tp.fee))
+                                                        from public.trainer_pricing tp), '{}'::jsonb)),
+    'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc) from public.session_packs sp), '[]'::jsonb)
   );
 end $$;
 
@@ -1060,7 +1238,7 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 
 revoke execute on function public.my_data() from public, anon;
 revoke execute on function public.touch_login() from public, anon;
-revoke execute on function public.book_session(text, date, integer, text) from public, anon;
+revoke execute on function public.book_session(text, date, integer, text, text, text) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.log_workout(text, integer) from public, anon;
 revoke execute on function public.save_body_stats(jsonb) from public, anon;
@@ -1070,7 +1248,19 @@ revoke execute on function public.admin_data() from public, anon;
 
 grant execute on function public.my_data() to authenticated;
 grant execute on function public.touch_login() to authenticated;
-grant execute on function public.book_session(text, date, integer, text) to authenticated;
+grant execute on function public.book_session(text, date, integer, text, text, text) to authenticated;
+revoke execute on function public._quote(uuid, text, text) from public, anon, authenticated;
+revoke execute on function public._pack_used(uuid) from public, anon, authenticated;
+revoke execute on function public._pack_json(public.session_packs) from public, anon, authenticated;
+revoke execute on function public.request_pack(integer) from public, anon;
+revoke execute on function public.cancel_pack_request(uuid) from public, anon;
+revoke execute on function public.mark_pack_paid(uuid) from public, anon;
+revoke execute on function public.set_trainer_pricing(text, numeric, numeric) from public, anon;
+grant execute on function public.request_pack(integer) to authenticated;
+grant execute on function public.cancel_pack_request(uuid) to authenticated;
+grant execute on function public.mark_pack_paid(uuid) to authenticated;
+grant execute on function public.set_trainer_pricing(text, numeric, numeric) to authenticated;
+grant execute on function public.pricing_info() to anon, authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.log_workout(text, integer) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;

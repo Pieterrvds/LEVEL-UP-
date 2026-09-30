@@ -291,6 +291,11 @@ const LevelUp = (() => {
   let slots = new Map();      // "trainer|date|hour" -> { id, status } (only filled in when it's yours)
   let coachBookings = [];     // bookings for the logged-in trainer's card
   let coachEarnings = null;   // { earned, paid, owed, expected, sessions, fee, isOwner }
+  // Public price list (the server's app_config decides; these are the fallbacks)
+  let pricing = {
+    price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
+    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}
+  };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // [{ place, name, xp, isMe }]
 
@@ -320,15 +325,12 @@ const LevelUp = (() => {
         price: Number(b.price ?? SESSION_PRICE),
         trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
       })),
-      applications: data.applications || [],
-      unlinkedTrainers: data.unlinkedTrainers || [],
-      pricing: {
-        price: Number(data.pricing?.price ?? SESSION_PRICE),
-        fee: Number(data.pricing?.fee ?? TRAINER_FEE),
-        ownerTrainerId: data.pricing?.ownerTrainerId || "pieter"
-      }
+      packs: (data.packs || []).map(normalisePack),
+      introEligible: Boolean(data.introEligible)
     };
   }
+
+  const normalisePack = (pk) => ({ ...pk, size: Number(pk.size), price: Number(pk.price), used: Number(pk.used), remaining: Number(pk.remaining) });
 
   // Tells a player when a trainer confirmed or declined since their last visit
   function announceBookingChanges() {
@@ -347,6 +349,12 @@ const LevelUp = (() => {
       });
     }
     write(key, now);
+    const packKey = `levelup.packStatus.${player.id}`;
+    const seenPacks = read(packKey, null);
+    if (seenPacks) player.packs.forEach((pk) => {
+      if (seenPacks[pk.id] === "requested" && pk.status === "paid") toast({ title: "Pack active", text: `${pk.size} session credits ready to use`, icon: "★", tone: "green" });
+    });
+    write(packKey, Object.fromEntries(player.packs.map((pk) => [pk.id, pk.status])));
   }
 
   async function refreshPlayer({ announce = false } = {}) {
@@ -398,6 +406,101 @@ const LevelUp = (() => {
   }
 
   // Trainers approved through the admin dashboard get added to the site automatically
+  async function loadPricing() {
+    try {
+      const p = await call("pricing_info");
+      if (!p) return;
+      pricing = {
+        price: Number(p.price), fee: Number(p.fee), introPrice: Number(p.introPrice), duoPrice: Number(p.duoPrice),
+        packs: (p.packs || []).map((o) => ({ size: Number(o.size), price: Number(o.price) })),
+        trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
+      };
+    } catch (err) {
+      console.error("Loading prices failed:", err);
+    }
+  }
+
+  const priceFor = (trainerId) => pricing.trainers[trainerId] ?? pricing.price;
+  const packCredits = () => (player?.packs || []).filter((pk) => pk.status === "paid").reduce((n, pk) => n + pk.remaining, 0);
+  const openPackRequest = () => (player?.packs || []).find((pk) => pk.status === "requested") || null;
+
+  // What the next booking costs this player (the server applies the same rules):
+  // duo > pack credit > first-session price > the trainer's price
+  function quote(trainerId, kind = "solo") {
+    if (kind === "duo") return { type: "duo", price: pricing.duoPrice };
+    if (player) {
+      const pk = (player.packs || []).filter((x) => x.status === "paid" && x.remaining > 0)
+        .sort((a, b) => new Date(a.paidAt) - new Date(b.paidAt))[0];
+      if (pk) return { type: "pack", price: Math.round((pk.price / pk.size) * 100) / 100, credits: packCredits() };
+      if (player.introEligible) return { type: "intro", price: pricing.introPrice, normal: priceFor(trainerId) };
+    }
+    return { type: "standard", price: priceFor(trainerId) };
+  }
+
+  // Short description of what a booking costs, for rows and emails
+  function priceLabel(b) {
+    if (b.priceType === "pack") return "pack credit";
+    if (b.priceType === "intro") return `${euro(b.price)} first session`;
+    if (b.kind === "duo") return `${euro(b.price)} duo${b.partner ? ` with ${b.partner}` : ""}`;
+    return euro(b.price ?? SESSION_PRICE);
+  }
+
+  async function requestPack(size) {
+    const pack = normalisePack(await call("request_pack", { p_size: size }));
+    await refreshPlayer();
+    notifyPack(pack, "requested");
+    emit();
+    return pack;
+  }
+
+  async function cancelPackRequest(id) {
+    await call("cancel_pack_request", { p_id: id });
+    await refreshPlayer();
+    emit();
+  }
+
+  async function markPackPaid(id) {
+    const pack = normalisePack(await call("mark_pack_paid", { p_id: id }));
+    notifyPack(pack, "paid");
+    emit();
+    return pack;
+  }
+
+  async function setTrainerPricing(trainerId, price, fee) {
+    await call("set_trainer_pricing", { p_trainer: trainerId, p_price: price, p_fee: fee });
+    await loadPricing();
+    emit();
+  }
+
+  // Pack request / activation emails (to the LEVEL-UP inbox, automatic reply to the player)
+  function notifyPack(pack, action) {
+    const texts = {
+      requested: {
+        subject: `Pack request: ${pack.size} sessions · ${euro(pack.price)} · ${pack.name}`,
+        reply: `Hi ${pack.name}, thanks for your request for a ${pack.size}-session pack (${euro(pack.price)}, ${euro(pack.price / pack.size)} per session). LEVEL-UP sends you the payment details; your credits become active as soon as the payment is in.`
+      },
+      paid: {
+        subject: `Pack active: ${pack.size} sessions · ${pack.name}`,
+        reply: `Hi ${pack.name}, your payment is in: your ${pack.size} session credits are active. Every 1:1 session you book now uses one credit automatically. Level up!`
+      }
+    }[action];
+    fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: texts.subject,
+        _template: "table",
+        _autoresponse: `${texts.reply}\n\nThe LEVEL-UP team`,
+        status: action,
+        name: pack.name,
+        email: pack.email,
+        pack: `${pack.size} sessions`,
+        price: euro(pack.price),
+        next_step: action === "requested" ? "Send the payment details, then mark the pack as paid in the admin dashboard." : "-"
+      })
+    }).catch((error) => console.error("Pack email failed:", error));
+  }
+
   async function loadTrainerList() {
     try {
       const rows = await call("trainer_list");
@@ -575,10 +678,13 @@ const LevelUp = (() => {
     return null;
   }
 
-  async function bookSession({ trainerId, date, hour, note = "" }) {
+  async function bookSession({ trainerId, date, hour, note = "", kind = "solo", partner = "" }) {
     if (!player) throw new Error("Log in to book a session.");
     if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
-    const booking = await call("book_session", { p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300) });
+    const booking = await call("book_session", {
+      p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300),
+      p_kind: kind, p_partner: String(partner).trim().slice(0, 40)
+    });
     await Promise.all([refreshPlayer(), loadSlots()]);
     notifyBooking({ ...booking, hour: Number(booking.hour) }, "requested");
     emit();
@@ -690,11 +796,11 @@ const LevelUp = (() => {
     const texts = {
       requested: {
         subject: `New booking request: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your request for a session with ${trainer.name} on ${when} has been sent. ${trainer.short} will confirm it soon; you'll see the status in your LEVEL-UP profile.`
+        reply: `Hi ${booking.name}, your request for a ${booking.kind === "duo" ? "duo " : ""}session with ${trainer.name} on ${when} has been sent (${priceLabel(booking)}). ${trainer.short} will confirm it soon; you'll see the status in your LEVEL-UP profile.`
       },
       confirmed: {
         subject: `Confirmed: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. Price: ${euro(booking.price ?? SESSION_PRICE)} for the hour; LEVEL-UP will send you the payment details. After the session you get +${booking.xp} XP.`
+        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. ${booking.priceType === "pack" ? "This session uses one of your pack credits." : `Price: ${priceLabel(booking)}; LEVEL-UP will send you the payment details.`} After the session you get +${booking.xp} XP.`
       },
       declined: {
         subject: `Declined: ${trainer.short} · ${when}`,
@@ -731,7 +837,8 @@ const LevelUp = (() => {
         name: booking.name,
         email: booking.email,
         note: booking.note || "-",
-        price: euro(booking.price ?? SESSION_PRICE),
+        price: priceLabel(booking),
+        session: booking.kind === "duo" ? `Duo with ${booking.partner}` : "1:1",
         booking_id: booking.id,
         charged: ["late_cancel", "no_show"].includes(action) ? `Yes, ${euro(booking.price ?? SESSION_PRICE)}` : "No",
         next_step: action === "requested" ? `${trainer.short}: log in on the LEVEL-UP website to confirm or decline.` : "-"
@@ -817,10 +924,17 @@ const LevelUp = (() => {
       })),
       applications: data.applications || [],
       unlinkedTrainers: data.unlinkedTrainers || [],
+      packs: (data.packs || []).map(normalisePack),
       pricing: {
         price: Number(data.pricing?.price ?? SESSION_PRICE),
         fee: Number(data.pricing?.fee ?? TRAINER_FEE),
-        ownerTrainerId: data.pricing?.ownerTrainerId || "pieter"
+        ownerTrainerId: data.pricing?.ownerTrainerId || "pieter",
+        introPrice: Number(data.pricing?.introPrice ?? pricing.introPrice),
+        duoPrice: Number(data.pricing?.duoPrice ?? pricing.duoPrice),
+        duoFee: Number(data.pricing?.duoFee ?? 50),
+        trainers: Object.fromEntries(Object.entries(data.pricing?.trainers || {}).map(([id, v]) => [id, {
+          price: v.price === null ? null : Number(v.price), fee: v.fee === null ? null : Number(v.fee)
+        }]))
       }
     };
   }
@@ -1083,7 +1197,7 @@ const LevelUp = (() => {
       try {
         const { data } = await sb.auth.getSession();
         session = data.session;
-        await loadTrainerList(); // before the calendar, so new trainers' open hours are recognised
+        await Promise.all([loadTrainerList(), loadPricing()]); // trainers before the calendar, so new trainers' open hours are recognised
         await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar(), loadLeaderboard()]);
         if (player) {
           welcomed = true;
@@ -1432,7 +1546,8 @@ const LevelUp = (() => {
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
-    SESSION_PRICE, TRAINER_FEE, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
+    SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
+    requestPack, cancelPackRequest, markPackPaid, setTrainerPricing, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };

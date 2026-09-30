@@ -234,7 +234,9 @@ function renderBookingDialog(message = "") {
       </div>
     </div>
     <p class="booking-when">${when}</p>
-    <p class="booking-price"><strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> · 1 hour, 1:1 with ${esc(trainer.short)} · payment details follow from LEVEL-UP</p>`;
+    ${booking?.mine ? "" : player
+      ? `<p class="booking-price">1 hour with ${esc(trainer.short)} · payment details follow from LEVEL-UP</p>`
+      : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong> · 1 hour, 1:1 with ${esc(trainer.short)} · your first session only <strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong></p>`}`;
 
   // Your own booking: offer to cancel
   if (booking?.mine) {
@@ -246,6 +248,7 @@ function renderBookingDialog(message = "") {
       <p class="status-line">${booking.status === "pending"
         ? `<span class="status-chip pending">Pending</span> ${esc(trainer.short)} still has to confirm this session.`
         : `<span class="status-chip confirmed">Confirmed</span> ${esc(trainer.short)} will reward your +${own?.xp ?? LevelUp.SESSION_XP} XP after the session.`}</p>
+      ${own ? `<p class="booking-price">${own.kind === "duo" ? "Duo session" : "1:1 session"} · <strong>${esc(LevelUp.priceLabel(own))}</strong></p>` : ""}
       ${own?.note ? `<p class="booking-note-view">“${esc(own.note)}”</p>` : ""}
       ${own && LevelUp.isLateCancel(own) ? `<p class="booking-warning">Starts in less than ${LevelUp.FREE_CANCEL_HOURS} hours: cancelling now is charged in full (${LevelUp.euro(own.price)}).</p>` : ""}
       <p class="form-error" role="alert">${esc(message)}</p>
@@ -274,6 +277,10 @@ function renderBookingDialog(message = "") {
     ${trainerCard}
     ${player ? `
       <form class="auth-form" id="bookingForm">
+        ${bookingOptions(trainerId)}
+        <label class="partner-field" hidden>Who do you train with?
+          <input type="text" name="partner" maxlength="40" placeholder="Name of your training buddy">
+        </label>
         <label>Note for your trainer (optional)
           <textarea name="note" rows="3" maxlength="300" placeholder="Your goal, experience level or preferred location…"></textarea>
         </label>
@@ -296,22 +303,53 @@ function renderBookingDialog(message = "") {
     submit.disabled = true;
     submit.textContent = "Booking…";
     try {
-      await LevelUp.bookSession({ ...pendingSlot, note: event.target.elements.note.value.trim() });
-      showBooked();
+      const form = event.target.elements;
+      const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value });
+      showBooked(booked);
     } catch (err) {
       renderBookingDialog(err.message);
     }
   });
 }
 
-function showBooked() {
+// 1:1 or duo, with the price this player pays (pack credit, first-session price or the normal price)
+function bookingOptions(trainerId) {
+  const solo = LevelUp.quote(trainerId, "solo");
+  const duo = LevelUp.quote(trainerId, "duo");
+  const euro = LevelUp.euro;
+  const soloText = {
+    pack: `1 pack credit <small>${solo.credits} left</small>`,
+    intro: `${euro(solo.price)} <small>first session, normally ${euro(solo.normal)}</small>`,
+    standard: euro(solo.price)
+  }[solo.type];
+  return `
+    <fieldset class="kind-picker">
+      <legend>Session</legend>
+      <label class="kind-option"><input type="radio" name="kind" value="solo" checked>
+        <span><strong>1:1</strong><span class="kind-price">${soloText}</span></span></label>
+      <label class="kind-option"><input type="radio" name="kind" value="duo">
+        <span><strong>Duo</strong><span class="kind-price">${euro(duo.price)} <small>for the two of you</small></span></span></label>
+    </fieldset>
+    ${solo.type === "standard" && LevelUp.getPricing().packs.length ? `<p class="kind-tip">Training often? <a href="profile.html#packs">Session packs</a> from ${euro(Math.min(...LevelUp.getPricing().packs.map((p) => p.price / p.size)))} per session.</p>` : ""}`;
+}
+
+bookingDialog.addEventListener("change", (event) => {
+  if (event.target.name !== "kind") return;
+  const field = bookingDialog.querySelector(".partner-field");
+  field.hidden = event.target.value !== "duo";
+  field.querySelector("input").required = event.target.value === "duo";
+});
+
+function showBooked(booked) {
   const trainer = LevelUp.trainerById(pendingSlot.trainerId);
   bookingContent.innerHTML = `
     <p class="section-kicker">Quest sent</p>
     <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
-    <p class="booking-price">Price: <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> for the hour. You only pay for confirmed sessions; LEVEL-UP sends you the payment details. Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
+    <p class="booking-price">${booked?.priceType === "pack"
+      ? "Paid with <strong>1 pack credit</strong>. A declined request gives it back."
+      : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. You only pay for confirmed sessions; LEVEL-UP sends you the payment details.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
@@ -467,3 +505,21 @@ document.addEventListener("levelup:change", () => {
 document.getElementById("noticeText").textContent = `Closed: book at least ${LevelUp.BOOKING_NOTICE_HOURS} hours ahead`;
 renderFilter();
 renderAll();
+
+// ---------- Price list (from the server's prices) ----------
+function renderPriceList() {
+  const el = document.getElementById("priceList");
+  if (!el) return;
+  const p = LevelUp.getPricing();
+  const euro = LevelUp.euro;
+  const best = [...p.packs].sort((a, b) => a.price / a.size - b.price / b.size)[0];
+  el.innerHTML = [
+    { tag: "First session", price: euro(p.introPrice), note: "Try any trainer, 1:1", featured: true },
+    { tag: "1:1 session", price: euro(p.price), note: "1 hour with your trainer" },
+    { tag: "Duo session", price: euro(p.duoPrice), note: "Train with a friend, 1 hour" },
+    best && { tag: `${best.size}-session pack`, price: euro(best.price), note: `${euro(best.price / best.size)} per session` }
+  ].filter(Boolean).map((c) => `
+    <li class="price-card${c.featured ? " featured" : ""}"><span class="price-tag">${c.tag}</span><strong>${c.price}</strong><span>${c.note}</span></li>`).join("");
+}
+renderPriceList();
+document.addEventListener("levelup:change", renderPriceList);

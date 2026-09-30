@@ -180,7 +180,7 @@
 @media (max-width: 760px) { .application-item { grid-template-columns: 1fr; } .application-actions { justify-content: flex-start; } }
 
 /* Finances */
-.finance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.finance-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .finance-kpis .kpi { background: #000; }
 .finance-kpis .kpi.good .kpi-value { color: var(--green-bright); }
 .finance-kpis .kpi.warn .kpi-value { color: var(--gold); }
@@ -193,3 +193,8 @@
   .finance-kpis .kpi-value { font-size: 1.4rem; }
 }
 .settle-note { margin: 14px 0 8px; padding: 10px 12px; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
+
+.price-editor { margin: 16px 0 8px; }
+.price-editor summary { cursor: pointer; font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; }
+.price-input { width: 90px; padding: 6px 8px; color: var(--text); background: #000; border: 2px solid var(--line); font: inherit; }
+.price-input:focus { border-color: var(--green-bright); outline: none; }
