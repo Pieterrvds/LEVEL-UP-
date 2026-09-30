@@ -93,7 +93,37 @@ and the pack are saved on every booking, so later price changes never alter past
 - Trainers see their earnings in their profile (Coach panel): earned, still to receive, paid out and expected.
 - The admin dashboard has a **Finances** panel (revenue, your share, owed per trainer with **Mark paid**,
   packs sold) and a **Session packs** panel for pack requests.
-- Online payment is not built yet; players are told payment details follow from LEVEL-UP.
+
+## Payments
+Players choose how to pay when they book (and when they buy a pack):
+- **Online (recommended, preselected):** Mollie (Bancontact, card, Payconiq…). The booking holds the hour for
+  20 minutes while they pay; the request only reaches the trainer once it's paid. If a paid session is declined,
+  expires or is cancelled for free, the money is refunded automatically through Mollie. A pack paid online is
+  active right away.
+- **At the headquarters** (Hoogstraat 40, 9308 Aalst): the request goes to the trainer straight away. The admin
+  presses **Paid at HQ** in the Bookings table once the money is in (Finances shows the total **To collect**).
+  Players can still switch to paying online from their profile. If they cancel for free after paying at the HQ,
+  the admin gives the money back and presses **Refunded**.
+- Pack credits need no payment. Late cancellations and no-shows stay charged (no refund).
+
+The website never sees the Mollie key: payments go through the Supabase Edge Function in
+`supabase/functions/payments/index.ts`, which creates the payment, receives Mollie's webhook and does refunds.
+
+### Setting up online payments (once)
+1. **Mollie:** create an account at mollie.com. Under *Developers → API keys* you get a **test key**
+   (`test_…`) right away; the **live key** (`live_…`) comes once Mollie has verified the business.
+   Switch on the payment methods you want (Bancontact, cards, Payconiq) under *Settings → Payment methods*.
+2. **Deploy the function:** Supabase → *Edge Functions* → *Deploy a new function* → *Via Editor*. Name it
+   exactly `payments`, replace the example code with everything in `supabase/functions/payments/index.ts`, deploy.
+3. **Turn off JWT verification** for the function (Edge Functions → payments → *Details* → "Enforce JWT
+   verification" off → Save). Mollie's webhook can't log in; the function checks the player itself.
+4. **Add the key as a secret:** *Edge Functions → Secrets* → add `MOLLIE_API_KEY` with your test key.
+   Never put the key in the website code or send it to anyone.
+5. **Switch it on:** SQL Editor → `update public.app_config set value = 'on' where key = 'online_payments';`
+6. **Test:** book a session and pay; Mollie's test page lets you choose *Paid*, *Failed*, *Canceled*…
+7. **Go live:** replace the `MOLLIE_API_KEY` secret with the live key.
+
+To turn online payment off again: set `online_payments` back to `off` (everyone pays at the HQ).
 
 ## High scores
 Under the team cards: the top 10 players by XP (player name and level only, never email). Trainers are left out

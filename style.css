@@ -1611,3 +1611,16 @@ textarea { resize: vertical; min-height: 130px; }
 .price-card strong { font-size: 1.5rem; color: var(--text); }
 .price-card span:last-child { font-size: 0.85rem; color: var(--muted); }
 @media (max-width: 760px) { .price-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Booking: payment choice */
+.pay-picker { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.pay-picker[hidden] { display: none; }
+.pay-picker legend { margin-bottom: 8px; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.pay-option { display: block; cursor: pointer; }
+.pay-option input { position: absolute; opacity: 0; pointer-events: none; }
+.pay-option > span { display: block; padding: 12px; font-family: var(--sans); font-size: 0.95rem; text-transform: none; letter-spacing: normal; color: var(--text); background: #000; border: 2px solid var(--line); }
+.pay-option input:checked + span { border-color: var(--green-bright); box-shadow: 3px 3px 0 var(--green-dark); }
+.pay-option input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pay-option small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+.pay-tag { margin-left: 6px; padding: 2px 6px; font-style: normal; font-family: var(--pixel); font-size: 0.45rem; color: #000; background: var(--green-bright); vertical-align: 2px; }
+.pay-note { margin: 0; font-size: 0.9rem; color: var(--muted); }

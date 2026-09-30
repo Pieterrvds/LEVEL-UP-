@@ -65,7 +65,7 @@ function slotState(trainer, key, hour, now) {
   const blocker = LevelUp.slotBlocker(key, hour, now);
   if (booking?.mine) {
     if (booking.status === "completed" || blocker === "past") return { state: "done", booking };
-    return { state: booking.status === "pending" ? "requested" : "mine", booking };
+    return { state: ["pending", "awaiting_payment"].includes(booking.status) ? "requested" : "mine", booking };
   }
   if (booking) return { state: "taken", booking };
   return { state: blocker ? "past" : "free", booking: null };
@@ -235,7 +235,7 @@ function renderBookingDialog(message = "") {
     </div>
     <p class="booking-when">${when}</p>
     ${booking?.mine ? "" : player
-      ? `<p class="booking-price">1 hour with ${esc(trainer.short)} · payment details follow from LEVEL-UP</p>`
+      ? `<p class="booking-price">1 hour with ${esc(trainer.short)}</p>`
       : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong> · 1 hour, 1:1 with ${esc(trainer.short)} · your first session only <strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong></p>`}`;
 
   // Your own booking: offer to cancel
@@ -243,19 +243,27 @@ function renderBookingDialog(message = "") {
     const own = LevelUp.playerBookings().find((b) => b.id === booking.id);
     bookingContent.innerHTML = `
       <p class="section-kicker">Your session</p>
-      <h2 class="auth-title" id="bookingTitle">${booking.status === "pending" ? "Waiting for confirmation" : "Confirmed ✓"}</h2>
+      <h2 class="auth-title" id="bookingTitle">${booking.status === "awaiting_payment" ? "Waiting for payment" : booking.status === "pending" ? "Waiting for confirmation" : "Confirmed ✓"}</h2>
       ${trainerCard}
-      <p class="status-line">${booking.status === "pending"
+      <p class="status-line">${booking.status === "awaiting_payment"
+        ? `<span class="status-chip pending">Not paid</span> Finish the payment to send the request to ${esc(trainer.short)}. The hour is held for a few minutes.`
+        : booking.status === "pending"
         ? `<span class="status-chip pending">Pending</span> ${esc(trainer.short)} still has to confirm this session.`
         : `<span class="status-chip confirmed">Confirmed</span> ${esc(trainer.short)} will reward your +${own?.xp ?? LevelUp.SESSION_XP} XP after the session.`}</p>
-      ${own ? `<p class="booking-price">${own.kind === "duo" ? "Duo session" : "1:1 session"} · <strong>${esc(LevelUp.priceLabel(own))}</strong></p>` : ""}
+      ${own ? `<p class="booking-price">${own.kind === "duo" ? "Duo session" : "1:1 session"} · <strong>${esc(LevelUp.priceLabel(own))}</strong>${LevelUp.payLabel(own) ? ` · ${esc(LevelUp.payLabel(own))}` : ""}</p>` : ""}
+      ${own && LevelUp.canPayOnline(own) ? `<button type="button" class="btn btn-primary btn-block" id="payNow">Pay ${LevelUp.euro(own.price)} online ▶</button>` : ""}
       ${own?.note ? `<p class="booking-note-view">“${esc(own.note)}”</p>` : ""}
       ${own && LevelUp.isLateCancel(own) ? `<p class="booking-warning">Starts in less than ${LevelUp.FREE_CANCEL_HOURS} hours: cancelling now is charged in full (${LevelUp.euro(own.price)}).</p>` : ""}
       <p class="form-error" role="alert">${esc(message)}</p>
       <div class="btn-row">
         <a class="btn btn-ghost btn-small" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
-        <button type="button" class="btn btn-small btn-danger" id="cancelBooking">${booking.status === "pending" ? "Withdraw request" : "Cancel session"}</button>
+        <button type="button" class="btn btn-small btn-danger" id="cancelBooking">${["pending", "awaiting_payment"].includes(booking.status) ? "Withdraw request" : "Cancel session"}</button>
       </div>`;
+    document.getElementById("payNow")?.addEventListener("click", async (event) => {
+      event.target.disabled = true;
+      event.target.textContent = "To the payment page…";
+      try { await LevelUp.startPayment("booking", own.id); } catch (err) { renderBookingDialog(err.message); }
+    });
     const cancel = document.getElementById("cancelBooking");
     cancel.addEventListener("click", async () => {
       if (own && LevelUp.isLateCancel(own) && !confirm(`Cancelling now is charged in full (${LevelUp.euro(own.price)}). Cancel anyway?`)) return;
@@ -281,12 +289,13 @@ function renderBookingDialog(message = "") {
         <label class="partner-field" hidden>Who do you train with?
           <input type="text" name="partner" maxlength="40" placeholder="Name of your training buddy">
         </label>
+        ${paymentOptions(trainerId)}
         <label>Note for your trainer (optional)
           <textarea name="note" rows="3" maxlength="300" placeholder="Your goal, experience level or preferred location…"></textarea>
         </label>
         <p class="form-error" role="alert">${esc(message)}</p>
         <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, rewarded by ${esc(trainer.short)}</span></div>
-        <button type="submit" class="btn btn-primary btn-block">Send booking request ▶</button>
+        <button type="submit" class="btn btn-primary btn-block" id="bookSubmit">Send booking request ▶</button>
       </form>
       <p class="auth-note">${esc(trainer.short)} gets a notification and confirms or declines. Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>` : `
       <div class="booking-login">
@@ -297,6 +306,7 @@ function renderBookingDialog(message = "") {
         </div>
       </div>`}`;
 
+  updateSubmitLabel();
   document.getElementById("bookingForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const submit = event.target.querySelector('button[type="submit"]');
@@ -304,7 +314,18 @@ function renderBookingDialog(message = "") {
     submit.textContent = "Booking…";
     try {
       const form = event.target.elements;
-      const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value });
+      const pay = needsPayment(pendingSlot.trainerId, form.kind.value) ? (form.pay?.value || "in_person") : "in_person";
+      const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value, pay });
+      if (booked.status === "awaiting_payment") {
+        submit.textContent = "To the payment page…";
+        try {
+          await LevelUp.startPayment("booking", booked.id);
+        } catch (err) {
+          // the hour stays held for a few minutes; the player can pay from their profile
+          renderBookingDialog(`${err.message} Your booking is waiting for payment in your profile.`);
+        }
+        return;
+      }
       showBooked(booked);
     } catch (err) {
       renderBookingDialog(err.message);
@@ -333,11 +354,43 @@ function bookingOptions(trainerId) {
     ${solo.type === "standard" && LevelUp.getPricing().packs.length ? `<p class="kind-tip">Training often? <a href="profile.html#packs">Session packs</a> from ${euro(Math.min(...LevelUp.getPricing().packs.map((p) => p.price / p.size)))} per session.</p>` : ""}`;
 }
 
+// Pack credits cover 1:1 sessions; everything else is paid online (preferred) or at the HQ
+const needsPayment = (trainerId, kind) => kind === "duo" || LevelUp.quote(trainerId, "solo").type !== "pack";
+
+function paymentOptions(trainerId) {
+  const online = LevelUp.getPricing().onlinePayments;
+  return `
+    <fieldset class="pay-picker" ${needsPayment(trainerId, "solo") ? "" : "hidden"}>
+      <legend>Payment</legend>
+      ${online ? `
+        <label class="pay-option"><input type="radio" name="pay" value="online" checked>
+          <span><strong>Pay online now</strong> <em class="pay-tag">Recommended</em><small>Bancontact, card or Payconiq · your request goes to the trainer right after paying · money back automatically if it doesn't go ahead</small></span></label>
+        <label class="pay-option"><input type="radio" name="pay" value="in_person">
+          <span><strong>Pay at the headquarters</strong><small>${esc(LevelUp.HQ_ADDRESS)} · pay on the day</small></span></label>`
+      : `<p class="pay-note">You pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)}). Online payment is coming soon.</p>
+         <input type="hidden" name="pay" value="in_person">`}
+    </fieldset>`;
+}
+
+function updateSubmitLabel() {
+  const form = document.getElementById("bookingForm");
+  if (!form || !pendingSlot) return;
+  const kind = form.elements.kind.value;
+  const pays = needsPayment(pendingSlot.trainerId, kind);
+  form.querySelector(".pay-picker").hidden = !pays;
+  const q = LevelUp.quote(pendingSlot.trainerId, kind);
+  document.getElementById("bookSubmit").textContent = pays && form.elements.pay?.value === "online"
+    ? `Pay ${LevelUp.euro(q.price)} & send request ▶`
+    : "Send booking request ▶";
+}
+
 bookingDialog.addEventListener("change", (event) => {
-  if (event.target.name !== "kind") return;
-  const field = bookingDialog.querySelector(".partner-field");
-  field.hidden = event.target.value !== "duo";
-  field.querySelector("input").required = event.target.value === "duo";
+  if (event.target.name === "kind") {
+    const field = bookingDialog.querySelector(".partner-field");
+    field.hidden = event.target.value !== "duo";
+    field.querySelector("input").required = event.target.value === "duo";
+  }
+  if (["kind", "pay"].includes(event.target.name)) updateSubmitLabel();
 });
 
 function showBooked(booked) {
@@ -349,7 +402,7 @@ function showBooked(booked) {
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
     <p class="booking-price">${booked?.priceType === "pack"
       ? "Paid with <strong>1 pack credit</strong>. A declined request gives it back."
-      : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. You only pay for confirmed sessions; LEVEL-UP sends you the payment details.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
+      : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. Pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)})${LevelUp.getPricing().onlinePayments ? " or online from your profile" : ""}.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>

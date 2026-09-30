@@ -23,9 +23,11 @@ const euro = (n) => `€${n.toFixed(2)}`;
 const fmtDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const fmtShort = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const isUpcoming = (b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
-const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", late_cancel: "Late cancel · charged", no_show: "No-show · charged", expired: "Expired" };
-const STATUS_CLASS = { late_cancel: "declined", no_show: "declined", expired: "declined" };
+const isUpcoming = (b) => ["awaiting_payment", "pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
+const STATUS_LABEL = { awaiting_payment: "Not paid yet", cancelled: "Cancelled", pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", late_cancel: "Late cancel · charged", no_show: "No-show · charged", expired: "Expired" };
+const STATUS_CLASS = { late_cancel: "declined", no_show: "declined", expired: "declined", cancelled: "declined", awaiting_payment: "pending" };
+// Sessions the player still has to pay (at the HQ, or online later)
+const toCollect = (b) => b.payMethod !== "pack" && b.payStatus === "unpaid" && ["pending", "confirmed", "completed", "no_show", "late_cancel"].includes(b.status);
 const BILLABLE = ["completed", "no_show", "late_cancel"];
 // Confirmed sessions from their day on that nobody rewarded or marked as no-show yet
 const toSettle = (b) => b.status === "confirmed" && b.date <= LevelUp.dateKey();
@@ -280,6 +282,8 @@ function renderFinances() {
   const paidPacks = data.packs.filter((pk) => pk.status === "paid");
   const packSales = paidPacks.reduce((s, pk) => s + pk.price, 0);
   const unusedCredits = paidPacks.reduce((n, pk) => n + pk.remaining, 0);
+  const collect = data.rawBookings.filter(toCollect);
+  const refundsOpen = data.rawBookings.filter((b) => b.refundStatus === "manual");
   const tile = (label, value, note, cls = "") => `
     <div class="kpi ${cls}"><span class="kpi-label">${label}</span><span class="kpi-value">${value}</span><span class="kpi-note">${note}</span></div>`;
 
@@ -293,6 +297,7 @@ function renderFinances() {
       ${tile("Your share", money(revenue - trainerShare), "Venue share + your own sessions", "good")}
       ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
       ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
+      ${tile("To collect", money(collect.reduce((s, b) => s + b.price, 0)), collect.length ? `${plural(collect.length, "session")} not paid yet (HQ)` : "Everything is paid", collect.length ? "warn" : "")}
       ${tile("Packs sold", money(packSales), `${plural(paidPacks.length, "pack")} · ${plural(unusedCredits, "credit")} not used yet`)}
     </div>
     <div class="table-wrap">
@@ -316,7 +321,8 @@ function renderFinances() {
     </div>
     ${(() => {
       const open = data.rawBookings.filter(toSettle);
-      return open.length ? `<p class="settle-note">⚠ ${plural(open.length, "confirmed session")} still to settle (reward or no-show). Trainers have ${LevelUp.REWARD_WINDOW_DAYS} days; you can settle any time under Bookings → past.</p>` : "";
+      return (refundsOpen.length ? `<p class="settle-note">⚠ ${plural(refundsOpen.length, "payment")} made at the HQ must be given back by hand (${money(refundsOpen.reduce((s, b) => s + b.price, 0))}). Press "Refunded" in Bookings once done.</p>` : "")
+        + (open.length ? `<p class="settle-note">⚠ ${plural(open.length, "confirmed session")} still to settle (reward or no-show). Trainers have ${LevelUp.REWARD_WINDOW_DAYS} days; you can settle any time under Bookings → past.</p>` : "");
     })()}
     <details class="price-editor">
       <summary>Prices per trainer</summary>
@@ -352,8 +358,8 @@ function renderPacks() {
       <li class="application-item">
         <div>
           <p class="coach-who">${esc(pk.name)} <span class="muted small">· ${esc(pk.email)}</span></p>
-          <p><strong>${pk.size}-session pack · ${money(pk.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
-          <p class="muted small">Requested ${fmtDate(pk.createdAt)}. Send the payment details, then mark it as paid.</p>
+          <p><strong>${pk.size}-session pack · ${money(pk.price)}</strong> <span class="status-chip pending">${pk.payMethod === "online" ? "Paying online" : "Pays at the HQ"}</span></p>
+          <p class="muted small">Requested ${fmtDate(pk.createdAt)}. ${pk.payMethod === "online" ? "Activates automatically once the online payment is in." : "Mark it as paid once you have the money."}</p>
         </div>
         <div class="application-actions">
           <button type="button" class="btn btn-small btn-primary" data-pack-paid="${pk.id}">Mark paid</button>
@@ -820,7 +826,7 @@ function renderBookings() {
     return;
   }
   el.innerHTML = tableView(
-    ["When", "Trainer", "Player", "Status", "Price", "Note", ""],
+    ["When", "Trainer", "Player", "Status", "Price", "Payment", "Note", ""],
     list.map((b) => {
       const t = LevelUp.trainerById(b.trainerId);
       return [
@@ -829,9 +835,12 @@ function renderBookings() {
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
         `<span class="status-chip ${STATUS_CLASS[b.status] || b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
         `<span class="nowrap">${esc(LevelUp.priceLabel(b))}</span>`,
+        `<span class="nowrap">${esc(LevelUp.payLabel(b) || (b.payMethod === "pack" ? "Pack credit" : "–"))}</span>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
         `<span class="admin-actions">${[
           b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
+          toCollect(b) || b.status === "awaiting_payment" ? `<button type="button" class="btn btn-small btn-ghost" data-paid-hq="${b.id}">Paid at HQ</button>` : "",
+          b.refundStatus === "manual" ? `<button type="button" class="btn btn-small btn-ghost" data-refunded="${b.id}">Refunded</button>` : "",
           toSettle(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-reward="${b.id}">Reward</button>` : "",
           toSettle(b) && LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-noshow="${b.id}">No-show</button>` : "",
           isUpcoming(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-cancel="${b.id}">Cancel</button>` : ""
@@ -977,6 +986,18 @@ root.addEventListener("click", (event) => {
     btn.disabled = true;
     const action = reward ? LevelUp.rewardSession(btn.dataset.adminReward) : LevelUp.respondBooking(btn.dataset.id, btn.dataset.adminRespond === "confirm");
     action.catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const paidHq = event.target.closest("[data-paid-hq]");
+  const refunded = event.target.closest("[data-refunded]");
+  if (paidHq || refunded) {
+    const btn = paidHq || refunded;
+    const b = data.bookings.find((x) => x.id === btn.dataset[paidHq ? "paidHq" : "refunded"]);
+    if (!b || !confirm(paidHq
+      ? `Did ${b.name} pay ${money(b.price)} at the headquarters for ${slotLabel(b)}?`
+      : `Did you give ${b.name} their ${money(b.price)} back?`)) return;
+    btn.disabled = true;
+    (paidHq ? LevelUp.markPaidInPerson(b.id) : LevelUp.markRefunded(b.id)).catch((err) => { btn.disabled = false; alert(err.message); });
     return;
   }
   const packPaid = event.target.closest("[data-pack-paid]");

@@ -68,7 +68,9 @@ const STATUS = {
   completed: { label: "Completed", cls: "completed" },
   late_cancel: { label: "Late cancel · charged", cls: "declined" },
   no_show: { label: "No-show · charged", cls: "declined" },
-  expired: { label: "Expired", cls: "declined" }
+  expired: { label: "Expired", cls: "declined" },
+  awaiting_payment: { label: "Not paid yet", cls: "pending" },
+  cancelled: { label: "Cancelled", cls: "declined" }
 };
 const CHARGED = ["late_cancel", "no_show"];
 const fmtDeadline = (iso) => new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -77,7 +79,7 @@ const statusChip = (status) => `<span class="status-chip ${STATUS[status]?.cls |
 function renderSessions() {
   const now = new Date();
   const bookings = LevelUp.playerBookings();
-  const upcoming = bookings.filter((b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > now);
+  const upcoming = bookings.filter((b) => ["awaiting_payment", "pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > now);
   const history = bookings
     .filter((b) => !upcoming.includes(b))
     .sort((a, b) => LevelUp.slotStart(b.date, b.hour) - LevelUp.slotStart(a.date, a.hour))
@@ -88,15 +90,20 @@ function renderSessions() {
     const open = upcoming.includes(b);
     const past = LevelUp.slotStart(b.date, b.hour) <= now;
     let side = "";
-    if (open) side = `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${b.status === "pending" ? "Withdraw" : "Cancel"}</button>`;
-    else if (b.status === "completed") side = `<span class="log-xp">+${b.xp} XP</span>`;
+    const pay = LevelUp.canPayOnline(b) ? `<button type="button" class="btn btn-small btn-primary" data-pay-booking="${b.id}">Pay online</button>` : "";
+    if (open) side = `${pay}<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${["pending", "awaiting_payment"].includes(b.status) ? "Withdraw" : "Cancel"}</button>`;
+    else if (b.status === "completed") side = `${pay}<span class="log-xp">+${b.xp} XP</span>`;
+    else side = pay;
     let note = "";
     if (b.status === "confirmed" && past) note = "Waiting for your trainer to reward the session";
     else if (b.status === "confirmed" && open) note = LevelUp.isLateCancel(b)
       ? "Cancelling now is charged in full"
       : `Free cancellation until ${fmtDeadline(b.freeCancelUntil || LevelUp.slotStart(b.date, b.hour) - LevelUp.FREE_CANCEL_HOURS * 3600e3)}`;
     else if (CHARGED.includes(b.status)) note = "Charged in full";
-    else if (b.status === "expired") note = "Not confirmed in time · no costs";
+    else if (b.status === "expired") note = b.payMethod === "online" && b.payStatus === "unpaid" ? "Payment not completed · no costs" : "Not confirmed in time · no costs";
+    else if (b.status === "awaiting_payment") note = "Finish the payment to send the request";
+    const payText = LevelUp.payLabel(b);
+    if (payText && !["awaiting_payment"].includes(b.status)) note = note ? `${note} · ${payText}` : payText;
     const price = ["declined", "expired"].includes(b.status) ? "" : ` · ${esc(LevelUp.priceLabel(b))}`;
     return `
       <li class="session-row" style="--c:${trainer.color}">
@@ -105,7 +112,7 @@ function renderSessions() {
           <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}</p>
           <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${price}${note ? ` · ${note}` : ""}</p>
         </div>
-        ${side}
+        <div class="session-actions">${side}</div>
       </li>`;
   };
 
@@ -169,6 +176,7 @@ function renderPacks(player) {
   const history = player.packs.filter((pk) => pk.status !== "cancelled");
   const options = LevelUp.getPricing().packs;
   const single = LevelUp.getPricing().price;
+  const online = LevelUp.getPricing().onlinePayments;
   return `
     <section class="panel panel-wide" id="packs">
       <div class="panel-head">
@@ -179,9 +187,16 @@ function renderPacks(player) {
       ${open ? `
         <div class="pack-open">
           <p><strong>${open.size}-session pack · ${euro(open.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
-          <p class="muted small-text">LEVEL-UP sends you the payment details. Your credits become active once the payment is in.</p>
-          <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${open.id}">Cancel request</button>
+          <p class="muted small-text">Pay ${online ? "online now, or " : ""}at the headquarters (${esc(LevelUp.HQ_ADDRESS)}). Your credits become active once the payment is in.</p>
+          <div class="btn-row">
+            ${online ? `<button type="button" class="btn btn-small btn-primary" data-pack-pay="${open.id}">Pay ${LevelUp.euro(open.price)} online</button>` : ""}
+            <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${open.id}">Cancel request</button>
+          </div>
         </div>` : `
+        ${online ? `<div class="pack-pay" role="radiogroup" aria-label="Payment">
+          <label><input type="radio" name="packPay" value="online" checked> Pay online now <em class="pay-tag">Recommended</em></label>
+          <label><input type="radio" name="packPay" value="in_person"> Pay at the headquarters</label>
+        </div>` : ""}
         <div class="pack-options">${options.map((o) => `
           <button type="button" class="pack-option" data-pack-size="${o.size}">
             <span class="price-tag">${o.size} sessions</span>
@@ -234,7 +249,7 @@ function renderCoachPanel() {
       <span class="avatar" aria-hidden="true">${esc((b.name || "?").charAt(0).toUpperCase())}</span>
       <div>
         <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
-        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
         <p class="form-error" role="alert"></p>
       </div>
       <div class="coach-actions">${actions}</div>
@@ -645,15 +660,32 @@ function bindEvents(player) {
     button.addEventListener("click", async () => {
       const size = Number(button.dataset.packSize);
       const o = LevelUp.getPricing().packs.find((x) => x.size === size);
-      if (!confirm(`Request a ${size}-session pack for ${LevelUp.euro(o.price)}? LEVEL-UP sends you the payment details; your credits become active once you've paid.`)) return;
+      const pay = root.querySelector("[name=packPay]:checked")?.value || "in_person";
+      if (!confirm(pay === "online"
+        ? `Buy a ${size}-session pack for ${LevelUp.euro(o.price)}? You go to the payment page; your credits are active right after paying.`
+        : `Request a ${size}-session pack for ${LevelUp.euro(o.price)}? You pay at the headquarters; your credits become active once you've paid.`)) return;
       button.disabled = true;
       try {
-        await LevelUp.requestPack(size);
-        LevelUp.toast({ title: "Pack requested", text: "Payment details follow by email", icon: "✉", tone: "green" });
+        await LevelUp.requestPack(size, pay);
+        if (pay !== "online") LevelUp.toast({ title: "Pack requested", text: "Pay at the headquarters to activate it", icon: "✉", tone: "green" });
       } catch (err) {
         button.disabled = false;
         document.getElementById("packError").textContent = err.message;
       }
+    });
+  });
+  root.querySelector("[data-pack-pay]")?.addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    event.target.textContent = "To the payment page…";
+    try { await LevelUp.startPayment("pack", event.target.dataset.packPay); }
+    catch (err) { event.target.disabled = false; document.getElementById("packError").textContent = err.message; }
+  });
+  root.querySelectorAll("[data-pay-booking]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "To the payment page…";
+      try { await LevelUp.startPayment("booking", button.dataset.payBooking); }
+      catch (err) { button.disabled = false; button.textContent = "Pay online"; alert(err.message); }
     });
   });
   root.querySelector("[data-pack-cancel]")?.addEventListener("click", async (event) => {

@@ -14,6 +14,8 @@ const LevelUp = (() => {
   const SUPABASE_KEY = "sb_publishable_sG2smuMtYS_T5Xz1HAPOMA_p70i8nJX"; // public key, safe in the browser
 
   const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
+  const PAYMENTS_URL = `${SUPABASE_URL}/functions/v1/payments`; // Edge Function that talks to Mollie
+  const HQ_ADDRESS = "Hoogstraat 40, 9308 Aalst";
   const GUEST_ORDERS_KEY = "levelup.guestOrders.v2";
 
   // Keep these in sync with app_config in supabase/schema.sql
@@ -294,7 +296,7 @@ const LevelUp = (() => {
   // Public price list (the server's app_config decides; these are the fallbacks)
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
-    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}
+    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // [{ place, name, xp, isMe }]
@@ -413,6 +415,7 @@ const LevelUp = (() => {
       pricing = {
         price: Number(p.price), fee: Number(p.fee), introPrice: Number(p.introPrice), duoPrice: Number(p.duoPrice),
         packs: (p.packs || []).map((o) => ({ size: Number(o.size), price: Number(o.price) })),
+        onlinePayments: Boolean(p.onlinePayments),
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
     } catch (err) {
@@ -445,9 +448,14 @@ const LevelUp = (() => {
     return euro(b.price ?? SESSION_PRICE);
   }
 
-  async function requestPack(size) {
-    const pack = normalisePack(await call("request_pack", { p_size: size }));
+  async function requestPack(size, pay = "in_person") {
+    const pack = normalisePack(await call("request_pack", { p_size: size, p_pay: pay }));
     await refreshPlayer();
+    if (pay === "online") {
+      emit();
+      await startPayment("pack", pack.id);
+      return pack;
+    }
     notifyPack(pack, "requested");
     emit();
     return pack;
@@ -477,7 +485,7 @@ const LevelUp = (() => {
     const texts = {
       requested: {
         subject: `Pack request: ${pack.size} sessions · ${euro(pack.price)} · ${pack.name}`,
-        reply: `Hi ${pack.name}, thanks for your request for a ${pack.size}-session pack (${euro(pack.price)}, ${euro(pack.price / pack.size)} per session). LEVEL-UP sends you the payment details; your credits become active as soon as the payment is in.`
+        reply: `Hi ${pack.name}, thanks for your request for a ${pack.size}-session pack (${euro(pack.price)}, ${euro(pack.price / pack.size)} per session). Pay at the headquarters (${HQ_ADDRESS})${pricing.onlinePayments ? " or online in your LEVEL-UP profile" : ""}; your credits become active as soon as the payment is in.`
       },
       paid: {
         subject: `Pack active: ${pack.size} sessions · ${pack.name}`,
@@ -678,17 +686,106 @@ const LevelUp = (() => {
     return null;
   }
 
-  async function bookSession({ trainerId, date, hour, note = "", kind = "solo", partner = "" }) {
+  // pay: "online" (Mollie, the request reaches the trainer once paid) or "in_person" (at the headquarters)
+  async function bookSession({ trainerId, date, hour, note = "", kind = "solo", partner = "", pay = "in_person" }) {
     if (!player) throw new Error("Log in to book a session.");
     if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
     const booking = await call("book_session", {
       p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300),
-      p_kind: kind, p_partner: String(partner).trim().slice(0, 40)
+      p_kind: kind, p_partner: String(partner).trim().slice(0, 40), p_pay: pay
     });
     await Promise.all([refreshPlayer(), loadSlots()]);
-    notifyBooking({ ...booking, hour: Number(booking.hour) }, "requested");
+    // Online bookings email the trainer once the payment is in (see claimBookingNotices)
+    if (booking.status !== "awaiting_payment") notifyBooking({ ...booking, hour: Number(booking.hour) }, "requested");
     emit();
     return booking;
+  }
+
+  // ---------- Payments (Mollie) ----------
+  // Sends the player to Mollie's payment page for a booking or pack
+  async function startPayment(type, id) {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Log in first.");
+    let res;
+    try {
+      res = await fetch(`${PAYMENTS_URL}/create`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ type, id })
+      });
+    } catch {
+      throw new Error("Can't reach the payment service. Try again, or pay at the headquarters.");
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.checkoutUrl) throw new Error(body.error || "Online payment failed. Try again, or pay at the headquarters.");
+    window.location.href = body.checkoutUrl;
+  }
+
+  // Refunds the server marked as due (declined, expired or cancelled for free after paying online)
+  function processRefunds() {
+    if (!pricing.onlinePayments) return;
+    fetch(`${PAYMENTS_URL}/refunds`, { method: "POST", headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" }, body: "{}" })
+      .catch(() => { /* the next action or webhook tries again */ });
+  }
+
+  const PAYABLE = ["awaiting_payment", "pending", "confirmed", "completed", "no_show", "late_cancel"];
+  const canPayOnline = (b) => pricing.onlinePayments && b.payMethod !== "pack" && b.payStatus === "unpaid" && PAYABLE.includes(b.status);
+
+  // How a booking is paid, for rows and emails
+  function payLabel(b) {
+    if (b.payMethod === "pack") return "";
+    if (b.refundStatus === "manual") return "Refund at the HQ";
+    if (b.refundStatus === "due" || b.refundStatus === "processing") return "Refund on its way";
+    if (b.payStatus === "refunded") return "Refunded";
+    if (b.payStatus === "paid") return b.payMethod === "online" ? "Paid online ✓" : "Paid at the HQ ✓";
+    if (b.status === "awaiting_payment") return "Payment not finished";
+    if (["declined", "expired", "cancelled"].includes(b.status)) return "";
+    return "Pay at the HQ";
+  }
+
+  // Back from Mollie (?payment=booking:<id>): wait for the webhook, then tell the player
+  async function handlePaymentReturn() {
+    const params = new URLSearchParams(location.search);
+    const ref = params.get("payment");
+    if (!ref || !player) return;
+    params.delete("payment");
+    history.replaceState(null, "", `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`);
+    const [type, id] = ref.split(":");
+    const isPaid = () => type === "pack"
+      ? player.packs.find((pk) => pk.id === id)?.status === "paid"
+      : ["paid"].includes(player.bookings.find((b) => b.id === id)?.payStatus);
+    toast({ title: "Checking your payment…", text: "One moment", icon: "€" });
+    const gaveUp = () => type === "booking" && player.bookings.find((b) => b.id === id)?.status === "expired";
+    for (let i = 0; i < 10 && !isPaid() && !gaveUp(); i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      await refreshPlayer();
+    }
+    emit();
+    if (isPaid()) {
+      if (type === "pack") {
+        const pk = player.packs.find((x) => x.id === id);
+        notifyPack({ ...pk, name: player.name, email: player.email }, "paid");
+        toast({ title: "Payment received", text: `${pk.size} session credits are active`, icon: "★", tone: "green" });
+      } else {
+        const b = player.bookings.find((x) => x.id === id);
+        toast({ title: "Payment received", text: b.status === "pending" ? `Request sent to ${trainerById(b.trainerId).short}` : "Thanks!", icon: "✓", tone: "green" });
+      }
+    } else {
+      toast({ title: "Payment not completed", text: "Try again from your profile, or pay at the headquarters.", icon: "✕" });
+    }
+  }
+
+  async function markPaidInPerson(id) {
+    const booking = await call("mark_paid_in_person", { p_id: id });
+    await claimBookingNotices();
+    emit();
+    return booking;
+  }
+
+  async function markRefunded(id) {
+    await call("mark_refunded", { p_id: id });
+    emit();
   }
 
   // A confirmed session cancelled less than FREE_CANCEL_HOURS before is charged in full
@@ -700,6 +797,7 @@ const LevelUp = (() => {
 
   async function cancelBooking(id) {
     const booking = await call("cancel_booking", { p_id: id });
+    processRefunds();
     await Promise.all([refreshPlayer(), loadSlots(), loadCoachBookings()]);
     notifyBooking({ ...booking, hour: Number(booking.hour) }, booking.late ? "late_cancel" : "cancelled");
     emit();
@@ -710,7 +808,8 @@ const LevelUp = (() => {
   async function claimBookingNotices() {
     try {
       const rows = await call("claim_booking_notices");
-      (rows || []).forEach((b) => notifyBooking({ ...b, hour: Number(b.hour) }, "expired"));
+      (rows || []).forEach((b) => notifyBooking({ ...b, hour: Number(b.hour) }, b.notice === "requested" ? "requested" : "expired"));
+      if ((rows || []).some((b) => b.notice === "expired")) processRefunds();
     } catch (err) {
       console.error("Claiming booking notices failed:", err);
     }
@@ -742,6 +841,7 @@ const LevelUp = (() => {
 
   async function respondBooking(id, accept) {
     const booking = await call("respond_booking", { p_id: id, p_accept: Boolean(accept) });
+    if (!accept) processRefunds();
     await Promise.all([loadCoachBookings(), loadSlots()]);
     notifyBooking({ ...booking, hour: Number(booking.hour) }, accept ? "confirmed" : "declined");
     emit();
@@ -796,31 +896,31 @@ const LevelUp = (() => {
     const texts = {
       requested: {
         subject: `New booking request: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your request for a ${booking.kind === "duo" ? "duo " : ""}session with ${trainer.name} on ${when} has been sent (${priceLabel(booking)}). ${trainer.short} will confirm it soon; you'll see the status in your LEVEL-UP profile.`
+        reply: `Hi ${booking.name}, your request for a ${booking.kind === "duo" ? "duo " : ""}session with ${trainer.name} on ${when} has been sent (${priceLabel(booking)}${booking.payStatus === "paid" ? ", paid online" : ""}). ${trainer.short} will confirm it soon; you'll see the status in your LEVEL-UP profile.${booking.payMethod === "in_person" && booking.payStatus !== "paid" ? ` You pay at the headquarters (${HQ_ADDRESS}), or online in your profile.` : ""}${booking.payStatus === "paid" ? " If the session doesn't go ahead, you get your money back automatically." : ""}`
       },
       confirmed: {
         subject: `Confirmed: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. ${booking.priceType === "pack" ? "This session uses one of your pack credits." : `Price: ${priceLabel(booking)}; LEVEL-UP will send you the payment details.`} After the session you get +${booking.xp} XP.`
+        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. ${booking.priceType === "pack" ? "This session uses one of your pack credits." : booking.payStatus === "paid" ? `Price: ${priceLabel(booking)}, already paid.` : `Price: ${priceLabel(booking)}: pay at the headquarters (${HQ_ADDRESS}) or online in your LEVEL-UP profile.`} After the session you get +${booking.xp} XP.`
       },
       declined: {
         subject: `Declined: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, unfortunately ${trainer.name} can't make it on ${when}. Pick another hour in the LEVEL-UP schedule.`
+        reply: `Hi ${booking.name}, unfortunately ${trainer.name} can't make it on ${when}. Pick another hour in the LEVEL-UP schedule.${booking.payStatus === "paid" ? " You get your payment back." : ""}`
       },
       cancelled: {
         subject: `Cancelled: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled. No costs.`
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled. No costs${booking.payStatus === "paid" ? "; you get your payment back" : ""}.`
       },
       late_cancel: {
         subject: `Late cancellation (charged): ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled less than ${FREE_CANCEL_HOURS} hours before the start. As agreed in our cancellation policy, the session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}. LEVEL-UP will send you the payment details.`
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled less than ${FREE_CANCEL_HOURS} hours before the start. As agreed in our cancellation policy, the session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.${booking.payStatus === "paid" || booking.payMethod === "pack" ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."}`
       },
       no_show: {
         subject: `No-show (charged): ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, we missed you at your session with ${trainer.name} on ${when}. A missed session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}. LEVEL-UP will send you the payment details. Something came up? Reply to this email.`
+        reply: `Hi ${booking.name}, we missed you at your session with ${trainer.name} on ${when}. A missed session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.${booking.payStatus === "paid" || booking.payMethod === "pack" ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."} Something came up? Reply to this email.`
       },
       expired: {
         subject: `Request expired: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your request for a session with ${trainer.name} on ${when} wasn't confirmed in time, so it has been cancelled. No costs. Pick another hour in the LEVEL-UP schedule.`
+        reply: `Hi ${booking.name}, your request for a session with ${trainer.name} on ${when} wasn't confirmed in time, so it has been cancelled. No costs${booking.payStatus === "paid" ? "; you get your payment back" : ""}. Pick another hour in the LEVEL-UP schedule.`
       }
     }[action];
     fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
@@ -838,6 +938,7 @@ const LevelUp = (() => {
         email: booking.email,
         note: booking.note || "-",
         price: priceLabel(booking),
+        payment: booking.payMethod === "pack" ? "Pack credit" : booking.payStatus === "paid" ? `Paid ${booking.payMethod === "online" ? "online" : "at the HQ"}` : "Pays at the HQ",
         session: booking.kind === "duo" ? `Duo with ${booking.partner}` : "1:1",
         booking_id: booking.id,
         charged: ["late_cancel", "no_show"].includes(action) ? `Yes, ${euro(booking.price ?? SESSION_PRICE)}` : "No",
@@ -1205,6 +1306,7 @@ const LevelUp = (() => {
           claimGuestOrders();
           setTimeout(showCoachInbox, 600);
           setTimeout(showAdminInbox, 1200);
+          setTimeout(handlePaymentReturn, 300);
         }
       } catch (err) {
         serverError = friendly(err);
@@ -1547,7 +1649,8 @@ const LevelUp = (() => {
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
-    requestPack, cancelPackRequest, markPackPaid, setTrainerPricing, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
+    requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
+    startPayment, canPayOnline, payLabel, markPaidInPerson, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };

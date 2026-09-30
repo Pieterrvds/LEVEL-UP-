@@ -213,3 +213,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .pack-open p { margin: 0; }
 #packs .detail-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 #packs .detail-list li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: #000; border-left: 4px solid var(--green-dark); }
+.session-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.session-actions:empty { display: none; }
+.pack-pay { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0 0; font-size: 0.9rem; }
+.pack-pay label { display: flex; align-items: center; gap: 8px; cursor: pointer; }

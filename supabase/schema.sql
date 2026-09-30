@@ -43,7 +43,9 @@ insert into public.app_config (key, value) values
   ('intro_price', '30'),          -- a player's very first 1:1 session (the trainer still gets their full fee)
   ('duo_price', '80'),            -- one trainer, two people, one hour (total)
   ('duo_trainer_fee', '50'),      -- the trainer's share of a duo session
-  ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]') -- session packs: credits for 1:1 sessions
+  ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]'), -- session packs: credits for 1:1 sessions
+  ('online_payments', 'off'),     -- 'on' once the payments Edge Function and the Mollie key are set up
+  ('payment_hold_minutes', '20')  -- how long an unpaid online booking holds the hour
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -175,6 +177,9 @@ create table if not exists public.session_packs (
 );
 create index if not exists session_packs_user_idx on public.session_packs (user_id);
 
+alter table public.session_packs add column if not exists pay_method text not null default 'in_person';
+alter table public.session_packs add column if not exists mollie_id text;
+
 -- Per-trainer price and fee (empty = the defaults in app_config). Not public.
 create table if not exists public.trainer_pricing (
   trainer_id text primary key references public.trainers (id) on delete cascade,
@@ -193,7 +198,8 @@ alter table public.bookings add column if not exists rewarded_at timestamptz;
 -- charged in full and the trainer keeps their fee; expired = request nobody answered in time.
 alter table public.bookings drop constraint if exists bookings_status_check;
 alter table public.bookings add constraint bookings_status_check
-  check (status in ('pending', 'confirmed', 'declined', 'completed', 'late_cancel', 'no_show', 'expired'));
+  check (status in ('awaiting_payment', 'pending', 'confirmed', 'declined', 'completed', 'late_cancel', 'no_show',
+                    'expired', 'cancelled'));
 alter table public.bookings add column if not exists notice_sent_at timestamptz; -- expiry email sent
 -- What kind of session and how the price was set: standard, intro (first session), pack (credit) or duo
 alter table public.bookings add column if not exists kind text not null default 'solo';
@@ -202,13 +208,32 @@ alter table public.bookings add column if not exists price_type text not null de
 alter table public.bookings add column if not exists pack_id uuid references public.session_packs (id) on delete set null;
 alter table public.bookings drop constraint if exists bookings_kind_check;
 alter table public.bookings add constraint bookings_kind_check check (kind in ('solo', 'duo'));
+-- Payment: online (Mollie), in person at the headquarters, or a pack credit.
+-- awaiting_payment = booked online, not paid yet (holds the hour for payment_hold_minutes);
+-- the request only goes to the trainer once it's paid. cancelled = cancelled for free after paying.
+alter table public.bookings add column if not exists pay_method text not null default 'in_person';
+alter table public.bookings add column if not exists pay_status text not null default 'unpaid';
+alter table public.bookings add column if not exists paid_at timestamptz;
+alter table public.bookings add column if not exists mollie_id text;
+alter table public.bookings add column if not exists refund_status text;  -- due / processing / done (online), manual (in person)
+alter table public.bookings add column if not exists refund_id text;
+alter table public.bookings add column if not exists request_at timestamptz; -- when the request reached the trainer
+alter table public.bookings add column if not exists request_notice_sent boolean not null default true;
+update public.bookings set request_at = created_at where request_at is null;
+update public.bookings set pay_method = 'pack', pay_status = 'n/a' where price_type = 'pack' and pay_method <> 'pack';
+alter table public.bookings drop constraint if exists bookings_pay_check;
+alter table public.bookings add constraint bookings_pay_check
+  check (pay_method in ('online', 'in_person', 'pack') and pay_status in ('unpaid', 'paid', 'refunded', 'n/a'));
+create index if not exists bookings_mollie_idx on public.bookings (mollie_id);
 -- A declined request frees the hour again, so uniqueness only counts active bookings
 alter table public.bookings drop constraint if exists bookings_trainer_id_day_hour_key;
 alter table public.bookings drop constraint if exists bookings_user_id_day_hour_key;
-create unique index if not exists bookings_active_slot on public.bookings (trainer_id, day, hour)
-  where status in ('pending', 'confirmed', 'completed');
-create unique index if not exists bookings_active_user on public.bookings (user_id, day, hour)
-  where status in ('pending', 'confirmed', 'completed');
+drop index if exists public.bookings_active_slot;
+drop index if exists public.bookings_active_user;
+create unique index if not exists bookings_active_slot2 on public.bookings (trainer_id, day, hour)
+  where status in ('awaiting_payment', 'pending', 'confirmed', 'completed');
+create unique index if not exists bookings_active_user2 on public.bookings (user_id, day, hour)
+  where status in ('awaiting_payment', 'pending', 'confirmed', 'completed');
 
 -- Money per booking, fixed at the moment of booking (so later price changes don't rewrite history)
 alter table public.bookings add column if not exists price numeric(8, 2) not null default 60;
@@ -224,6 +249,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'status', b.status, 'createdAt', b.created_at, 'respondedAt', b.responded_at, 'rewardedAt', b.rewarded_at,
     'price', b.price, 'trainerFee', b.trainer_fee, 'payoutAt', b.payout_at,
     'kind', b.kind, 'partner', b.partner, 'priceType', b.price_type, 'packId', b.pack_id,
+    'payMethod', b.pay_method, 'payStatus', b.pay_status, 'paidAt', b.paid_at, 'refundStatus', b.refund_status,
     'freeCancelUntil', ((b.day + make_interval(hours => b.hour)) at time zone 'Europe/Brussels')
                        - make_interval(hours => public._config('free_cancel_hours')::int),
     'name', p.name, 'email', p.email,
@@ -236,12 +262,12 @@ $$;
 -- a free cancellation deletes the booking)
 create or replace function public._pack_used(p_pack uuid)
 returns integer language sql stable security definer set search_path = public as $$
-  select count(*)::int from public.bookings where pack_id = p_pack and status not in ('declined', 'expired');
+  select count(*)::int from public.bookings where pack_id = p_pack and status not in ('declined', 'expired', 'cancelled');
 $$;
 
 create or replace function public._pack_json(sp public.session_packs)
 returns jsonb language sql stable security definer set search_path = public as $$
-  select jsonb_build_object('id', sp.id, 'size', sp.size, 'price', sp.price, 'status', sp.status,
+  select jsonb_build_object('id', sp.id, 'size', sp.size, 'price', sp.price, 'status', sp.status, 'payMethod', sp.pay_method,
     'createdAt', sp.created_at, 'paidAt', sp.paid_at,
     'used', public._pack_used(sp.id), 'remaining', sp.size - public._pack_used(sp.id),
     'name', p.name, 'email', p.email)
@@ -494,7 +520,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
-                                 and k.status in ('pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
+                                 and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
   )
   from public.profiles p
   where p.id = p_user;
@@ -553,10 +579,23 @@ returns timestamptz language sql stable security definer set search_path = publi
 $$;
 
 -- Expire unanswered requests (runs whenever someone loads or changes bookings)
+-- A paid booking that is declined, expires or is cancelled for free gets its money back:
+-- online payments are refunded through Mollie (refund_status due), cash at the desk by hand (manual)
+create or replace function public._refund_state(b public.bookings)
+returns text language sql immutable as $$
+  select case when b.pay_status <> 'paid' then null
+              when b.pay_method = 'online' then 'due'
+              when b.pay_method = 'in_person' then 'manual' end;
+$$;
+
 create or replace function public._expire_requests()
 returns void language sql security definer set search_path = public as $$
-  update public.bookings set status = 'expired', responded_at = now()
-  where status = 'pending' and public._confirm_deadline(created_at, day, hour) <= now();
+  update public.bookings b set status = 'expired', responded_at = now(), refund_status = public._refund_state(b)
+  where b.status = 'pending' and public._confirm_deadline(coalesce(b.request_at, b.created_at), b.day, b.hour) <= now();
+  -- unpaid online bookings free the hour again (no email: the player left the payment page)
+  update public.bookings set status = 'expired', responded_at = now(), notice_sent_at = now()
+  where status = 'awaiting_payment'
+    and created_at + make_interval(mins => public._config('payment_hold_minutes')::int) <= now();
 $$;
 
 -- Trainers settle (reward / no-show) from the session day until reward_window_days after;
@@ -612,7 +651,7 @@ begin
       'fee', case when owner then round(pk.price / pk.size, 2) else fee end);
   end if;
   if not exists (select 1 from public.bookings k where k.user_id = p_user
-                 and k.status in ('pending', 'confirmed', 'completed', 'no_show', 'late_cancel')) then
+                 and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel')) then
     return jsonb_build_object('type', 'intro', 'price', public._config('intro_price')::numeric,
       'fee', case when owner then public._config('intro_price')::numeric else fee end);
   end if;
@@ -620,8 +659,10 @@ begin
 end $$;
 
 drop function if exists public.book_session(text, date, integer, text);
+drop function if exists public.book_session(text, date, integer, text, text, text);
 create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '',
-                                               p_kind text default 'solo', p_partner text default '')
+                                               p_kind text default 'solo', p_partner text default '',
+                                               p_pay text default 'in_person')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := auth.uid();
@@ -638,6 +679,8 @@ begin
   if p_hour < 0 or p_hour > 23 then raise exception 'Invalid time.'; end if;
   if p_kind not in ('solo', 'duo') then raise exception 'Invalid session type.'; end if;
   if p_kind = 'duo' and trim(coalesce(p_partner, '')) = '' then raise exception 'Enter the name of the person you train with.'; end if;
+  if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
+  if p_pay = 'online' and public._config('online_payments') <> 'on' then raise exception 'Online payment is not available yet. Choose to pay at the headquarters.'; end if;
   if public._slot_start(p_day, p_hour) <= now() then raise exception 'This time slot has already passed.'; end if;
   if public._slot_start(p_day, p_hour) < now() + make_interval(hours => public._config('booking_notice_hours')::int) then
     raise exception 'Sessions must be booked at least % hours in advance.', public._config('booking_notice_hours');
@@ -646,11 +689,11 @@ begin
     raise exception 'You can book up to % weeks ahead.', public._config('booking_weeks_ahead');
   end if;
   if exists (select 1 from public.bookings where trainer_id = p_trainer and day = p_day and hour = p_hour
-             and status in ('pending', 'confirmed', 'completed')) then
+             and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
     raise exception 'Someone just booked this slot. Pick another hour.';
   end if;
   if exists (select 1 from public.bookings where user_id = uid and day = p_day and hour = p_hour
-             and status in ('pending', 'confirmed', 'completed')) then
+             and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
     raise exception 'You already have a session at this time.';
   end if;
 
@@ -659,11 +702,16 @@ begin
   q := public._quote(uid, p_trainer, p_kind);
   begin
     insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee,
-                                 kind, partner, price_type, pack_id)
-    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int, 'pending',
+                                 kind, partner, price_type, pack_id, pay_method, pay_status, request_at, request_notice_sent)
+    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int,
+            case when q ->> 'type' <> 'pack' and p_pay = 'online' then 'awaiting_payment' else 'pending' end,
             (q ->> 'price')::numeric, (q ->> 'fee')::numeric,
             p_kind, case when p_kind = 'duo' then left(trim(p_partner), 40) else '' end,
-            q ->> 'type', (q ->> 'packId')::uuid)
+            q ->> 'type', (q ->> 'packId')::uuid,
+            case when q ->> 'type' = 'pack' then 'pack' else p_pay end,
+            case when q ->> 'type' = 'pack' then 'n/a' else 'unpaid' end,
+            case when q ->> 'type' <> 'pack' and p_pay = 'online' then null else now() end,
+            not (q ->> 'type' <> 'pack' and p_pay = 'online'))
     returning * into b;
   exception when unique_violation then
     raise exception 'Someone just booked this slot. Pick another hour.';
@@ -685,7 +733,8 @@ begin
   if b.status <> 'pending' then raise exception 'This request has already been handled.'; end if;
   if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session time has already passed.'; end if;
   update public.bookings
-    set status = case when p_accept then 'confirmed' else 'declined' end, responded_at = now()
+    set status = case when p_accept then 'confirmed' else 'declined' end, responded_at = now(),
+        refund_status = case when p_accept then refund_status else public._refund_state(b) end
     where id = p_id returning * into b;
   return public._booking_json(b);
 end $$;
@@ -752,12 +801,18 @@ begin
   if not found or (b.user_id <> auth.uid() and not public.is_admin()) then
     raise exception 'Booking not found.';
   end if;
-  if b.status not in ('pending', 'confirmed') then raise exception 'This session can no longer be cancelled.'; end if;
+  if b.status not in ('awaiting_payment', 'pending', 'confirmed') then raise exception 'This session can no longer be cancelled.'; end if;
   if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session has already started.'; end if;
   if b.status = 'confirmed' and b.user_id = auth.uid() and not public.is_admin()
      and public._slot_start(b.day, b.hour) - make_interval(hours => public._config('free_cancel_hours')::int) < now() then
     update public.bookings set status = 'late_cancel', responded_at = now() where id = p_id returning * into b;
     return public._booking_json(b) || jsonb_build_object('late', true);
+  end if;
+  -- paid: keep the row as cancelled so the refund is tracked; unpaid: just remove it
+  if b.pay_status = 'paid' then
+    update public.bookings set status = 'cancelled', responded_at = now(), refund_status = public._refund_state(b)
+      where id = p_id returning * into b;
+    return public._booking_json(b) || jsonb_build_object('late', false);
   end if;
   result := public._booking_json(b) || jsonb_build_object('late', false);
   delete from public.bookings where id = p_id;
@@ -789,8 +844,16 @@ begin
     where b.status = 'expired' and b.notice_sent_at is null
       and (b.user_id = auth.uid() or public._can_coach(b.trainer_id))
     returning b.*
+  ), requests as (
+    -- paid online requests: the trainer's email goes out once the payment is in
+    update public.bookings b set request_notice_sent = true
+    where not b.request_notice_sent and b.status = 'pending'
+      and (b.user_id = auth.uid() or public._can_coach(b.trainer_id))
+    returning b.*
   )
-  select coalesce(jsonb_agg(public._booking_json(c)), '[]'::jsonb) into result from claimed c;
+  select coalesce((select jsonb_agg(public._booking_json(c) || jsonb_build_object('notice', 'expired')) from claimed c), '[]'::jsonb)
+      || coalesce((select jsonb_agg(public._booking_json(r) || jsonb_build_object('notice', 'requested')) from requests r), '[]'::jsonb)
+    into result;
   return result;
 end $$;
 
@@ -845,7 +908,9 @@ language sql stable security definer set search_path = public as $$
   from public.bookings b
   where b.day between p_from and least(p_to, p_from + 70)
     and (b.status in ('confirmed', 'completed')
-         or (b.status = 'pending' and public._confirm_deadline(b.created_at, b.day, b.hour) > now()));
+         or (b.status = 'pending' and public._confirm_deadline(coalesce(b.request_at, b.created_at), b.day, b.hour) > now())
+         or (b.status = 'awaiting_payment'
+             and b.created_at + make_interval(mins => public._config('payment_hold_minutes')::int) > now()));
 $$;
 
 -- Trainer levels count completed sessions only
@@ -1106,12 +1171,15 @@ returns jsonb language sql stable security definer set search_path = public as $
     'introPrice', public._config('intro_price')::numeric,
     'duoPrice', public._config('duo_price')::numeric,
     'packs', public._config('packs')::jsonb,
+    'onlinePayments', public._config('online_payments') = 'on',
+    'hq', 'Hoogstraat 40, 9308 Aalst',
     'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
   );
 $$;
 
 -- A player asks for a pack; it gives credits once an admin marks it as paid
-create or replace function public.request_pack(p_size integer)
+drop function if exists public.request_pack(integer);
+create or replace function public.request_pack(p_size integer, p_pay text default 'in_person')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   opt jsonb;
@@ -1120,10 +1188,12 @@ begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
   select o into opt from jsonb_array_elements(public._config('packs')::jsonb) o where (o ->> 'size')::int = p_size;
   if opt is null then raise exception 'This pack is not available.'; end if;
+  if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
+  if p_pay = 'online' and public._config('online_payments') <> 'on' then raise exception 'Online payment is not available yet.'; end if;
   if exists (select 1 from public.session_packs where user_id = auth.uid() and status = 'requested') then
     raise exception 'You already have a pack waiting for payment.';
   end if;
-  insert into public.session_packs (user_id, size, price) values (auth.uid(), p_size, (opt ->> 'price')::numeric)
+  insert into public.session_packs (user_id, size, price, pay_method) values (auth.uid(), p_size, (opt ->> 'price')::numeric, p_pay)
     returning * into sp;
   return public._pack_json(sp);
 end $$;
@@ -1165,6 +1235,148 @@ begin
   end if;
   insert into public.trainer_pricing (trainer_id, price, fee) values (p_trainer, p_price, p_fee)
   on conflict (trainer_id) do update set price = excluded.price, fee = excluded.fee;
+end $$;
+
+-- ---------------------------------------------------------
+-- Payments (Mollie through the 'payments' Edge Function)
+-- ---------------------------------------------------------
+-- The logged-in player asks to pay a booking or pack online: checks it's theirs and still payable
+create or replace function public.payment_request(p_type text, p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  b public.bookings;
+  sp public.session_packs;
+  t public.trainers;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if public._config('online_payments') <> 'on' then raise exception 'Online payment is not available yet.'; end if;
+  if p_type = 'booking' then
+    select * into b from public.bookings where id = p_id and user_id = auth.uid();
+    if not found then raise exception 'Booking not found.'; end if;
+    if b.pay_method = 'pack' or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
+    if b.status not in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel') then
+      raise exception 'This booking can''t be paid anymore.';
+    end if;
+    select * into t from public.trainers where id = b.trainer_id;
+    return jsonb_build_object('type', 'booking', 'id', b.id, 'amount', b.price,
+      'description', 'LEVEL-UP ' || case when b.kind = 'duo' then 'duo ' else '' end || 'session with '
+                     || split_part(t.name, ' ', 1) || ' ' || to_char(b.day, 'DD-MM-YYYY') || ' ' || lpad(b.hour::text, 2, '0') || ':00');
+  elsif p_type = 'pack' then
+    select * into sp from public.session_packs where id = p_id and user_id = auth.uid();
+    if not found then raise exception 'Pack not found.'; end if;
+    if sp.status <> 'requested' then raise exception 'This pack doesn''t need a payment.'; end if;
+    return jsonb_build_object('type', 'pack', 'id', sp.id, 'amount', sp.price,
+      'description', 'LEVEL-UP ' || sp.size || '-session pack');
+  end if;
+  raise exception 'Unknown payment type.';
+end $$;
+
+-- Edge Function only (service role): remember the Mollie payment for a booking or pack
+create or replace function public.attach_payment(p_type text, p_id uuid, p_mollie text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_type = 'booking' then
+    update public.bookings set mollie_id = p_mollie, pay_method = 'online' where id = p_id and pay_status = 'unpaid';
+  else
+    update public.session_packs set mollie_id = p_mollie, pay_method = 'online' where id = p_id and status = 'requested';
+  end if;
+end $$;
+
+-- Edge Function only: Mollie reported a status. Returns {action: 'refund'} when the money
+-- came in for something that no longer exists or was cancelled in the meantime.
+create or replace function public.payment_update(p_mollie text, p_status text, p_type text, p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  b public.bookings;
+  sp public.session_packs;
+begin
+  if p_type = 'booking' then
+    select * into b from public.bookings where id = p_id for update;
+    if not found then
+      return jsonb_build_object('action', case when p_status = 'paid' then 'refund' else 'none' end);
+    end if;
+    if b.mollie_id is distinct from p_mollie and b.pay_status = 'paid' then
+      -- paid twice (two payment pages): give the second one back
+      return jsonb_build_object('action', case when p_status = 'paid' then 'refund' else 'none' end);
+    end if;
+    if p_status = 'paid' then
+      if b.pay_status = 'paid' then return jsonb_build_object('action', 'none'); end if;
+      if b.status in ('expired', 'cancelled', 'declined') then
+        update public.bookings set mollie_id = p_mollie, pay_method = 'online', pay_status = 'paid', paid_at = now(),
+               refund_status = 'due' where id = p_id;
+        return jsonb_build_object('action', 'none'); -- the refund runs from refund_status
+      end if;
+      update public.bookings set mollie_id = p_mollie, pay_method = 'online', pay_status = 'paid', paid_at = now(),
+             status = case when status = 'awaiting_payment' then 'pending' else status end,
+             request_at = case when status = 'awaiting_payment' then now() else request_at end,
+             request_notice_sent = case when status = 'awaiting_payment' then false else request_notice_sent end
+        where id = p_id;
+    elsif p_status in ('failed', 'canceled', 'expired') and b.status = 'awaiting_payment' and b.mollie_id = p_mollie then
+      update public.bookings set status = 'expired', responded_at = now(), notice_sent_at = now() where id = p_id;
+    end if;
+  elsif p_type = 'pack' then
+    select * into sp from public.session_packs where id = p_id for update;
+    if not found then
+      return jsonb_build_object('action', case when p_status = 'paid' then 'refund' else 'none' end);
+    end if;
+    if p_status = 'paid' then
+      if sp.status = 'requested' then
+        update public.session_packs set status = 'paid', paid_at = now(), mollie_id = p_mollie, pay_method = 'online' where id = p_id;
+      elsif sp.status = 'cancelled' or sp.mollie_id is distinct from p_mollie then
+        return jsonb_build_object('action', 'refund');
+      end if;
+    end if;
+  end if;
+  return jsonb_build_object('action', 'none');
+end $$;
+
+-- Edge Function only: take the refunds that are due (so two calls never refund twice)
+create or replace function public.claim_refunds()
+returns jsonb language sql security definer set search_path = public as $$
+  with claimed as (
+    update public.bookings set refund_status = 'processing'
+    where refund_status = 'due' and pay_method = 'online' and mollie_id is not null
+    returning id, mollie_id, price
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'mollieId', mollie_id, 'amount', price)), '[]'::jsonb) from claimed;
+$$;
+
+-- Edge Function only: the result of a refund
+create or replace function public.refund_done(p_id uuid, p_refund text, p_ok boolean)
+returns void language sql security definer set search_path = public as $$
+  update public.bookings
+     set refund_status = case when p_ok then 'done' else 'due' end,
+         refund_id = coalesce(p_refund, refund_id),
+         pay_status = case when p_ok then 'refunded' else pay_status end
+   where id = p_id;
+$$;
+
+-- Admin: the player paid at the headquarters
+create or replace function public.mark_paid_in_person(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b public.bookings;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select * into b from public.bookings where id = p_id;
+  if not found then raise exception 'Booking not found.'; end if;
+  if b.pay_method = 'pack' or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
+  update public.bookings set pay_status = 'paid', pay_method = 'in_person', paid_at = now(),
+         status = case when status = 'awaiting_payment' then 'pending' else status end,
+         request_at = case when status = 'awaiting_payment' then now() else request_at end
+    where id = p_id returning * into b;
+  return public._booking_json(b);
+end $$;
+
+-- Admin: money paid at the desk was given back by hand
+create or replace function public.mark_refunded(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b public.bookings;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.bookings set refund_status = 'done', pay_status = 'refunded'
+    where id = p_id and refund_status = 'manual' returning * into b;
+  if not found then raise exception 'No manual refund open for this booking.'; end if;
+  return public._booking_json(b);
 end $$;
 
 -- ---------------------------------------------------------
@@ -1238,7 +1450,7 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 
 revoke execute on function public.my_data() from public, anon;
 revoke execute on function public.touch_login() from public, anon;
-revoke execute on function public.book_session(text, date, integer, text, text, text) from public, anon;
+revoke execute on function public.book_session(text, date, integer, text, text, text, text) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.log_workout(text, integer) from public, anon;
 revoke execute on function public.save_body_stats(jsonb) from public, anon;
@@ -1248,15 +1460,34 @@ revoke execute on function public.admin_data() from public, anon;
 
 grant execute on function public.my_data() to authenticated;
 grant execute on function public.touch_login() to authenticated;
-grant execute on function public.book_session(text, date, integer, text, text, text) to authenticated;
+grant execute on function public.book_session(text, date, integer, text, text, text, text) to authenticated;
 revoke execute on function public._quote(uuid, text, text) from public, anon, authenticated;
 revoke execute on function public._pack_used(uuid) from public, anon, authenticated;
 revoke execute on function public._pack_json(public.session_packs) from public, anon, authenticated;
-revoke execute on function public.request_pack(integer) from public, anon;
+revoke execute on function public.request_pack(integer, text) from public, anon;
+revoke execute on function public._refund_state(public.bookings) from public, anon, authenticated;
+revoke execute on function public.payment_request(text, uuid) from public, anon;
+revoke execute on function public.attach_payment(text, uuid, text) from public, anon, authenticated;
+revoke execute on function public.payment_update(text, text, text, uuid) from public, anon, authenticated;
+revoke execute on function public.claim_refunds() from public, anon, authenticated;
+revoke execute on function public.refund_done(uuid, text, boolean) from public, anon, authenticated;
+revoke execute on function public.mark_paid_in_person(uuid) from public, anon;
+revoke execute on function public.mark_refunded(uuid) from public, anon;
+grant execute on function public.payment_request(text, uuid) to authenticated;
+grant execute on function public.mark_paid_in_person(uuid) to authenticated;
+grant execute on function public.mark_refunded(uuid) to authenticated;
+do $$ begin
+  -- the payments Edge Function uses the service role
+  execute 'grant execute on function public.attach_payment(text, uuid, text) to service_role';
+  execute 'grant execute on function public.payment_update(text, text, text, uuid) to service_role';
+  execute 'grant execute on function public.claim_refunds() to service_role';
+  execute 'grant execute on function public.refund_done(uuid, text, boolean) to service_role';
+exception when undefined_object then null;
+end $$;
 revoke execute on function public.cancel_pack_request(uuid) from public, anon;
 revoke execute on function public.mark_pack_paid(uuid) from public, anon;
 revoke execute on function public.set_trainer_pricing(text, numeric, numeric) from public, anon;
-grant execute on function public.request_pack(integer) to authenticated;
+grant execute on function public.request_pack(integer, text) to authenticated;
 grant execute on function public.cancel_pack_request(uuid) to authenticated;
 grant execute on function public.mark_pack_paid(uuid) to authenticated;
 grant execute on function public.set_trainer_pricing(text, numeric, numeric) to authenticated;
