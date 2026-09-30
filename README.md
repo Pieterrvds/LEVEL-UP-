@@ -42,7 +42,15 @@ Event titles decide what an event does:
 - **Anything else** (intakes, days off): blocks the trainer named in the title, or Pieter when no trainer is named.
   These titles are never shown on the site.
 
-A trainer without any "available" events falls back to the hours in `TRAINERS` in `game.js`: Pieter Wednesday 19:00–21:00 and Saturday 17:00–20:00, Filip Wednesday 13:00–18:00, Maxim Sunday 9:00–18:00. Trainers can overlap: the training area fits two trainers with their clients.
+**Opening hours** are set in the admin dashboard → **Opening hours** (per trainer, including Pieter):
+- **Every week:** blocks like Wednesday 19:00–21:00. Click a block to change or move it, ✕ to delete it.
+- **Extra hours on one date** or **closed on one date** (day off, holiday, all day or a few hours).
+- 🔒 Hours with a booking or request are locked: they can be made longer, but not removed, shortened, moved
+  away or closed (the database refuses it too). Cancel or move the session first.
+- "Filip available" events in the Google Calendar still add hours; other calendar events still block them.
+They're stored in the `trainer_hours` table. The hours in `TRAINERS` in `game.js` (Pieter Wednesday 19–21 and
+Saturday 17–20, Filip Wednesday 13–18, Maxim Sunday 9–18) were copied into it once and are only used when the
+database can't be reached. Trainers can overlap: the training area fits two trainers with their clients.
 
 ## Trainers and bookings
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`

@@ -180,6 +180,25 @@ create index if not exists session_packs_user_idx on public.session_packs (user_
 alter table public.session_packs add column if not exists pay_method text not null default 'in_person';
 alter table public.session_packs add column if not exists mollie_id text;
 
+-- Bookable hours per trainer, edited in the admin dashboard:
+--   weekly hours (weekday 0 = Sunday … 6 = Saturday) that repeat every week,
+--   extra hours on one date (kind 'open'), or closed on one date (kind 'closed': day off, holiday).
+create table if not exists public.trainer_hours (
+  id uuid primary key default gen_random_uuid(),
+  trainer_id text not null references public.trainers (id) on delete cascade,
+  weekday smallint check (weekday between 0 and 6),
+  day date,
+  start_hour smallint not null check (start_hour between 0 and 23),
+  end_hour smallint not null check (end_hour between 1 and 24),
+  kind text not null default 'open' check (kind in ('open', 'closed')),
+  note text not null default '',
+  created_at timestamptz not null default now(),
+  check (end_hour > start_hour),
+  check ((weekday is null) <> (day is null)),
+  check (kind = 'open' or day is not null)
+);
+create index if not exists trainer_hours_trainer_idx on public.trainer_hours (trainer_id);
+
 -- Per-trainer price and fee (empty = the defaults in app_config). Not public.
 create table if not exists public.trainer_pricing (
   trainer_id text primary key references public.trainers (id) on delete cascade,
@@ -319,6 +338,7 @@ alter table public.calendar_cache enable row level security;
 alter table public.trainer_applications enable row level security;
 alter table public.session_packs enable row level security;
 alter table public.trainer_pricing enable row level security;
+alter table public.trainer_hours enable row level security;
 
 drop policy if exists "own packs or admin" on public.session_packs;
 create policy "own packs or admin" on public.session_packs for select using (user_id = auth.uid() or public.is_admin());
@@ -1248,6 +1268,104 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
+-- Opening hours per trainer
+-- ---------------------------------------------------------
+-- Start once with the hours that used to be in the website code; after that the admin dashboard decides
+do $$ begin
+  if not exists (select 1 from public.app_config where key = 'hours_seeded') then
+    insert into public.trainer_hours (trainer_id, weekday, start_hour, end_hour)
+    select v.t, v.w, v.a, v.b
+    from (values ('pieter', 3, 19, 21), ('pieter', 6, 17, 20), ('filip', 3, 13, 18), ('maxim', 0, 9, 18)) v(t, w, a, b)
+    where exists (select 1 from public.trainers where id = v.t)
+      and not exists (select 1 from public.trainer_hours h where h.trainer_id = v.t);
+    insert into public.app_config (key, value) values ('hours_seeded', 'yes');
+  end if;
+end $$;
+
+-- For the public schedule (no notes: they can be private)
+create or replace function public.trainer_hours_list()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
+                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind) order by h.trainer_id, h.weekday, h.day, h.start_hour), '[]'::jsonb)
+  from public.trainer_hours h join public.trainers t on t.id = h.trainer_id
+  where t.active and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1);
+$$;
+
+-- Is this hour open in the admin's hours (weekly or extra on that date, and not closed that date)?
+create or replace function public._hours_cover(p_trainer text, p_day date, p_hour integer)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.trainer_hours h where h.trainer_id = p_trainer and h.kind = 'open'
+                   and (h.weekday = extract(dow from p_day) or h.day = p_day) and p_hour >= h.start_hour and p_hour < h.end_hour)
+     and not exists (select 1 from public.trainer_hours h where h.trainer_id = p_trainer and h.kind = 'closed'
+                   and h.day = p_day and p_hour >= h.start_hour and p_hour < h.end_hour);
+$$;
+
+-- Upcoming booked or requested sessions of a trainer that are inside the open hours right now
+create or replace function public._covered_bookings(p_trainer text)
+returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(b.id), '{}') from public.bookings b
+  where b.trainer_id = p_trainer and b.status in ('awaiting_payment', 'pending', 'confirmed')
+    and public._slot_start(b.day, b.hour) > now() and public._hours_cover(b.trainer_id, b.day, b.hour);
+$$;
+
+-- Hours with a booking or request can't be removed: raise when a change left one of them outside the hours
+create or replace function public._check_booked_hours(p_trainer text, p_before uuid[])
+returns void language plpgsql stable security definer set search_path = public as $$
+declare lost text;
+begin
+  select string_agg(to_char(b.day, 'Dy DD Mon') || ' ' || lpad(b.hour::text, 2, '0') || ':00', ', ' order by b.day, b.hour)
+    into lost
+  from public.bookings b where b.id = any(p_before) and not public._hours_cover(b.trainer_id, b.day, b.hour);
+  if lost is not null then
+    raise exception 'These hours are already booked or requested: %. Cancel or move those sessions first.', lost;
+  end if;
+end $$;
+
+-- Add or change a block of hours (admin, or the trainer for their own card).
+-- p_id null = new. Weekly: p_weekday set, p_day null. One date: p_day set, p_weekday null.
+create or replace function public.save_trainer_hours(p_id uuid, p_trainer text, p_weekday integer, p_day date,
+                                                     p_start integer, p_end integer, p_kind text default 'open', p_note text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  h public.trainer_hours;
+  before uuid[] := public._covered_bookings(p_trainer);
+begin
+  if auth.uid() is null or not public._can_coach(p_trainer) then raise exception 'Only an admin or the trainer can change these hours.'; end if;
+  if not exists (select 1 from public.trainers where id = p_trainer) then raise exception 'Trainer not found.'; end if;
+  if (p_weekday is null) = (p_day is null) then raise exception 'Choose a weekday or a date.'; end if;
+  if p_start is null or p_end is null or p_start < 0 or p_end > 24 or p_end <= p_start then
+    raise exception 'The end time must be after the start time.';
+  end if;
+  if p_kind not in ('open', 'closed') or (p_kind = 'closed' and p_day is null) then raise exception 'Invalid type of hours.'; end if;
+  if p_day is not null and p_day < (now() at time zone 'Europe/Brussels')::date then raise exception 'Pick today or a date in the future.'; end if;
+  if p_id is null then
+    insert into public.trainer_hours (trainer_id, weekday, day, start_hour, end_hour, kind, note)
+    values (p_trainer, p_weekday, p_day, p_start, p_end, p_kind, left(coalesce(p_note, ''), 80)) returning * into h;
+  else
+    update public.trainer_hours set trainer_id = p_trainer, weekday = p_weekday, day = p_day, start_hour = p_start,
+           end_hour = p_end, kind = p_kind, note = left(coalesce(p_note, ''), 80)
+     where id = p_id and trainer_id = p_trainer and public._can_coach(trainer_id) returning * into h;
+    if not found then raise exception 'These hours no longer exist.'; end if;
+  end if;
+  perform public._check_booked_hours(p_trainer, before);
+  return to_jsonb(h);
+end $$;
+
+create or replace function public.delete_trainer_hours(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  t text;
+  before uuid[];
+begin
+  select trainer_id into t from public.trainer_hours where id = p_id;
+  if t is null then raise exception 'These hours no longer exist.'; end if;
+  before := public._covered_bookings(t);
+  delete from public.trainer_hours where id = p_id and public._can_coach(trainer_id);
+  if not found then raise exception 'These hours no longer exist.'; end if;
+  perform public._check_booked_hours(t, before);
+end $$;
+
+-- ---------------------------------------------------------
 -- Payments (Mollie through the 'payments' Edge Function)
 -- ---------------------------------------------------------
 -- The logged-in player asks to pay a booking or pack online: checks it's theirs and still payable
@@ -1428,7 +1546,10 @@ begin
                                   'duoPrice', public._config('duo_price')::numeric, 'duoFee', public._config('duo_trainer_fee')::numeric,
                                   'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, jsonb_build_object('price', tp.price, 'fee', tp.fee))
                                                         from public.trainer_pricing tp), '{}'::jsonb)),
-    'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc) from public.session_packs sp), '[]'::jsonb)
+    'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc) from public.session_packs sp), '[]'::jsonb),
+    'hours', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
+                          'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'note', h.note) order by h.weekday, h.day, h.start_hour)
+                       from public.trainer_hours h where h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1), '[]'::jsonb)
   );
 end $$;
 
@@ -1522,6 +1643,14 @@ grant execute on function public.cancel_pack_request(uuid) to authenticated;
 grant execute on function public.mark_pack_paid(uuid) to authenticated;
 grant execute on function public.set_trainer_pricing(text, numeric, numeric) to authenticated;
 grant execute on function public.pricing_info() to anon, authenticated;
+grant execute on function public.trainer_hours_list() to anon, authenticated;
+revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
+revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
+revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;
+revoke execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) from public, anon;
+revoke execute on function public.delete_trainer_hours(uuid) from public, anon;
+grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) to authenticated;
+grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.log_workout(text, integer) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;

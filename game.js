@@ -292,6 +292,7 @@ const LevelUp = (() => {
   let serverError = "";
   let slots = new Map();      // "trainer|date|hour" -> { id, status } (only filled in when it's yours)
   let coachBookings = [];     // bookings for the logged-in trainer's card
+  let openingHours = null;     // rows from trainer_hours (null = not loaded: use TRAINERS' hours)
   let coachEarnings = null;   // { earned, paid, owed, expected, sessions, fee, isOwner }
   // Public price list (the server's app_config decides; these are the fallbacks)
   let pricing = {
@@ -649,19 +650,67 @@ const LevelUp = (() => {
 
   // Bookable hours of a trainer on a date: calendar availability (or the
   // fallback hours) minus anything else in the trainer's calendar
+  // Opening hours from the admin dashboard (trainer_hours). While they haven't loaded
+  // (older database), the hours in TRAINERS are used instead.
   function trainerHours(trainerId, key) {
     const trainer = trainerById(trainerId);
     if (!trainer) return [];
-    let hours;
-    if (calendar.hasAvailability[trainerId]) {
-      hours = [...(calendar.availability[trainerId]?.[key] || [])];
-    } else {
+    const hours = new Set();
+    const addRange = (a, b) => { for (let h = a; h < b; h++) hours.add(h); };
+    if (openingHours) {
+      const weekday = parseDate(key).getDay();
+      openingHours.forEach((r) => {
+        if (r.trainerId !== trainerId || r.kind !== "open") return;
+        if (r.weekday === weekday || r.date === key) addRange(r.start, r.end);
+      });
+    } else if (!calendar.hasAvailability[trainerId]) {
       const range = trainer.availability[parseDate(key).getDay()];
-      hours = [];
-      if (range) for (let h = range[0]; h < range[1]; h++) hours.push(h);
+      if (range) addRange(range[0], range[1]);
     }
+    // "Filip available" events in the Google Calendar still add hours
+    (calendar.availability[trainerId]?.[key] || []).forEach((h) => hours.add(h));
+    // Closed on this date (admin dashboard) or busy in the Google Calendar
+    (openingHours || []).forEach((r) => {
+      if (r.trainerId === trainerId && r.kind === "closed" && r.date === key) for (let h = r.start; h < r.end; h++) hours.delete(h);
+    });
     const blocked = calendar.blocked[trainerId]?.[key];
-    return hours.filter((h) => !blocked || !blocked.has(h)).sort((a, b) => a - b);
+    return [...hours].filter((h) => !blocked || !blocked.has(h)).sort((a, b) => a - b);
+  }
+
+  // Weekly hours of a trainer as text, e.g. "Wed 19:00–21:00, Sat 17:00–20:00"
+  function weeklyHoursText(trainerId) {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    const rows = openingHours
+      ? openingHours.filter((r) => r.trainerId === trainerId && r.weekday !== null && r.kind === "open")
+      : Object.entries(trainerById(trainerId)?.availability || {}).map(([d, [a, b]]) => ({ weekday: Number(d), start: a, end: b }));
+    return rows.sort((a, b) => order.indexOf(a.weekday) - order.indexOf(b.weekday) || a.start - b.start)
+      .map((r) => `${days[r.weekday]} ${pad(r.start)}:00–${pad(r.end)}:00`).join(", ");
+  }
+
+  async function loadOpeningHours() {
+    try {
+      const rows = await call("trainer_hours_list");
+      openingHours = (rows || []).map((r) => ({ ...r, weekday: r.weekday === null ? null : Number(r.weekday), start: Number(r.start), end: Number(r.end) }));
+    } catch (err) {
+      openingHours = null; // database not updated yet: keep the hours from the code
+      console.error("Loading opening hours failed:", err);
+    }
+  }
+
+  async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "" }) {
+    await call("save_trainer_hours", {
+      p_id: id, p_trainer: trainerId, p_weekday: weekday, p_day: date,
+      p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note
+    });
+    await loadOpeningHours();
+    emit();
+  }
+
+  async function deleteOpeningHours(id) {
+    await call("delete_trainer_hours", { p_id: id });
+    await loadOpeningHours();
+    emit();
   }
 
   const groupSessions = (key) => calendar.groups.filter((g) => dateKey(g.start) === key);
@@ -1040,6 +1089,7 @@ const LevelUp = (() => {
       })),
       applications: data.applications || [],
       unlinkedTrainers: data.unlinkedTrainers || [],
+      hours: data.hours ? data.hours.map((r) => ({ ...r, weekday: r.weekday === null ? null : Number(r.weekday), start: Number(r.start), end: Number(r.end) })) : null,
       packs: (data.packs || []).map(normalisePack),
       pricing: {
         price: Number(data.pricing?.price ?? SESSION_PRICE),
@@ -1313,7 +1363,7 @@ const LevelUp = (() => {
       try {
         const { data } = await sb.auth.getSession();
         session = data.session;
-        await Promise.all([loadTrainerList(), loadPricing()]); // trainers before the calendar, so new trainers' open hours are recognised
+        await Promise.all([loadTrainerList(), loadPricing(), loadOpeningHours()]); // trainers before the calendar, so new trainers' open hours are recognised
         await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar(), loadLeaderboard()]);
         if (player) {
           welcomed = true;
@@ -1660,7 +1710,7 @@ const LevelUp = (() => {
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
     getPlayer, isAdmin, adminData, getLeaderboard: () => leaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     logWorkout, saveBodyStats, recordPurchase,
-    trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
