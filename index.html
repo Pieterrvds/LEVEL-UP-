@@ -68,6 +68,7 @@
             <a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>
             <a href="#team" class="btn btn-ghost">Meet the team</a>
           </div>
+          <button type="button" class="replay-open" data-replays>▶ Watch replays <span>photos &amp; video</span></button>
           <ul class="hero-stats">
             <li><strong id="trainerCount">3</strong><span>Trainers</span></li>
             <li><strong>€60</strong><span>Per 1:1 hour</span></li>
@@ -349,23 +350,6 @@
       <div id="bookingContent"></div>
     </dialog>
 
-    <!-- GALLERY -->
-    <section id="gallery" class="section">
-      <div class="container">
-        <p class="section-kicker">Level 05 · Replays</p>
-        <h2 class="section-title">In action</h2>
-        <p class="section-intro">This is what a LEVEL-UP session looks like. Follow us for the latest replays.</p>
-        <div class="gallery">
-          <figure class="gallery-item"><img src="img/galleryfotocrossfit.jpg" alt="Pull-ups in a LEVEL-UP hoodie at the CrossFit box" loading="lazy"></figure>
-          <figure class="gallery-item"><video src="img/galleryvideocrossfit.mp4" muted loop playsinline preload="metadata" controls aria-label="CrossFit training video"></video></figure>
-          <figure class="gallery-item"><img src="img/galleryfotoklimzaal.jpg" alt="LEVEL-UP hoodie at the climbing gym" loading="lazy"></figure>
-        </div>
-        <div class="btn-row gallery-cta">
-          <a href="https://www.instagram.com/levelupcrossfitpvds/" class="btn btn-ghost" target="_blank" rel="noopener">More on Instagram ↗</a>
-        </div>
-      </div>
-    </section>
-
     <!-- CONTACT -->
     <section id="contact" class="section contact">
       <div class="container contact-grid">
@@ -480,6 +464,23 @@
     </section>
   </main>
 
+
+  <!-- Replays: photos and videos, opened from the "Watch replays" buttons -->
+  <dialog class="auth-dialog replay-dialog" id="replayDialog" aria-labelledby="replayTitle">
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <p class="section-kicker">Replays</p>
+    <h2 class="auth-title" id="replayTitle">LEVEL-UP in action</h2>
+    <p class="muted">This is what a LEVEL-UP session looks like.</p>
+    <div class="gallery">
+      <figure class="gallery-item"><img src="img/galleryfotocrossfit.jpg" alt="Pull-ups in a LEVEL-UP hoodie at the CrossFit box" loading="lazy"></figure>
+      <figure class="gallery-item"><video src="img/galleryvideocrossfit.mp4" muted loop playsinline preload="none" controls aria-label="CrossFit training video"></video></figure>
+      <figure class="gallery-item"><img src="img/galleryfotoklimzaal.jpg" alt="LEVEL-UP hoodie at the climbing gym" loading="lazy"></figure>
+    </div>
+    <div class="btn-row gallery-cta">
+      <a href="https://www.instagram.com/levelupcrossfitpvds/" class="btn btn-ghost" target="_blank" rel="noopener">More on Instagram ↗</a>
+    </div>
+  </dialog>
+
   <footer class="footer">
     <div class="vine-divider" aria-hidden="true"></div>
     <div class="container footer-inner">
@@ -489,7 +490,7 @@
       </a>
       <p class="footer-contact">Hoogstraat 40, 9308 Aalst · <a href="tel:+32471955489">+32 471 95 54 89</a></p>
       <p>© <span id="year">2025</span> LEVEL-UP Personal Training. All rights reserved.</p>
-      <p class="footer-hint">Game over? Never. Continue ▶</p>
+      <p class="footer-hint"><button type="button" class="footer-replay" data-replays>▶ Replays</button> · Game over? Never. Continue ▶</p>
     </div>
   </footer>
 

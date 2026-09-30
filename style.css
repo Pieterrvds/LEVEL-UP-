@@ -1258,6 +1258,27 @@ textarea { resize: vertical; min-height: 130px; }
 .team-photo-new span { font-family: var(--pixel); font-size: 3rem; color: var(--c, var(--green-bright)); text-shadow: 4px 4px 0 #000; }
 .team-card-recruit .team-photo { object-fit: contain; background: var(--panel-2); padding: 30px; filter: invert(1) opacity(0.35); border-bottom-color: var(--line); }
 
+/* Replays dialog */
+.replay-dialog { width: min(980px, calc(100% - 32px)); max-height: 90vh; overflow-y: auto; }
+.replay-dialog .gallery { margin-top: 20px; }
+.replay-open {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 0;
+  font-family: var(--pixel);
+  font-size: 0.6rem;
+  color: var(--gold);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.replay-open span { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); }
+.replay-open:hover { color: var(--green-bright); }
+.footer-replay { padding: 0; font: inherit; color: var(--gold); background: none; border: 0; cursor: pointer; }
+.footer-replay:hover { color: var(--green-bright); }
+
 /* Gallery */
 .gallery {
   display: grid;

@@ -31,7 +31,7 @@ document.querySelectorAll("main section[id]").forEach(section => sectionObserver
 
 // ===== Reveal on scroll =====
 const revealTargets = document.querySelectorAll(
-  ".section-title, .section-intro, .quest-steps li, .class-grid, .team-grid, .gallery-item, .contact-form, .xp-board, .high-scores"
+  ".section-title, .section-intro, .quest-steps li, .class-grid, .team-grid, .contact-form, .xp-board, .high-scores"
 );
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
@@ -47,13 +47,18 @@ revealTargets.forEach(el => {
   revealObserver.observe(el);
 });
 
-// ===== Gallery video: play only while visible =====
-const galleryVideo = document.querySelector(".gallery video");
-if (galleryVideo && !prefersReducedMotion) {
-  new IntersectionObserver(([entry]) => {
-    if (entry.isIntersecting) galleryVideo.play().catch(() => {});
-    else galleryVideo.pause();
-  }, { threshold: 0.4 }).observe(galleryVideo);
+// ===== Replays dialog: photos and video, kept off the main page =====
+const replayDialog = document.getElementById("replayDialog");
+if (replayDialog) {
+  const replayVideo = replayDialog.querySelector("video");
+  document.querySelectorAll("[data-replays]").forEach((btn) => btn.addEventListener("click", () => {
+    replayDialog.showModal();
+    if (replayVideo && !prefersReducedMotion) replayVideo.play().catch(() => {});
+  }));
+  replayDialog.addEventListener("click", (event) => {
+    if (event.target === replayDialog || event.target.closest("[data-close]")) replayDialog.close();
+  });
+  replayDialog.addEventListener("close", () => replayVideo?.pause());
 }
 
 // ===== "Select class" buttons pre-fill the contact form =====
