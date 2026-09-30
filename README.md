@@ -42,7 +42,7 @@ Event titles decide what an event does:
 - **Anything else** (intakes, days off): blocks the trainer named in the title, or Pieter when no trainer is named.
   These titles are never shown on the site.
 
-A trainer without any "available" events falls back to the hours in `TRAINERS` in `game.js`.
+A trainer without any "available" events falls back to the hours in `TRAINERS` in `game.js`: Pieter Wednesday 19:00–21:00 and Saturday 17:00–20:00, Filip Wednesday 13:00–18:00, Maxim Sunday 9:00–18:00. Trainers can overlap: the training area fits two trainers with their clients.
 
 ## Trainers and bookings
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`

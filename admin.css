@@ -198,3 +198,6 @@
 .price-editor summary { cursor: pointer; font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; }
 .price-input { width: 90px; padding: 6px 8px; color: var(--text); background: #000; border: 2px solid var(--line); font: inherit; }
 .price-input:focus { border-color: var(--green-bright); outline: none; }
+.todo-panel { border-color: var(--gold); }
+.todo-panel ol { margin: 0 0 12px; padding-left: 1.3rem; display: grid; gap: 6px; }
+.todo-panel code { font-size: 0.85em; padding: 1px 5px; background: #000; border: 1px solid var(--line); overflow-wrap: anywhere; }

@@ -45,7 +45,7 @@ const LevelUp = (() => {
       img: "img/pf.jpg",
       color: "#ff7eb6",
       chartColor: "#d55181",
-      availability: {},
+      availability: { 3: [19, 21], 6: [17, 20] }, // Wednesday 19:00–21:00, Saturday 17:00–20:00
       stats: { sessions: 0, clients: 0 }
     },
     {

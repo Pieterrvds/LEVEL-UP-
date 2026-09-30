@@ -113,6 +113,19 @@ async function render() {
       <p class="data-note"><strong>Live data</strong> from the LEVEL-UP server. Schedule: ${LevelUp.calendarStatus() === "ok" ? "open hours come from the Google Calendar." : "the Google Calendar couldn't be read, so the fallback hours are used."}</p>
     </header>
 
+    ${LevelUp.getPricing().onlinePayments ? "" : `
+    <section class="panel admin-panel todo-panel">
+      <div class="panel-head"><h2>To do: online payments</h2><span class="status-chip pending">Not active</span></div>
+      <p>Everyone pays at the headquarters for now. To switch on Mollie (Bancontact, card, Payconiq):</p>
+      <ol>
+        <li>Create a Mollie account and copy the <strong>test key</strong> (<code>test_…</code>) under Developers → API keys.</li>
+        <li>Supabase → Edge Functions → Secrets: set <code>MOLLIE_API_KEY</code> to that key.</li>
+        <li>SQL Editor: <code>update public.app_config set value = 'on' where key = 'online_payments';</code></li>
+        <li>Book a test session and choose "Paid" on Mollie's test page, then swap the secret for your <strong>live key</strong>.</li>
+      </ol>
+      <p class="muted small">This reminder disappears once online payments are on. Full guide: README → Payments.</p>
+    </section>`}
+
     <section class="panel admin-panel applications" id="applications"></section>
 
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
