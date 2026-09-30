@@ -840,6 +840,12 @@ const LevelUp = (() => {
     }
   }
 
+  // The logged-in trainer's charged sessions between two dates (for their monthly statement)
+  async function coachStatement(from, to) {
+    const rows = await call("coach_statement", { p_from: from, p_to: to });
+    return (rows || []).map((b) => ({ ...b, hour: Number(b.hour), price: Number(b.price), trainerFee: Number(b.trainerFee) }));
+  }
+
   async function markPayout(trainerId) {
     const result = await call("mark_payout", { p_trainer: trainerId });
     emit();
@@ -1659,7 +1665,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
-    startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
+    startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };

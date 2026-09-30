@@ -201,3 +201,20 @@
 .todo-panel { border-color: var(--gold); }
 .todo-panel ol { margin: 0 0 12px; padding-left: 1.3rem; display: grid; gap: 6px; }
 .todo-panel code { font-size: 0.85em; padding: 1px 5px; background: #000; border: 1px solid var(--line); overflow-wrap: anywhere; }
+
+/* Finance periods, overview and statements */
+.period-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 16px; }
+.period-nav { display: flex; align-items: center; gap: 10px; flex: 1; }
+.period-label { font-size: 1rem; white-space: nowrap; }
+.kpi-caption { margin: 4px 0 8px; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.fin-sub-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }
+.fin-sub-head .panel-sub { margin: 0; }
+.overview-table .num { text-align: right; white-space: nowrap; }
+.overview-table tr.current td { background: rgba(126, 224, 106, 0.07); }
+.overview-table tr.current td:first-child { box-shadow: inset 3px 0 0 var(--green-bright); }
+.overview-table tr.total-row td { border-top: 2px solid var(--line); font-weight: 700; }
+.statement-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.statement-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; background: #000; border-left: 4px solid var(--line); }
+.statement-list li > span:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.statement-actions { display: flex; gap: 8px; }
+@media (max-width: 760px) { .period-nav { flex-basis: 100%; } }

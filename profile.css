@@ -217,3 +217,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .session-actions:empty { display: none; }
 .pack-pay { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0 0; font-size: 0.9rem; }
 .pack-pay label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.statement-box { display: grid; gap: 8px; margin: 14px 0 6px; padding: 12px 14px; background: #000; border-left: 4px solid var(--green-dark); }
+.statement-box p { margin: 0; }
+.statement-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.statement-controls select { padding: 6px 10px; color: var(--text); background: var(--panel); border: 2px solid var(--line); font: inherit; }

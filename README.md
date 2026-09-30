@@ -94,6 +94,20 @@ and the pack are saved on every booking, so later price changes never alter past
 - The admin dashboard has a **Finances** panel (revenue, your share, owed per trainer with **Mark paid**,
   packs sold) and a **Session packs** panel for pack requests.
 
+## Finance overview and statements
+Admin dashboard → **Finances**:
+- **Week / Month / All time** with ◀ ▶ to browse back: session revenue, trainer fees, your share and packs sold
+  for that period (sessions by session date, packs by payment date). "Right now" shows what is owed to trainers,
+  what is still to collect at the HQ, what is booked ahead and how many pack credits are unused.
+- **Overview per week / month:** the last 12 weeks or months (all time: every month since the first booking) with a
+  total row. **Download overview (CSV)** exports it; **Download sessions (CSV)** exports every charged session in the
+  selected period with price, trainer fee, venue share and payment.
+- **Monthly statements per trainer:** pick a month, then **PDF** (opens a printable statement: use "Save as PDF") or
+  **CSV**. It lists every charged session (completed, no-show, late cancellation) with the trainer's fee, the total,
+  what was already paid out and what is still to receive: the basis for the trainer's invoice to you.
+  Trainers download their own statement in their profile (Coach panel).
+CSV files use `;` and decimal commas, so they open directly in Excel with Belgian settings.
+
 ## Payments
 Players choose how to pay when they book (and when they buy a pack):
 - **Online (recommended, preselected):** Mollie (Bancontact, card, Payconiq…). The booking holds the hour for

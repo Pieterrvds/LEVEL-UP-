@@ -14,7 +14,8 @@ const state = {
   sort: "joined",
   bookingView: "upcoming",
   bookingTrainer: "all",
-  tables: {} // chart key -> showing table view
+  tables: {}, // chart key -> showing table view
+  fin: { mode: "month", offset: 0, statementMonth: null }
 };
 let data = null;
 const tips = new Map();
@@ -256,47 +257,99 @@ function renderApplications() {
 // session. The owner's own sessions keep the full price.
 const money = LevelUp.euro;
 
-function financeRows() {
+// Selected finance period: this/previous week or month, or all time
+function periodRange(mode, offset) {
+  const today = LevelUp.parseDate(LevelUp.dateKey());
+  if (mode === "week") {
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + offset * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { from: LevelUp.dateKey(monday), to: LevelUp.dateKey(sunday), label: `Week ${isoWeek(monday)} · ${fmtShort(monday)} – ${fmtShort(sunday)} ${sunday.getFullYear()}` };
+  }
+  if (mode === "month") {
+    const first = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+    return LevelUpStatements.monthRange(`${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return { from: "0000-01-01", to: "9999-12-31", label: "All time" };
+}
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  return Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+}
+const inRange = (key, r) => key >= r.from && key <= r.to;
+const packDay = (pk) => pk.paidAt ? LevelUp.dateKey(new Date(pk.paidAt)) : "";
+
+// Money in a period: charged sessions by session date, packs by payment date
+function periodTotals(r) {
+  const owner = data.pricing.ownerTrainerId;
+  const done = data.rawBookings.filter((b) => BILLABLE.includes(b.status) && inRange(b.date, r));
+  const revenue = done.reduce((s, b) => s + b.price, 0);
+  const fees = done.filter((b) => b.trainerId !== owner).reduce((s, b) => s + b.trainerFee, 0);
+  const packs = data.packs.filter((pk) => pk.status === "paid" && inRange(packDay(pk), r)).reduce((s, pk) => s + pk.price, 0);
+  return { ...r, done, sessions: done.length, revenue, fees, share: revenue - fees, packs };
+}
+
+// Per trainer: the period's sessions, plus what is owed right now (all time)
+function financeRows(r) {
   const { pricing, rawBookings } = data;
   const trainerIds = [...new Set([...TRAINERS.map((t) => t.id), ...rawBookings.map((b) => b.trainerId)])];
   return trainerIds.map((id) => {
     const own = rawBookings.filter((b) => b.trainerId === id);
-    const done = own.filter((b) => BILLABLE.includes(b.status));
-    const upcoming = own.filter(isUpcoming);
+    const all = own.filter((b) => BILLABLE.includes(b.status));
+    const done = all.filter((b) => inRange(b.date, r));
     const isOwner = id === pricing.ownerTrainerId;
-    const earned = done.reduce((s, b) => s + b.trainerFee, 0);
-    const paid = isOwner ? earned : done.filter((b) => b.payoutAt).reduce((s, b) => s + b.trainerFee, 0);
-    const payouts = done.map((b) => b.payoutAt).filter(Boolean).sort();
+    const earnedAll = all.reduce((s, b) => s + b.trainerFee, 0);
+    const paidAll = isOwner ? earnedAll : all.filter((b) => b.payoutAt).reduce((s, b) => s + b.trainerFee, 0);
+    const payouts = all.map((b) => b.payoutAt).filter(Boolean).sort();
+    const upcoming = own.filter(isUpcoming);
     return {
       id,
       trainer: LevelUp.trainerById(id),
       isOwner,
       sessions: done.length,
       revenue: done.reduce((s, b) => s + b.price, 0),
-      earned,
-      paid,
-      owed: earned - paid,
-      unpaidSessions: isOwner ? 0 : done.filter((b) => !b.payoutAt).length,
+      earned: done.reduce((s, b) => s + b.trainerFee, 0),
+      owed: earnedAll - paidAll,
+      unpaidSessions: isOwner ? 0 : all.filter((b) => !b.payoutAt).length,
       expected: upcoming.filter((b) => b.status === "confirmed").reduce((s, b) => s + b.trainerFee, 0),
       pipeline: upcoming.reduce((s, b) => s + b.price, 0),
       lastPayout: payouts[payouts.length - 1] || null
     };
-  }).filter((r) => r.trainer || r.sessions);
+  }).filter((x) => x.trainer || x.sessions);
+}
+
+// Rows of the overview table: the 12 weeks/months up to the selected one (all time: every month)
+function overviewRows() {
+  const { mode, offset } = state.fin;
+  const first = [...data.rawBookings.map((b) => b.date), ...data.packs.map(packDay)].filter(Boolean).sort()[0] || LevelUp.dateKey();
+  // no rows before LEVEL-UP's first booking (the selected period always shows)
+  const keep = (rows) => rows.filter((o, i) => i === 0 || o.to >= first);
+  if (mode === "week") return keep(Array.from({ length: 12 }, (_, i) => periodTotals(periodRange("week", offset - i))));
+  let count = 12;
+  if (mode === "all") {
+    const today = new Date();
+    count = first ? Math.max(1, (today.getFullYear() - +first.slice(0, 4)) * 12 + today.getMonth() + 1 - +first.slice(5, 7) + 1) : 1;
+  }
+  return keep(Array.from({ length: count }, (_, i) => periodTotals(periodRange("month", (mode === "month" ? offset : 0) - i))));
 }
 
 function renderFinances() {
   const el = document.getElementById("finances");
   const { pricing } = data;
-  const rows = financeRows();
-  const revenue = rows.reduce((s, r) => s + r.revenue, 0);
-  const trainerShare = rows.filter((r) => !r.isOwner).reduce((s, r) => s + r.earned, 0);
+  const { mode, offset } = state.fin;
+  const period = periodTotals(periodRange(mode, offset));
+  const rows = financeRows(period);
   const owed = rows.reduce((s, r) => s + r.owed, 0);
   const pipeline = rows.reduce((s, r) => s + r.pipeline, 0);
   const paidPacks = data.packs.filter((pk) => pk.status === "paid");
-  const packSales = paidPacks.reduce((s, pk) => s + pk.price, 0);
   const unusedCredits = paidPacks.reduce((n, pk) => n + pk.remaining, 0);
   const collect = data.rawBookings.filter(toCollect);
   const refundsOpen = data.rawBookings.filter((b) => b.refundStatus === "manual");
+  const overview = overviewRows();
+  const months = LevelUpStatements.recentMonths(13);
+  const statementMonth = state.fin.statementMonth || (mode === "month" ? period.from.slice(0, 7) : months[0]);
   const tile = (label, value, note, cls = "") => `
     <div class="kpi ${cls}"><span class="kpi-label">${label}</span><span class="kpi-value">${value}</span><span class="kpi-note">${note}</span></div>`;
 
@@ -305,24 +358,43 @@ function renderFinances() {
       <h2>Finances</h2>
       <span class="muted">${money(pricing.price)} per session · trainer gets ${money(pricing.fee)} · you keep ${money(pricing.price - pricing.fee)} (and the full ${money(pricing.price)} for your own sessions)</span>
     </div>
-    <div class="finance-kpis">
-      ${tile("Session revenue", money(revenue), `${plural(rows.reduce((s, r) => s + r.sessions, 0), "charged session")} (incl. no-shows &amp; late cancels)`)}
-      ${tile("Your share", money(revenue - trainerShare), "Venue share + your own sessions", "good")}
-      ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
-      ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
-      ${tile("To collect", money(collect.reduce((s, b) => s + b.price, 0)), collect.length ? `${plural(collect.length, "session")} not paid yet (HQ)` : "Everything is paid", collect.length ? "warn" : "")}
-      ${tile("Packs sold", money(packSales), `${plural(paidPacks.length, "pack")} · ${plural(unusedCredits, "credit")} not used yet`)}
+
+    <div class="period-bar">
+      <div class="filter-tabs" role="tablist" aria-label="Period">
+        ${[["week", "Week"], ["month", "Month"], ["all", "All time"]].map(([v, l]) => `<button type="button" role="tab" data-fin-mode="${v}" aria-selected="${mode === v}">${l}</button>`).join("")}
+      </div>
+      <div class="period-nav">
+        ${mode === "all" ? "" : `<button type="button" class="week-btn" data-fin-step="-1" aria-label="Previous ${mode}">◀</button>`}
+        <strong class="period-label">${esc(period.label)}</strong>
+        ${mode === "all" ? "" : `<button type="button" class="week-btn" data-fin-step="1" aria-label="Next ${mode}" ${offset >= 0 ? "disabled" : ""}>▶</button>`}
+        ${mode !== "all" && offset !== 0 ? `<button type="button" class="link-btn" data-fin-now>Back to this ${mode}</button>` : ""}
+      </div>
+      <button type="button" class="btn btn-small btn-ghost" data-export="sessions">Download sessions (CSV)</button>
     </div>
+
+    <div class="finance-kpis">
+      ${tile("Session revenue", money(period.revenue), `${plural(period.sessions, "charged session")}`)}
+      ${tile("Trainer fees", money(period.fees), "Earned by the trainers")}
+      ${tile("Your share", money(period.share), "Venue share + your own sessions", "good")}
+      ${tile("Packs sold", money(period.packs), "Paid up front (their sessions count at pack price)")}
+    </div>
+    <p class="kpi-caption">Right now</p>
+    <div class="finance-kpis">
+      ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
+      ${tile("To collect", money(collect.reduce((s, b) => s + b.price, 0)), collect.length ? `${plural(collect.length, "session")} not paid yet (HQ)` : "Everything is paid", collect.length ? "warn" : "")}
+      ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
+      ${tile("Unused credits", String(unusedCredits), `${plural(paidPacks.length, "pack")} sold in total`)}
+    </div>
+
     <div class="table-wrap">
       <table class="data-table finance-table">
-        <thead><tr><th>Trainer</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer earned</th><th class="num">Paid out</th><th class="num">Owed</th><th class="num">Expected</th><th></th></tr></thead>
+        <thead><tr><th>Trainer</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer earned</th><th class="num">Owed now</th><th class="num">Expected</th><th></th></tr></thead>
         <tbody>${rows.map((r) => `
           <tr>
             <td><span class="dot" style="--c:${r.trainer?.chartColor || "#888"}" aria-hidden="true"></span>${esc(r.trainer?.name || r.id)}${r.isOwner ? ` <span class="muted small">· owner</span>` : ""}</td>
             <td class="num">${r.sessions}</td>
             <td class="num">${money(r.revenue)}</td>
             <td class="num">${r.isOwner ? `<span class="muted">you</span>` : money(r.earned)}</td>
-            <td class="num">${r.isOwner ? "–" : money(r.paid)}</td>
             <td class="num ${r.owed ? "owed" : ""}">${r.isOwner ? "–" : money(r.owed)}</td>
             <td class="num">${r.isOwner ? "–" : money(r.expected)}</td>
             <td class="finance-action">${!r.isOwner && r.owed
@@ -332,11 +404,60 @@ function renderFinances() {
         </tbody>
       </table>
     </div>
+    <p class="muted small">Sessions, revenue and trainer earned are for ${esc(period.label.toLowerCase() === "all time" ? "all time" : period.label)}; "Owed now" and "Expected" are always the current totals.</p>
     ${(() => {
       const open = data.rawBookings.filter(toSettle);
       return (refundsOpen.length ? `<p class="settle-note">⚠ ${plural(refundsOpen.length, "payment")} made at the HQ must be given back by hand (${money(refundsOpen.reduce((s, b) => s + b.price, 0))}). Press "Refunded" in Bookings once done.</p>` : "")
         + (open.length ? `<p class="settle-note">⚠ ${plural(open.length, "confirmed session")} still to settle (reward or no-show). Trainers have ${LevelUp.REWARD_WINDOW_DAYS} days; you can settle any time under Bookings → past.</p>` : "");
     })()}
+
+    <div class="fin-sub-head">
+      <h3 class="panel-sub">Overview per ${mode === "week" ? "week" : "month"}</h3>
+      <button type="button" class="btn btn-small btn-ghost" data-export="overview">Download overview (CSV)</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table overview-table">
+        <thead><tr><th>${mode === "week" ? "Week" : "Month"}</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer fees</th><th class="num">Your share</th><th class="num">Packs sold</th></tr></thead>
+        <tbody>${overview.map((o, i) => `
+          <tr class="${i === 0 && mode !== "all" ? "current" : ""}">
+            <td class="nowrap">${esc(mode === "week" ? o.label.split(" · ")[0] + " · " + o.label.split(" · ")[1] : o.label)}</td>
+            <td class="num">${o.sessions || `<span class="muted">0</span>`}</td>
+            <td class="num">${money(o.revenue)}</td>
+            <td class="num">${money(o.fees)}</td>
+            <td class="num">${money(o.share)}</td>
+            <td class="num">${money(o.packs)}</td>
+          </tr>`).join("")}
+          <tr class="total-row">
+            <td>Total</td>
+            <td class="num">${overview.reduce((s, o) => s + o.sessions, 0)}</td>
+            <td class="num">${money(overview.reduce((s, o) => s + o.revenue, 0))}</td>
+            <td class="num">${money(overview.reduce((s, o) => s + o.fees, 0))}</td>
+            <td class="num">${money(overview.reduce((s, o) => s + o.share, 0))}</td>
+            <td class="num">${money(overview.reduce((s, o) => s + o.packs, 0))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="fin-sub-head">
+      <h3 class="panel-sub">Monthly statements per trainer</h3>
+      <label class="sort-field"><span>Month</span>
+        <select id="statementMonth">${months.map((m) => `<option value="${m}" ${m === statementMonth ? "selected" : ""}>${esc(LevelUpStatements.monthRange(m).label)}</option>`).join("")}</select>
+      </label>
+    </div>
+    <p class="muted small">A list of every charged session and the total fee, as the basis for the trainer's invoice to you. Trainers can download their own statement in their profile too.</p>
+    <ul class="statement-list">${rows.filter((r) => !r.isOwner).map((r) => {
+      const st = LevelUpStatements.build(r.id, statementMonth, data.rawBookings);
+      return `<li>
+        <span><span class="dot" style="--c:${r.trainer?.chartColor || "#888"}" aria-hidden="true"></span><strong>${esc(r.trainer?.name || r.id)}</strong>
+          <span class="muted small">${plural(st.rows.length, "session")} · ${money(st.total)}${st.open ? ` · ${money(st.open)} still to pay` : st.rows.length ? " · all paid out" : ""}</span></span>
+        <span class="statement-actions">
+          <button type="button" class="btn btn-small btn-primary" data-statement="pdf" data-trainer="${esc(r.id)}">PDF</button>
+          <button type="button" class="btn btn-small btn-ghost" data-statement="csv" data-trainer="${esc(r.id)}">CSV</button>
+        </span>
+      </li>`;
+    }).join("")}</ul>
+
     <details class="price-editor">
       <summary>Prices per trainer</summary>
       <p class="muted small">Leave a field empty to use the default (${money(pricing.price)} per session, trainer gets ${money(pricing.fee)}). First session ${money(pricing.introPrice)}, duo ${money(pricing.duoPrice)} (trainer ${money(pricing.duoFee)}) and packs are the same for every trainer. New prices only apply to new bookings.</p>
@@ -354,7 +475,7 @@ function renderFinances() {
         }).join("")}</tbody>
       </table></div>
     </details>
-    <p class="muted small">A session counts once it is rewarded, marked as no-show or cancelled late by the client (those two are charged in full). First sessions (${money(pricing.introPrice)}) still pay the trainer their full fee; the difference comes out of your share. Pack sessions count at their pack price per session. "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
+    <p class="muted small">A session counts once it is rewarded, marked as no-show or cancelled late by the client (those two are charged in full). First sessions (${money(pricing.introPrice)}) still pay the trainer their full fee; the difference comes out of your share. Pack sessions count at their pack price per session. "Expected" is the trainer fee of confirmed upcoming sessions. "Mark paid" records that you paid the trainer yourself (bank transfer or cash).</p>`;
 }
 
 // ---------- Session packs ----------
@@ -1001,6 +1122,37 @@ root.addEventListener("click", (event) => {
     action.catch((err) => { btn.disabled = false; alert(err.message); });
     return;
   }
+  const finMode = event.target.closest("[data-fin-mode]");
+  const finStep = event.target.closest("[data-fin-step]");
+  if (finMode || finStep || event.target.closest("[data-fin-now]")) {
+    if (finMode) state.fin = { ...state.fin, mode: finMode.dataset.finMode, offset: 0 };
+    else if (finStep) state.fin.offset = Math.min(0, state.fin.offset + Number(finStep.dataset.finStep));
+    else state.fin.offset = 0;
+    state.fin.statementMonth = null;
+    renderFinances();
+    return;
+  }
+  const exportBtn = event.target.closest("[data-export]");
+  if (exportBtn) {
+    const period = periodTotals(periodRange(state.fin.mode, state.fin.offset));
+    const tag = state.fin.mode === "all" ? "all-time" : period.from + "_" + period.to;
+    if (exportBtn.dataset.export === "sessions") {
+      LevelUpStatements.sessionsCsv(`level-up-sessions-${tag}.csv`,
+        [...period.done].sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour)), data.pricing.ownerTrainerId);
+    } else {
+      LevelUpStatements.overviewCsv(`level-up-overview-per-${state.fin.mode === "week" ? "week" : "month"}.csv`,
+        overviewRows().map((o) => ({ ...o, label: o.label })));
+    }
+    return;
+  }
+  const statementBtn = event.target.closest("[data-statement]");
+  if (statementBtn) {
+    const month = document.getElementById("statementMonth").value;
+    const st = LevelUpStatements.build(statementBtn.dataset.trainer, month, data.rawBookings);
+    if (statementBtn.dataset.statement === "pdf") LevelUpStatements.statementPdf(st);
+    else LevelUpStatements.statementCsv(st);
+    return;
+  }
   const paidHq = event.target.closest("[data-paid-hq]");
   const refunded = event.target.closest("[data-refunded]");
   if (paidHq || refunded) {
@@ -1076,6 +1228,10 @@ root.addEventListener("change", (event) => {
   if (event.target.id === "memberSort") {
     state.sort = event.target.value;
     renderMembers();
+  }
+  if (event.target.id === "statementMonth") {
+    state.fin.statementMonth = event.target.value;
+    renderFinances();
   }
 });
 

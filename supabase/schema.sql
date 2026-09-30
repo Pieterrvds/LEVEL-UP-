@@ -881,6 +881,16 @@ returns jsonb language sql stable security definer set search_path = public as $
   group by t.id;
 $$;
 
+-- A trainer's charged sessions in a period, for their monthly statement (basis for their invoice)
+create or replace function public.coach_statement(p_from date, p_to date)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(public._booking_json(b) order by b.day, b.hour), '[]'::jsonb)
+  from public.bookings b
+  join public.trainers t on t.id = b.trainer_id
+  where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+    and public._billable(b.status) and b.day between p_from and least(p_to, p_from + 62);
+$$;
+
 -- Admin: record that a trainer's open earnings have been paid out
 create or replace function public.mark_payout(p_trainer text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -1451,6 +1461,8 @@ grant execute on function public.coach_bookings() to authenticated;
 revoke execute on function public.coach_earnings() from public, anon;
 revoke execute on function public.mark_payout(text) from public, anon;
 grant execute on function public.coach_earnings() to authenticated;
+revoke execute on function public.coach_statement(date, date) from public, anon;
+grant execute on function public.coach_statement(date, date) to authenticated;
 grant execute on function public.mark_payout(text) to authenticated;
 revoke execute on function public.apply_as_trainer(jsonb) from public, anon;
 revoke execute on function public.review_trainer_application(uuid, boolean, text) from public, anon;

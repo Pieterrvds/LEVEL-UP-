@@ -230,6 +230,16 @@ function renderEarnings() {
       <div class="tile"><span class="tile-label">Paid out</span><span class="tile-value">${eur(e.paid)}</span><span class="tile-note">${e.lastPayout ? `Last on ${formatDate(e.lastPayout)}` : "No payouts yet"}</span></div>
       <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed sessions</span></div>
     </div>
+    <div class="statement-box">
+      <p><strong>Monthly statement</strong> <span class="muted small-text">every charged session and your total, as the basis for your invoice to LEVEL-UP</span></p>
+      <div class="statement-controls">
+        <label class="sr-only" for="statementMonth">Month</label>
+        <select id="statementMonth">${LevelUpStatements.recentMonths(13).map((m) => `<option value="${m}">${esc(LevelUpStatements.monthRange(m).label)}</option>`).join("")}</select>
+        <button type="button" class="btn btn-small btn-primary" data-my-statement="pdf">PDF</button>
+        <button type="button" class="btn btn-small btn-ghost" data-my-statement="csv">CSV</button>
+      </div>
+      <p class="form-error" role="alert" id="statementError"></p>
+    </div>
     <p class="muted small-text">You earn ${eur(e.fee)} of the ${eur(e.price)} per session. It counts once you reward the session or mark a no-show (within ${LevelUp.REWARD_WINDOW_DAYS} days); late cancellations by the client count too. LEVEL-UP pays out what you've earned.</p>`;
 }
 
@@ -680,6 +690,24 @@ function bindEvents(player) {
     event.target.textContent = "To the payment page…";
     try { await LevelUp.startPayment("pack", event.target.dataset.packPay); }
     catch (err) { event.target.disabled = false; document.getElementById("packError").textContent = err.message; }
+  });
+  root.querySelectorAll("[data-my-statement]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const month = document.getElementById("statementMonth").value;
+      const range = LevelUpStatements.monthRange(month);
+      const pdf = button.dataset.myStatement === "pdf";
+      const win = pdf ? window.open("", "_blank") : null; // open now, or pop-up blockers stop it after loading
+      button.disabled = true;
+      try {
+        const rows = await LevelUp.coachStatement(range.from, range.to);
+        const st = LevelUpStatements.build(LevelUp.getPlayer().trainerId, month, rows);
+        if (pdf) LevelUpStatements.statementPdf(st, win); else LevelUpStatements.statementCsv(st);
+      } catch (err) {
+        win?.close();
+        document.getElementById("statementError").textContent = err.message;
+      }
+      button.disabled = false;
+    });
   });
   root.querySelectorAll("[data-pay-hq]").forEach((button) => {
     button.addEventListener("click", async () => {
