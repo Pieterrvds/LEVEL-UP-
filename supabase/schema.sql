@@ -1282,11 +1282,13 @@ do $$ begin
   end if;
 end $$;
 
--- For the public schedule (no notes: they can be private)
+-- For the schedule and the hours editors. Notes (can be private) only for the admin and the trainer themselves.
 create or replace function public.trainer_hours_list()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
-                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind) order by h.trainer_id, h.weekday, h.day, h.start_hour), '[]'::jsonb)
+                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind,
+                    'note', case when public._can_coach(h.trainer_id) then h.note else '' end)
+                  order by h.trainer_id, h.weekday, h.day, h.start_hour), '[]'::jsonb)
   from public.trainer_hours h join public.trainers t on t.id = h.trainer_id
   where t.active and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1);
 $$;

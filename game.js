@@ -1182,7 +1182,7 @@ const LevelUp = (() => {
       return;
     }
     if ((event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && player) return;
-    await Promise.all([refreshPlayer(), loadSlots(), loadLeaderboard(), loadTrainerStats()]);
+    await Promise.all([refreshPlayer(), loadSlots(), loadLeaderboard(), loadTrainerStats(), loadOpeningHours()]);
     if (!wasLoggedIn && player && !welcomed) {
       welcomed = true;
       call("touch_login").catch(() => {});
@@ -1710,7 +1710,7 @@ const LevelUp = (() => {
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
     getPlayer, isAdmin, adminData, getLeaderboard: () => leaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     logWorkout, saveBodyStats, recordPurchase,
-    trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,

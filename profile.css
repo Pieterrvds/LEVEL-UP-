@@ -221,3 +221,13 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .statement-box p { margin: 0; }
 .statement-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .statement-controls select { padding: 6px 10px; color: var(--text); background: var(--panel); border: 2px solid var(--line); font: inherit; }
+
+/* Trainer: my opening hours */
+.my-hours { margin-top: 20px; padding: 12px 14px; background: rgba(0, 0, 0, 0.35); border: 2px solid var(--line); }
+.my-hours > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; cursor: pointer; list-style: none; }
+.my-hours > summary::-webkit-details-marker { display: none; }
+.my-hours > summary .panel-sub { margin: 0; color: var(--gold); }
+.my-hours > summary .panel-sub::before { content: "▶ "; }
+.my-hours[open] > summary .panel-sub::before { content: "▼ "; }
+.my-hours[open] > summary { margin-bottom: 8px; }
+.hours-editor .small { font-size: 0.8rem; }

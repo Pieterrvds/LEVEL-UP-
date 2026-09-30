@@ -10,6 +10,7 @@ const WORKOUT_TYPES = [
 
 let workoutMessage = "";
 let lastWorkout = { type: "CrossFit", minutes: 60 };
+const state = { hoursOpen: false }; // "My opening hours" stays open between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -286,6 +287,10 @@ function renderCoachPanel() {
         : `<p class="muted">Nothing to settle. From the day of a confirmed session you can reward it here.</p>`}
       ${settledToday.length ? `<h3 class="panel-sub">Settled today</h3><ul class="session-list">${settledToday.map((b) => row(b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul>` : ""}
       ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3><ul class="session-list">${upcoming.map((b) => row(b)).join("")}</ul>` : ""}
+      <details class="my-hours" id="myHoursBox" ${state.hoursOpen ? "open" : ""}>
+        <summary><span class="panel-sub">My opening hours</span> <span class="muted small-text">${esc(LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId) || "no weekly hours yet: players can't book you")}</span></summary>
+        <div id="myHours"></div>
+      </details>
       ${missed.length ? `<h3 class="panel-sub">Past the ${LevelUp.REWARD_WINDOW_DAYS}-day window</h3><p class="muted small-text">Ask Pieter to settle these in the admin dashboard.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
     </section>`;
 }
@@ -616,6 +621,16 @@ function bindEvents(player) {
     }
     render();
   });
+
+  if (LevelUp.isTrainer()) {
+    LevelUpHours.render(document.getElementById("myHours"), {
+      key: "profile",
+      trainers: [LevelUp.getPlayer().trainerId],
+      bookings: () => LevelUp.getCoachBookings(),
+      intro: `<p class="muted small-text">When players can book you on the schedule. Hours with a booking or request are locked.</p>`
+    });
+    document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
+  }
 
   root.querySelectorAll("[data-coach]").forEach((button) => {
     button.addEventListener("click", async () => {

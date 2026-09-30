@@ -15,9 +15,7 @@ const state = {
   bookingView: "upcoming",
   bookingTrainer: "all",
   tables: {}, // chart key -> showing table view
-  fin: { mode: "month", offset: 0, statementMonth: null },
-  hoursTrainer: null, // trainer shown in Opening hours
-  hoursEdit: null     // id of the hours being edited
+  fin: { mode: "month", offset: 0, statementMonth: null }
 };
 let data = null;
 const tips = new Map();
@@ -953,178 +951,14 @@ function renderTrainerCards() {
   }).join("");
 }
 
-// ---------- Opening hours ----------
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-const hh = (h) => `${String(h).padStart(2, "0")}:00`;
-const hourOptions = (from, to, selected) => Array.from({ length: to - from + 1 }, (_, i) => from + i)
-  .map((h) => `<option value="${h}" ${h === selected ? "selected" : ""}>${hh(h)}</option>`).join("");
-
-// Booked or requested hours are locked: a change may never leave them outside the open hours
-// (the server checks the same). covers() mirrors _hours_cover in schema.sql.
-function covers(rows, b) {
-  const dow = LevelUp.parseDate(b.date).getDay();
-  const inside = (r) => b.hour >= r.start && b.hour < r.end;
-  return rows.some((r) => r.trainerId === b.trainerId && r.kind === "open" && (r.weekday === dow || r.date === b.date) && inside(r))
-    && !rows.some((r) => r.trainerId === b.trainerId && r.kind === "closed" && r.date === b.date && inside(r));
-}
-// Sessions that would lose their hours if `after` replaced the current hours
-function lostBookings(trainerId, after) {
-  return data.bookings.filter((b) => b.trainerId === trainerId && isUpcoming(b) && covers(data.hours, b) && !covers(after, b));
-}
-const bookingList = (list) => list.slice(0, 5).map((b) => `• ${slotLabel(b)} with ${b.name} (${STATUS_LABEL[b.status].toLowerCase()})`).join("\n") + (list.length > 5 ? `\n• and ${list.length - 5} more` : "");
-const lockedMessage = (list) => `These hours are already booked or requested, so they can't be removed:\n${bookingList(list)}\n\nCancel or move those sessions first.`;
-
+// ---------- Opening hours (shared editor in hours-editor.js) ----------
 function renderHours() {
-  const el = document.getElementById("hoursPanel");
-  if (!el) return;
-  if (!data.hours) {
-    el.innerHTML = `<div class="panel-head"><h2>Opening hours</h2></div><p class="muted">Run the latest <code>supabase/schema.sql</code> in Supabase to edit the hours here.</p>`;
-    return;
-  }
-  const trainerId = state.hoursTrainer || TRAINERS[0].id;
-  const t = LevelUp.trainerById(trainerId);
-  const rows = data.hours.filter((r) => r.trainerId === trainerId);
-  const weekly = rows.filter((r) => r.weekday !== null);
-  const dated = rows.filter((r) => r.date).sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start);
-  const editing = rows.find((r) => r.id === state.hoursEdit) || null;
-  const type = editing ? (editing.date ? editing.kind : "weekly") : "weekly";
-  const today = LevelUp.dateKey();
-
-  // Bookable hours in the next 14 days, as the schedule shows them
-  const preview = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    const key = LevelUp.dateKey(d);
-    const hrs = LevelUp.trainerHours(trainerId, key);
-    const booked = (h) => data.bookings.some((b) => b.trainerId === trainerId && b.date === key && b.hour === h && isUpcoming(b));
-    if (hrs.length) preview.push(`<li><strong>${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</strong> ${hrs.map((h) => booked(h) ? `<mark title="Booked or requested">🔒 ${hh(h)}</mark>` : hh(h)).join(" · ")}</li>`);
-  }
-
-  el.innerHTML = `
-    <div class="panel-head">
-      <h2>Opening hours</h2>
-      <span class="muted">When players can book each trainer. Changes show on the schedule right away.</span>
-    </div>
-    <div class="filter-tabs" role="tablist" aria-label="Trainer">
-      ${TRAINERS.map((x) => `<button type="button" role="tab" data-hours-trainer="${x.id}" aria-selected="${x.id === trainerId}"><span class="dot" style="--c:${x.chartColor}" aria-hidden="true"></span>${esc(x.short)}</button>`).join("")}
-    </div>
-
-    <h3 class="panel-sub">Every week</h3>
-    <div class="week-hours">
-      ${WEEK_ORDER.map((d) => {
-        const blocks = weekly.filter((r) => r.weekday === d).sort((a, b) => a.start - b.start);
-        return `<div class="week-hours-day${blocks.length ? "" : " empty"}">
-          <span class="week-hours-name">${DAY_NAMES[d].slice(0, 3)}</span>
-          ${blocks.map((r) => {
-            const locked = lostBookings(trainerId, data.hours.filter((x) => x.id !== r.id));
-            return `<span class="hours-chip${r.id === state.hoursEdit ? " editing" : ""}${locked.length ? " locked" : ""}" style="--c:${t.chartColor}">
-              <button type="button" class="hours-chip-edit" data-hours-edit="${r.id}" title="${locked.length ? `Booked: ${esc(locked.map(slotLabel).join(", "))}` : "Change or move"}">${locked.length ? "🔒 " : ""}${hh(r.start)}–${hh(r.end)}</button>
-              ${locked.length ? `<span class="hours-chip-lock" title="${plural(locked.length, "booking")} in these hours">${locked.length}</span>`
-                : `<button type="button" class="hours-chip-del" data-hours-delete="${r.id}" aria-label="Delete ${DAY_NAMES[d]} ${hh(r.start)}–${hh(r.end)}">✕</button>`}
-            </span>`;
-          }).join("") || `<span class="muted small">closed</span>`}
-        </div>`;
-      }).join("")}
-    </div>
-
-    <h3 class="panel-sub">Extra hours and days off</h3>
-    ${dated.length ? `<ul class="detail-list hours-dates">${dated.map((r) => `
-      <li class="${r.kind}">
-        <span><strong>${LevelUp.parseDate(r.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</strong>
-          · ${r.kind === "closed" ? (r.start === 0 && r.end === 24 ? "Closed all day" : `Closed ${hh(r.start)}–${hh(r.end)}`) : `Extra ${hh(r.start)}–${hh(r.end)}`}
-          ${r.note ? `<span class="muted small">· ${esc(r.note)}</span>` : ""}${r.date < today ? ` <span class="muted small">(past)</span>` : ""}</span>
-        <span class="statement-actions">
-          <button type="button" class="btn btn-small btn-ghost" data-hours-edit="${r.id}">Change</button>
-          <button type="button" class="btn btn-small btn-ghost" data-hours-delete="${r.id}">Delete</button>
-        </span>
-      </li>`).join("")}</ul>` : `<p class="muted small">None. Add a holiday, a day off or one-time extra hours below.</p>`}
-
-    <form class="hours-form" id="hoursForm">
-      <p class="hours-form-title">${editing ? "Change hours" : `Add hours for ${esc(t.short)}`}</p>
-      <div class="hours-form-grid">
-        <label>Type
-          <select name="type">
-            <option value="weekly" ${type === "weekly" ? "selected" : ""}>Every week</option>
-            <option value="open" ${type === "open" ? "selected" : ""}>Extra hours on one date</option>
-            <option value="closed" ${type === "closed" ? "selected" : ""}>Closed on one date</option>
-          </select>
-        </label>
-        <label data-for="weekly">Day
-          <select name="weekday">${WEEK_ORDER.map((d) => `<option value="${d}" ${editing?.weekday === d ? "selected" : ""}>${DAY_NAMES[d]}</option>`).join("")}</select>
-        </label>
-        <label data-for="date">Date
-          <input type="date" name="date" min="${today}" value="${editing?.date || ""}">
-        </label>
-        <label data-for="closed" class="check-label"><input type="checkbox" name="allDay" ${!editing || (editing.start === 0 && editing.end === 24) ? "checked" : ""}> Whole day</label>
-        <label data-for="time">From
-          <select name="start">${hourOptions(0, 23, editing && !(editing.start === 0 && editing.end === 24) ? editing.start : 17)}</select>
-        </label>
-        <label data-for="time">To
-          <select name="end">${hourOptions(1, 24, editing && !(editing.start === 0 && editing.end === 24) ? editing.end : 20)}</select>
-        </label>
-        <label data-for="date" class="wide">Note (only you see it)
-          <input type="text" name="note" maxlength="80" placeholder="e.g. holiday, competition" value="${esc(editing?.note || "")}">
-        </label>
-      </div>
-      <p class="form-error" role="alert" id="hoursError"></p>
-      <div class="btn-row">
-        <button type="submit" class="btn btn-small btn-primary">${editing ? "Save changes" : "Add"}</button>
-        ${editing ? `<button type="button" class="btn btn-small btn-ghost" data-hours-cancel>Cancel</button>
-          <button type="button" class="btn btn-small btn-danger" data-hours-delete="${editing.id}">Delete</button>` : ""}
-      </div>
-    </form>
-
-    <h3 class="panel-sub">Bookable in the next 2 weeks</h3>
-    ${preview.length ? `<ul class="hours-preview">${preview.join("")}</ul>` : `<p class="muted small">No open hours in the next 2 weeks.</p>`}
-    <p class="muted small">🔒 Hours with a booking or request are locked: you can make them longer, but not remove, shorten or move them away from a booked hour, and you can't close that date. Cancel or move the session first. "Filip available" events in the Google Calendar still add hours; other calendar events still block them.</p>`;
-  syncHoursForm();
-}
-
-// Show only the fields that fit the chosen type
-function syncHoursForm() {
-  const form = document.getElementById("hoursForm");
-  if (!form) return;
-  const type = form.elements.type.value;
-  const allDay = type === "closed" && form.elements.allDay.checked;
-  form.querySelectorAll("[data-for]").forEach((el) => {
-    const f = el.dataset.for;
-    el.hidden = (f === "weekly" && type !== "weekly") || (f === "date" && type === "weekly")
-      || (f === "closed" && type !== "closed") || (f === "time" && allDay);
+  LevelUpHours.render(document.getElementById("hoursPanel"), {
+    key: "admin",
+    trainers: TRAINERS.map((t) => t.id),
+    bookings: () => data.bookings,
+    intro: `<div class="panel-head"><h2>Opening hours</h2><span class="muted">When players can book each trainer. Trainers can also change their own hours in their profile.</span></div>`
   });
-}
-
-async function submitHours(form) {
-  const f = form.elements;
-  const trainerId = state.hoursTrainer || TRAINERS[0].id;
-  const type = f.type.value;
-  const allDay = type === "closed" && f.allDay.checked;
-  const entry = {
-    id: state.hoursEdit,
-    trainerId,
-    weekday: type === "weekly" ? Number(f.weekday.value) : null,
-    date: type === "weekly" ? null : f.date.value,
-    start: allDay ? 0 : Number(f.start.value),
-    end: allDay ? 24 : Number(f.end.value),
-    kind: type === "closed" ? "closed" : "open",
-    note: type === "weekly" ? "" : f.note.value.trim()
-  };
-  const error = document.getElementById("hoursError");
-  if (entry.date === "") { error.textContent = "Pick a date."; return; }
-  if (entry.end <= entry.start) { error.textContent = "The end time must be after the start time."; return; }
-  // Booked or requested hours may not end up outside the open hours
-  const after = [...data.hours.filter((r) => r.id !== state.hoursEdit), { ...entry, id: entry.id || "new" }];
-  const lost = lostBookings(trainerId, after);
-  if (lost.length) { error.textContent = lockedMessage(lost).replace(/\n+/g, " "); return; }
-  form.querySelector('button[type="submit"]').disabled = true;
-  try {
-    await LevelUp.saveOpeningHours(entry);
-    state.hoursEdit = null;
-    LevelUp.toast({ title: "Hours saved", text: `${LevelUp.trainerById(trainerId).short}: the schedule is updated`, icon: "🕒", tone: "green" });
-  } catch (err) {
-    error.textContent = err.message;
-    form.querySelector('button[type="submit"]').disabled = false;
-  }
 }
 
 // ---------- Bookings table ----------
@@ -1302,39 +1136,6 @@ root.addEventListener("click", (event) => {
     action.catch((err) => { btn.disabled = false; alert(err.message); });
     return;
   }
-  const hoursTrainer = event.target.closest("[data-hours-trainer]");
-  if (hoursTrainer) {
-    state.hoursTrainer = hoursTrainer.dataset.hoursTrainer;
-    state.hoursEdit = null;
-    renderHours();
-    return;
-  }
-  const hoursEdit = event.target.closest("[data-hours-edit]");
-  if (hoursEdit) {
-    state.hoursEdit = hoursEdit.dataset.hoursEdit;
-    renderHours();
-    document.getElementById("hoursForm")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    return;
-  }
-  if (event.target.closest("[data-hours-cancel]")) {
-    state.hoursEdit = null;
-    renderHours();
-    return;
-  }
-  const hoursDelete = event.target.closest("[data-hours-delete]");
-  if (hoursDelete) {
-    const r = data.hours.find((x) => x.id === hoursDelete.dataset.hoursDelete);
-    if (!r) return;
-    const what = r.weekday !== null ? `every ${DAY_NAMES[r.weekday]} ${hh(r.start)}–${hh(r.end)}` : `${r.kind === "closed" ? "closed" : "extra hours"} on ${r.date}`;
-    const lost = lostBookings(r.trainerId, data.hours.filter((x) => x.id !== r.id));
-    if (lost.length) { alert(lockedMessage(lost)); return; }
-    if (!confirm(`Delete ${what}?`)) return;
-    hoursDelete.disabled = true;
-    LevelUp.deleteOpeningHours(r.id)
-      .then(() => { if (state.hoursEdit === r.id) state.hoursEdit = null; })
-      .catch((err) => { hoursDelete.disabled = false; alert(err.message); });
-    return;
-  }
   const finMode = event.target.closest("[data-fin-mode]");
   const finStep = event.target.closest("[data-fin-step]");
   if (finMode || finStep || event.target.closest("[data-fin-now]")) {
@@ -1437,18 +1238,11 @@ root.addEventListener("input", (event) => {
   }
 });
 
-root.addEventListener("submit", (event) => {
-  if (event.target.id !== "hoursForm") return;
-  event.preventDefault();
-  submitHours(event.target);
-});
-
 root.addEventListener("change", (event) => {
   if (event.target.id === "memberSort") {
     state.sort = event.target.value;
     renderMembers();
   }
-  if (event.target.closest("#hoursForm")) syncHoursForm();
   if (event.target.id === "statementMonth") {
     state.fin.statementMonth = event.target.value;
     renderFinances();
