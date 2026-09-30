@@ -1367,6 +1367,22 @@ begin
   return public._booking_json(b);
 end $$;
 
+-- The player couldn't (or didn't want to) pay online: pay at the headquarters instead.
+-- The request goes to the trainer right away.
+create or replace function public.pay_in_person_instead(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b public.bookings;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  perform public._expire_requests();
+  select * into b from public.bookings where id = p_id and user_id = auth.uid() for update;
+  if not found then raise exception 'Booking not found.'; end if;
+  if b.status <> 'awaiting_payment' then raise exception 'This booking is no longer waiting for payment.'; end if;
+  update public.bookings set status = 'pending', pay_method = 'in_person', request_at = now(), request_notice_sent = true
+    where id = p_id returning * into b;
+  return public._booking_json(b);
+end $$;
+
 -- Admin: money paid at the desk was given back by hand
 create or replace function public.mark_refunded(p_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -1474,6 +1490,8 @@ revoke execute on function public.refund_done(uuid, text, boolean) from public, 
 revoke execute on function public.mark_paid_in_person(uuid) from public, anon;
 revoke execute on function public.mark_refunded(uuid) from public, anon;
 grant execute on function public.payment_request(text, uuid) to authenticated;
+revoke execute on function public.pay_in_person_instead(uuid) from public, anon;
+grant execute on function public.pay_in_person_instead(uuid) to authenticated;
 grant execute on function public.mark_paid_in_person(uuid) to authenticated;
 grant execute on function public.mark_refunded(uuid) to authenticated;
 do $$ begin

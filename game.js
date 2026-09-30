@@ -776,6 +776,15 @@ const LevelUp = (() => {
     }
   }
 
+  // Online payment failed or the player changed their mind: pay at the HQ, request goes out now
+  async function payInPersonInstead(id) {
+    const booking = await call("pay_in_person_instead", { p_id: id });
+    await Promise.all([refreshPlayer(), loadSlots()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, "requested");
+    emit();
+    return booking;
+  }
+
   async function markPaidInPerson(id) {
     const booking = await call("mark_paid_in_person", { p_id: id });
     await claimBookingNotices();
@@ -1650,7 +1659,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
-    startPayment, canPayOnline, payLabel, markPaidInPerson, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
+    startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };

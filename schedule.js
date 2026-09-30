@@ -321,8 +321,7 @@ function renderBookingDialog(message = "") {
         try {
           await LevelUp.startPayment("booking", booked.id);
         } catch (err) {
-          // the hour stays held for a few minutes; the player can pay from their profile
-          renderBookingDialog(`${err.message} Your booking is waiting for payment in your profile.`);
+          showPaymentFailed(booked, err.message);
         }
         return;
       }
@@ -392,6 +391,35 @@ bookingDialog.addEventListener("change", (event) => {
   }
   if (["kind", "pay"].includes(event.target.name)) updateSubmitLabel();
 });
+
+// Online payment couldn't start: offer to pay at the HQ so the request still goes out
+function showPaymentFailed(booked, message) {
+  bookingContent.innerHTML = `
+    <p class="section-kicker">Payment</p>
+    <h2 class="auth-title" id="bookingTitle">Online payment didn't work</h2>
+    <p class="booking-when">${LevelUp.formatSlot(booked.date, Number(booked.hour))}</p>
+    <p class="form-error" role="alert">${esc(message)}</p>
+    <p>Your hour is held for a few minutes. Pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)}) instead and your request goes to the trainer right away.</p>
+    <div class="btn-row">
+      <button type="button" class="btn btn-primary" id="payHqInstead">Pay at the headquarters instead ▶</button>
+      <button type="button" class="btn btn-ghost btn-small" id="retryOnline">Try online again</button>
+    </div>`;
+  document.getElementById("payHqInstead").addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    try {
+      const b = await LevelUp.payInPersonInstead(booked.id);
+      showBooked(b);
+    } catch (err) {
+      event.target.disabled = false;
+      bookingContent.querySelector(".form-error").textContent = err.message;
+    }
+  });
+  document.getElementById("retryOnline").addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    try { await LevelUp.startPayment("booking", booked.id); }
+    catch (err) { event.target.disabled = false; bookingContent.querySelector(".form-error").textContent = err.message; }
+  });
+}
 
 function showBooked(booked) {
   const trainer = LevelUp.trainerById(pendingSlot.trainerId);

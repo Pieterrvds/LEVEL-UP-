@@ -90,7 +90,8 @@ function renderSessions() {
     const open = upcoming.includes(b);
     const past = LevelUp.slotStart(b.date, b.hour) <= now;
     let side = "";
-    const pay = LevelUp.canPayOnline(b) ? `<button type="button" class="btn btn-small btn-primary" data-pay-booking="${b.id}">Pay online</button>` : "";
+    const pay = (LevelUp.canPayOnline(b) ? `<button type="button" class="btn btn-small btn-primary" data-pay-booking="${b.id}">Pay online</button>` : "")
+      + (b.status === "awaiting_payment" ? `<button type="button" class="btn btn-small btn-ghost" data-pay-hq="${b.id}">Pay at HQ instead</button>` : "");
     if (open) side = `${pay}<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${["pending", "awaiting_payment"].includes(b.status) ? "Withdraw" : "Cancel"}</button>`;
     else if (b.status === "completed") side = `${pay}<span class="log-xp">+${b.xp} XP</span>`;
     else side = pay;
@@ -679,6 +680,15 @@ function bindEvents(player) {
     event.target.textContent = "To the payment page…";
     try { await LevelUp.startPayment("pack", event.target.dataset.packPay); }
     catch (err) { event.target.disabled = false; document.getElementById("packError").textContent = err.message; }
+  });
+  root.querySelectorAll("[data-pay-hq]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await LevelUp.payInPersonInstead(button.dataset.payHq);
+        LevelUp.toast({ title: "Request sent", text: "You pay at the headquarters", icon: "✓", tone: "green" });
+      } catch (err) { button.disabled = false; alert(err.message); }
+    });
   });
   root.querySelectorAll("[data-pay-booking]").forEach((button) => {
     button.addEventListener("click", async () => {
