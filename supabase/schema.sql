@@ -32,7 +32,10 @@ insert into public.app_config (key, value) values
   ('calendar_ics_url', 'https://calendar.google.com/calendar/ical/53bf8048ea28f4795aa89c52f00b8733569f2ee2e4ec97104dfed265a6559182%40group.calendar.google.com/public/basic.ics'),
   ('session_xp', '75'),
   ('booking_notice_hours', '12'),
-  ('booking_weeks_ahead', '4')
+  ('booking_weeks_ahead', '4'),
+  ('session_price', '60'),       -- what a player pays per 1-hour session (euro)
+  ('trainer_fee', '40'),         -- the trainer's share per session; the rest goes to the venue
+  ('owner_trainer_id', 'pieter') -- the owner's own trainer card keeps the full price
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -171,11 +174,19 @@ create unique index if not exists bookings_active_slot on public.bookings (train
 create unique index if not exists bookings_active_user on public.bookings (user_id, day, hour)
   where status in ('pending', 'confirmed', 'completed');
 
+-- Money per booking, fixed at the moment of booking (so later price changes don't rewrite history)
+alter table public.bookings add column if not exists price numeric(8, 2) not null default 60;
+alter table public.bookings add column if not exists trainer_fee numeric(8, 2) not null default 40;
+alter table public.bookings add column if not exists payout_at timestamptz; -- when the admin paid the trainer
+update public.bookings set trainer_fee = price
+  where trainer_id = public._config('owner_trainer_id') and trainer_fee <> price;
+
 create or replace function public._booking_json(b public.bookings)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp,
     'status', b.status, 'createdAt', b.created_at, 'respondedAt', b.responded_at, 'rewardedAt', b.rewarded_at,
+    'price', b.price, 'trainerFee', b.trainer_fee, 'payoutAt', b.payout_at,
     'name', p.name, 'email', p.email,
     'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id)
   )
@@ -508,8 +519,11 @@ begin
   end if;
 
   begin
-    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status)
-    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int, 'pending')
+    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee)
+    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int, 'pending',
+            public._config('session_price')::numeric,
+            case when p_trainer = public._config('owner_trainer_id') then public._config('session_price')::numeric
+                 else public._config('trainer_fee')::numeric end)
     returning * into b;
   exception when unique_violation then
     raise exception 'Someone just booked this slot. Pick another hour.';
@@ -589,6 +603,43 @@ returns jsonb language sql stable security definer set search_path = public as $
   where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
     and b.day >= (now() at time zone 'Europe/Brussels')::date - 30;
 $$;
+
+-- Earnings of the logged-in trainer: earned = rewarded sessions, expected = confirmed ones
+create or replace function public.coach_earnings()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'trainerId', t.id,
+    'isOwner', t.id = public._config('owner_trainer_id'),
+    'price', public._config('session_price')::numeric,
+    'fee', case when t.id = public._config('owner_trainer_id') then public._config('session_price')::numeric
+                else public._config('trainer_fee')::numeric end,
+    'sessions', count(b.id) filter (where b.status = 'completed'),
+    'earned', coalesce(sum(b.trainer_fee) filter (where b.status = 'completed'), 0),
+    'paid', coalesce(sum(b.trainer_fee) filter (where b.status = 'completed' and b.payout_at is not null), 0),
+    'owed', coalesce(sum(b.trainer_fee) filter (where b.status = 'completed' and b.payout_at is null), 0),
+    'expected', coalesce(sum(b.trainer_fee) filter (where b.status = 'confirmed'), 0),
+    'lastPayout', max(b.payout_at)
+  )
+  from public.trainers t left join public.bookings b on b.trainer_id = t.id
+  where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+  group by t.id;
+$$;
+
+-- Admin: record that a trainer's open earnings have been paid out
+create or replace function public.mark_payout(p_trainer text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  n integer;
+  total numeric;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select count(*), coalesce(sum(trainer_fee), 0) into n, total
+    from public.bookings where trainer_id = p_trainer and status = 'completed' and payout_at is null;
+  if n = 0 then raise exception 'Nothing to pay out for this trainer.'; end if;
+  update public.bookings set payout_at = now()
+    where trainer_id = p_trainer and status = 'completed' and payout_at is null;
+  return jsonb_build_object('trainerId', p_trainer, 'sessions', n, 'amount', total);
+end $$;
 
 -- Which hours are taken (no names), for the public schedule
 drop function if exists public.slot_status(date, date);
@@ -864,7 +915,9 @@ begin
                            'role', a.role_title, 'specialties', a.specialties, 'bio', a.bio, 'status', a.status,
                            'trainerId', a.trainer_id, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at) order by a.created_at desc)
                          from public.trainer_applications a join public.profiles p on p.id = a.user_id), '[]'::jsonb),
-    'unlinkedTrainers', coalesce((select jsonb_agg(t.id) from public.trainers t where t.email is null and t.active), '[]'::jsonb)
+    'unlinkedTrainers', coalesce((select jsonb_agg(t.id) from public.trainers t where t.email is null and t.active), '[]'::jsonb),
+    'pricing', jsonb_build_object('price', public._config('session_price')::numeric, 'fee', public._config('trainer_fee')::numeric,
+                                  'ownerTrainerId', public._config('owner_trainer_id'))
   );
 end $$;
 
@@ -887,6 +940,10 @@ revoke execute on function public.coach_bookings() from public, anon;
 grant execute on function public.respond_booking(uuid, boolean) to authenticated;
 grant execute on function public.reward_session(uuid) to authenticated;
 grant execute on function public.coach_bookings() to authenticated;
+revoke execute on function public.coach_earnings() from public, anon;
+revoke execute on function public.mark_payout(text) from public, anon;
+grant execute on function public.coach_earnings() to authenticated;
+grant execute on function public.mark_payout(text) to authenticated;
 revoke execute on function public.apply_as_trainer(jsonb) from public, anon;
 revoke execute on function public.review_trainer_application(uuid, boolean, text) from public, anon;
 revoke execute on function public.admin_inbox() from public, anon;

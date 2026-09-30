@@ -61,6 +61,17 @@ XP goes to the trainer's own account, so the level on the team card and in the p
    100 XP (+50 for a new player). The server only allows this on the day itself, and only once.
 Players see the status (pending, confirmed, declined, completed) in their profile and on the schedule.
 
+## Prices and payouts
+A 1:1 session costs **€60 per hour**. The client pays LEVEL-UP (the venue); the trainer gets **€40** per session and the
+venue keeps €20. Sessions with Pieter (the owner) keep the full €60. The amounts are rows in `app_config`
+(`session_price`, `trainer_fee`, `owner_trainer_id`) and are saved on every booking, so a later price change never
+alters past sessions.
+- A session counts as earned once it is rewarded (completed).
+- Trainers see their earnings in their profile (Coach panel): earned, still to receive, paid out and expected.
+- The admin dashboard has a **Finances** panel: session revenue, your share, what you owe each trainer, and a
+  **Mark paid** button that records a payout after you paid the trainer.
+- Online payment is not built yet; clients are told payment details follow from LEVEL-UP.
+
 ## High scores
 Under the team cards: the top 10 players by XP (player name and level only, never email). Trainers are left out
 (their level is on their card). Players can hide themselves in their profile under Account.

@@ -178,3 +178,17 @@
 .application-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .application-actions select { width: auto; min-height: 40px; padding: 8px 36px 8px 10px; font-size: 0.88rem; }
 @media (max-width: 760px) { .application-item { grid-template-columns: 1fr; } .application-actions { justify-content: flex-start; } }
+
+/* Finances */
+.finance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.finance-kpis .kpi { background: #000; }
+.finance-kpis .kpi.good .kpi-value { color: var(--green-bright); }
+.finance-kpis .kpi.warn .kpi-value { color: var(--gold); }
+.finance-table .num { text-align: right; white-space: nowrap; }
+.finance-table td.owed { color: var(--gold); font-weight: 700; }
+.finance-action { text-align: right; white-space: nowrap; }
+.finance-table td:first-child { white-space: nowrap; }
+@media (max-width: 760px) {
+  .finance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-kpis .kpi-value { font-size: 1.4rem; }
+}

@@ -151,6 +151,9 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .apply-form .btn { justify-self: start; }
 
 /* Coach panel */
+.earnings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
+.earnings .tile { background: #000; }
+@media (max-width: 760px) { .earnings { grid-template-columns: 1fr 1fr; } }
 .coach-panel { border-color: var(--gold); }
 .coach-row { grid-template-columns: 34px 1fr auto; }
 .coach-row .form-error { margin: 4px 0 0; font-size: 0.85rem; }

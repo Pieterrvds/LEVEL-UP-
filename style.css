@@ -1215,7 +1215,9 @@ textarea { resize: vertical; min-height: 130px; }
 .booking-trainer img { width: 56px; height: 56px; object-fit: cover; object-position: center 20%; }
 .booking-trainer p { margin: 0; }
 .booking-trainer-name { font-family: var(--pixel); font-size: 0.65rem; margin-bottom: 8px !important; }
-.booking-when { font-weight: 700; font-size: 1.05rem; margin-bottom: 18px; }
+.booking-when { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; }
+.booking-price { font-size: 0.9rem; color: var(--muted); margin-bottom: 18px; }
+.booking-price strong { color: var(--gold); }
 .booking-reward { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); }
 .booking-login { display: grid; gap: 12px; padding: 16px; border: 2px dashed var(--gold); }
 .booking-login p { margin: 0; }

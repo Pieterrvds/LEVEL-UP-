@@ -233,7 +233,8 @@ function renderBookingDialog(message = "") {
         <p class="muted">${esc(trainer.role)} · LVL ${stats.level} ${stats.rank.title}</p>
       </div>
     </div>
-    <p class="booking-when">${when}</p>`;
+    <p class="booking-when">${when}</p>
+    <p class="booking-price"><strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> · 1 hour, 1:1 with ${esc(trainer.short)} · payment details follow from LEVEL-UP</p>`;
 
   // Your own booking: offer to cancel
   if (booking?.mine) {
@@ -308,6 +309,7 @@ function showBooked() {
     <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
+    <p class="booking-price">Price: <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> for the hour. You only pay for confirmed sessions; LEVEL-UP sends you the payment details.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>

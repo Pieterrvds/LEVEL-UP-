@@ -32,7 +32,7 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const { players, bookings, applications, unlinkedTrainers } = await LevelUp.adminData();
+  const { players, bookings, applications, unlinkedTrainers, pricing } = await LevelUp.adminData();
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -47,6 +47,8 @@ async function loadData() {
   return {
     applications,
     unlinkedTrainers,
+    pricing,
+    rawBookings: bookings,
     players: rows,
     members: rows.filter((p) => !p.admin),
     active: bookings.filter((b) => b.status !== "declined"),
@@ -108,6 +110,8 @@ async function render() {
 
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
 
+    <section class="panel admin-panel finances" id="finances"></section>
+
     <section class="chart-grid">
       ${chartCard("weekly", "Sessions per week", "Last 4 weeks and the next 4, by trainer", true)}
       ${chartCard("trainers", "Sessions by trainer", "All-time sessions, including sessions from before the online schedule")}
@@ -164,6 +168,7 @@ async function render() {
     document.getElementById("applications").scrollIntoView({ block: "start" });
   }
   renderKpis();
+  renderFinances();
   renderCharts();
   renderTrainerCards();
   renderBookings();
@@ -221,6 +226,83 @@ function renderApplications() {
       </li>`).join("")}</ul>` : `<p class="muted">No open applications. New trainer sign-ups appear here and you get an email.</p>`}
     ${reviewed.length ? `<h3 class="panel-sub">Recently reviewed</h3><ul class="detail-list">${reviewed.map((a) => `
       <li><span>${esc(a.name)} · ${esc(a.role || "Personal trainer")} <span class="status-chip ${a.status === "approved" ? "confirmed" : "declined"}">${a.status}</span></span><span class="muted small">${a.reviewedAt ? fmtDate(a.reviewedAt) : ""}${a.trainerId ? ` · card: ${esc(a.trainerId)}` : ""}</span></li>`).join("")}</ul>` : ""}`;
+}
+
+// ---------- Finances ----------
+// Clients pay the venue (you) per session; trainers get their fee per completed
+// session. The owner's own sessions keep the full price.
+const money = LevelUp.euro;
+
+function financeRows() {
+  const { pricing, rawBookings } = data;
+  const trainerIds = [...new Set([...TRAINERS.map((t) => t.id), ...rawBookings.map((b) => b.trainerId)])];
+  return trainerIds.map((id) => {
+    const own = rawBookings.filter((b) => b.trainerId === id);
+    const done = own.filter((b) => b.status === "completed");
+    const upcoming = own.filter(isUpcoming);
+    const isOwner = id === pricing.ownerTrainerId;
+    const earned = done.reduce((s, b) => s + b.trainerFee, 0);
+    const paid = isOwner ? earned : done.filter((b) => b.payoutAt).reduce((s, b) => s + b.trainerFee, 0);
+    const payouts = done.map((b) => b.payoutAt).filter(Boolean).sort();
+    return {
+      id,
+      trainer: LevelUp.trainerById(id),
+      isOwner,
+      sessions: done.length,
+      revenue: done.reduce((s, b) => s + b.price, 0),
+      earned,
+      paid,
+      owed: earned - paid,
+      unpaidSessions: isOwner ? 0 : done.filter((b) => !b.payoutAt).length,
+      expected: upcoming.filter((b) => b.status === "confirmed").reduce((s, b) => s + b.trainerFee, 0),
+      pipeline: upcoming.reduce((s, b) => s + b.price, 0),
+      lastPayout: payouts[payouts.length - 1] || null
+    };
+  }).filter((r) => r.trainer || r.sessions);
+}
+
+function renderFinances() {
+  const el = document.getElementById("finances");
+  const { pricing } = data;
+  const rows = financeRows();
+  const revenue = rows.reduce((s, r) => s + r.revenue, 0);
+  const trainerShare = rows.filter((r) => !r.isOwner).reduce((s, r) => s + r.earned, 0);
+  const owed = rows.reduce((s, r) => s + r.owed, 0);
+  const pipeline = rows.reduce((s, r) => s + r.pipeline, 0);
+  const tile = (label, value, note, cls = "") => `
+    <div class="kpi ${cls}"><span class="kpi-label">${label}</span><span class="kpi-value">${value}</span><span class="kpi-note">${note}</span></div>`;
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Finances</h2>
+      <span class="muted">${money(pricing.price)} per session · trainer gets ${money(pricing.fee)} · you keep ${money(pricing.price - pricing.fee)} (and the full ${money(pricing.price)} for your own sessions)</span>
+    </div>
+    <div class="finance-kpis">
+      ${tile("Session revenue", money(revenue), `${plural(rows.reduce((s, r) => s + r.sessions, 0), "completed session")}`)}
+      ${tile("Your share", money(revenue - trainerShare), "Venue share + your own sessions", "good")}
+      ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
+      ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
+    </div>
+    <div class="table-wrap">
+      <table class="data-table finance-table">
+        <thead><tr><th>Trainer</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer earned</th><th class="num">Paid out</th><th class="num">Owed</th><th class="num">Expected</th><th></th></tr></thead>
+        <tbody>${rows.map((r) => `
+          <tr>
+            <td><span class="dot" style="--c:${r.trainer?.chartColor || "#888"}" aria-hidden="true"></span>${esc(r.trainer?.name || r.id)}${r.isOwner ? ` <span class="muted small">· owner</span>` : ""}</td>
+            <td class="num">${r.sessions}</td>
+            <td class="num">${money(r.revenue)}</td>
+            <td class="num">${r.isOwner ? `<span class="muted">you</span>` : money(r.earned)}</td>
+            <td class="num">${r.isOwner ? "–" : money(r.paid)}</td>
+            <td class="num ${r.owed ? "owed" : ""}">${r.isOwner ? "–" : money(r.owed)}</td>
+            <td class="num">${r.isOwner ? "–" : money(r.expected)}</td>
+            <td class="finance-action">${!r.isOwner && r.owed
+              ? `<button type="button" class="btn btn-small btn-primary" data-payout="${esc(r.id)}">Mark ${money(r.owed)} paid</button>`
+              : r.lastPayout ? `<span class="muted small">Last paid ${fmtDate(r.lastPayout)}</span>` : ""}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">A session counts once it is rewarded (completed). "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
 }
 
 // ---------- KPI tiles ----------
@@ -815,6 +897,16 @@ root.addEventListener("click", (event) => {
     if (!confirm(`Are you sure you want to ${what}? They get an email.`)) return;
     review.disabled = true;
     LevelUp.reviewApplication(review.dataset.id, approve, card).catch((err) => { review.disabled = false; alert(err.message); });
+    return;
+  }
+  const payout = event.target.closest("[data-payout]");
+  if (payout) {
+    const row = financeRows().find((r) => r.id === payout.dataset.payout);
+    if (!row || !confirm(`Did you pay ${row.trainer?.name || row.id} ${money(row.owed)} for ${plural(row.unpaidSessions, "session")}? This marks them as paid out.`)) return;
+    payout.disabled = true;
+    LevelUp.markPayout(row.id)
+      .then((res) => LevelUp.toast({ title: "Payout recorded", text: `${money(res.amount)} paid to ${row.trainer?.short || row.id}.`, icon: "€" }))
+      .catch((err) => { payout.disabled = false; alert(err.message); });
     return;
   }
   const respond = event.target.closest("[data-admin-respond]");

@@ -86,12 +86,13 @@ function renderSessions() {
     if (open) side = `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${b.status === "pending" ? "Withdraw" : "Cancel"}</button>`;
     else if (b.status === "completed") side = `<span class="log-xp">+${b.xp} XP</span>`;
     const note = b.status === "confirmed" && past ? "Waiting for your trainer to reward the session" : "";
+    const price = b.status === "declined" ? "" : ` · ${LevelUp.euro(b.price ?? LevelUp.SESSION_PRICE)}`;
     return `
       <li class="session-row" style="--c:${trainer.color}">
         <img src="${trainer.img}" alt="">
         <div>
           <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}</p>
-          <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${note ? ` · ${note}` : ""}</p>
+          <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${price}${note ? ` · ${note}` : ""}</p>
         </div>
         ${side}
       </li>`;
@@ -103,7 +104,7 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
-      <p class="muted small-text">Your trainer confirms each request. After the session they reward it and you get <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
+      <p class="muted small-text">A 1-hour session costs <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong>. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
         : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
@@ -148,6 +149,28 @@ function renderApplication(player) {
     </details>`;
 }
 
+// What the trainer earned: rewarded sessions count, confirmed ones are expected
+function renderEarnings() {
+  const e = LevelUp.getCoachEarnings();
+  if (!e) return "";
+  const eur = LevelUp.euro;
+  if (e.isOwner) {
+    return `
+      <div class="earnings">
+        <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} · you keep the full ${eur(e.price)}</span></div>
+        <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed, not yet held</span></div>
+      </div>`;
+  }
+  return `
+    <div class="earnings">
+      <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} × ${eur(e.fee)}</span></div>
+      <div class="tile highlight"><span class="tile-label">To receive</span><span class="tile-value">${eur(e.owed)}</span><span class="tile-note">From LEVEL-UP</span></div>
+      <div class="tile"><span class="tile-label">Paid out</span><span class="tile-value">${eur(e.paid)}</span><span class="tile-note">${e.lastPayout ? `Last on ${formatDate(e.lastPayout)}` : "No payouts yet"}</span></div>
+      <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed sessions</span></div>
+    </div>
+    <p class="muted small-text">You earn ${eur(e.fee)} of the ${eur(e.price)} per session, counted once you reward the session. LEVEL-UP pays out what you've earned.</p>`;
+}
+
 // Trainers: answer requests, see upcoming sessions and reward today's sessions
 function renderCoachPanel() {
   if (!LevelUp.isTrainer()) return "";
@@ -176,7 +199,8 @@ function renderCoachPanel() {
         <h2>Coach panel</h2>
         <span class="muted">${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
       </div>
-      <h3 class="panel-sub first">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
+      ${renderEarnings()}
+      <h3 class="panel-sub">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
       ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
           <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
           <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
@@ -477,14 +501,15 @@ function render() {
     ${renderHeader(player, p)}
     ${renderSummary(player)}
     <div class="panel-grid">
-      ${renderApplication(player)}
+      ${player.application?.status === "pending" ? renderApplication(player) : ""}
       ${renderCoachPanel()}
-      ${renderBodyStats(player)}
       ${renderSessions()}
       ${renderWorkouts(player)}
-      ${renderAchievements(player)}
       ${renderInventory(player)}
+      ${renderBodyStats(player)}
+      ${renderAchievements(player)}
       ${renderRanks(player, p)}
+      ${player.application?.status === "pending" ? "" : renderApplication(player)}
       ${renderSettings()}
     </div>`;
   bindEvents(player);

@@ -18,6 +18,8 @@ const LevelUp = (() => {
 
   // Keep these in sync with app_config in supabase/schema.sql
   const SESSION_XP = 75;
+  const SESSION_PRICE = 60;       // euro per 1-hour session (the server's app_config decides the real price)
+  const TRAINER_FEE = 40;         // the trainer's share; the rest goes to the venue
   const BOOKING_WEEKS_AHEAD = 4;
   const BOOKING_NOTICE_HOURS = 12;
   const TRAINER_SESSION_XP = 100; // trainer XP per session
@@ -286,6 +288,7 @@ const LevelUp = (() => {
   let serverError = "";
   let slots = new Map();      // "trainer|date|hour" -> { id, status } (only filled in when it's yours)
   let coachBookings = [];     // bookings for the logged-in trainer's card
+  let coachEarnings = null;   // { earned, paid, owed, expected, sessions, fee, isOwner }
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // [{ place, name, xp, isMe }]
 
@@ -309,9 +312,19 @@ const LevelUp = (() => {
       workouts: data.workouts || [],
       bodyStats: (data.bodyStats || []).map((s) => ({ ...s, weight: Number(s.weight), height: Number(s.height), bmi: Number(s.bmi) })),
       purchases: (data.purchases || []).map((o) => ({ ...o, total: Number(o.total) })),
-      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) })),
+      bookings: (data.bookings || []).map((b) => ({
+        ...b,
+        hour: Number(b.hour),
+        price: Number(b.price ?? SESSION_PRICE),
+        trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
+      })),
       applications: data.applications || [],
-      unlinkedTrainers: data.unlinkedTrainers || []
+      unlinkedTrainers: data.unlinkedTrainers || [],
+      pricing: {
+        price: Number(data.pricing?.price ?? SESSION_PRICE),
+        fee: Number(data.pricing?.fee ?? TRAINER_FEE),
+        ownerTrainerId: data.pricing?.ownerTrainerId || "pieter"
+      }
     };
   }
 
@@ -580,13 +593,25 @@ const LevelUp = (() => {
   const isTrainer = () => Boolean(player?.trainerId);
 
   async function loadCoachBookings() {
-    if (!isTrainer()) { coachBookings = []; return; }
+    if (!isTrainer()) { coachBookings = []; coachEarnings = null; return; }
     try {
-      coachBookings = ((await call("coach_bookings")) || []).map((b) => ({ ...b, hour: Number(b.hour) }));
+      const [rows, earnings] = await Promise.all([call("coach_bookings"), call("coach_earnings")]);
+      coachBookings = (rows || []).map((b) => ({ ...b, hour: Number(b.hour) }));
+      coachEarnings = earnings
+        ? Object.fromEntries(Object.entries(earnings).map(([k, v]) => [k, typeof v === "string" && !isNaN(v) && k !== "trainerId" ? Number(v) : v]))
+        : null;
     } catch (err) {
       console.error("Loading coach bookings failed:", err);
     }
   }
+
+  async function markPayout(trainerId) {
+    const result = await call("mark_payout", { p_trainer: trainerId });
+    emit();
+    return result;
+  }
+
+  const euro = (n) => `€${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
   async function respondBooking(id, accept) {
     const booking = await call("respond_booking", { p_id: id, p_accept: Boolean(accept) });
@@ -635,7 +660,7 @@ const LevelUp = (() => {
       },
       confirmed: {
         subject: `Confirmed: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. Your trainer will contact you about the location and payment. After the session you get +${booking.xp} XP.`
+        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. Price: ${euro(booking.price ?? SESSION_PRICE)} for the hour; LEVEL-UP will send you the payment details. After the session you get +${booking.xp} XP.`
       },
       declined: {
         subject: `Declined: ${trainer.short} · ${when}`,
@@ -660,6 +685,7 @@ const LevelUp = (() => {
         name: booking.name,
         email: booking.email,
         note: booking.note || "-",
+        price: euro(booking.price ?? SESSION_PRICE),
         booking_id: booking.id,
         next_step: action === "requested" ? `${trainer.short}: log in on the LEVEL-UP website to confirm or decline.` : "-"
       })
@@ -736,9 +762,19 @@ const LevelUp = (() => {
     const data = await call("admin_data");
     return {
       players: (data.players || []).map(normalisePlayer),
-      bookings: (data.bookings || []).map((b) => ({ ...b, hour: Number(b.hour) })),
+      bookings: (data.bookings || []).map((b) => ({
+        ...b,
+        hour: Number(b.hour),
+        price: Number(b.price ?? SESSION_PRICE),
+        trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
+      })),
       applications: data.applications || [],
-      unlinkedTrainers: data.unlinkedTrainers || []
+      unlinkedTrainers: data.unlinkedTrainers || [],
+      pricing: {
+        price: Number(data.pricing?.price ?? SESSION_PRICE),
+        fee: Number(data.pricing?.fee ?? TRAINER_FEE),
+        ownerTrainerId: data.pricing?.ownerTrainerId || "pieter"
+      }
     };
   }
 
@@ -1343,6 +1379,7 @@ const LevelUp = (() => {
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
+    SESSION_PRICE, TRAINER_FEE, euro, getCoachEarnings: () => coachEarnings, markPayout,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };
