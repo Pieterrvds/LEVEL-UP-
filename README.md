@@ -57,16 +57,29 @@ XP goes to the trainer's own account, so the level on the team card and in the p
 1. A player sends a booking request: status **pending**, the hour is reserved, no XP yet.
 2. The trainer gets a pop-up when logged in (and an email copy when their account is linked) and
    **confirms** or **declines**. A declined request frees the hour. Admins can do this for any trainer.
-3. On the day of the session the trainer (or an admin) presses **Reward**: the player gets 75 XP, the trainer
-   100 XP (+50 for a new player). The server only allows this on the day itself, and only once.
-Players see the status (pending, confirmed, declined, completed) in their profile and on the schedule.
+   A request nobody answers within 48 hours (and at the latest 12 hours before the session, with at least
+   2 hours to answer) **expires**: the hour opens up again and the player gets an email.
+3. From the day of the session the trainer (or an admin) settles it:
+   - **Reward**: the player gets 75 XP, the trainer 100 XP (+50 for a new player);
+   - **No-show**: the player didn't come, the session is charged in full, no XP.
+   Trainers can do this up to 7 days after the session; after that only an admin can. The trainer's pop-up
+   and Coach panel list every session still to settle, the admin dashboard shows a reminder in Finances.
+Players see the status (pending, confirmed, declined, completed, expired, no-show, late cancel) in their profile and on the schedule.
+
+## Cancellations
+- Players cancel for free up to **24 hours** before the session (and can always withdraw a pending request).
+- A confirmed session cancelled later is a **late cancellation**: charged in full, the trainer keeps their fee,
+  the hour opens up again. The site warns the player before they confirm.
+- Admins can always cancel for free.
+The numbers are rows in `app_config`: `free_cancel_hours`, `reward_window_days`, `confirm_hours`, `confirm_cutoff_hours`
+(the texts on the site say 24 hours / 7 days, so update `FREE_CANCEL_HOURS` and `REWARD_WINDOW_DAYS` in `game.js` too).
 
 ## Prices and payouts
 A 1:1 session costs **€60 per hour**. The client pays LEVEL-UP (the venue); the trainer gets **€40** per session and the
 venue keeps €20. Sessions with Pieter (the owner) keep the full €60. The amounts are rows in `app_config`
 (`session_price`, `trainer_fee`, `owner_trainer_id`) and are saved on every booking, so a later price change never
 alters past sessions.
-- A session counts as earned once it is rewarded (completed).
+- A session counts as earned once it is rewarded (completed), marked as no-show, or cancelled late by the client.
 - Trainers see their earnings in their profile (Coach panel): earned, still to receive, paid out and expected.
 - The admin dashboard has a **Finances** panel: session revenue, your share, what you owe each trainer, and a
   **Mark paid** button that records a payout after you paid the trainer.

@@ -65,8 +65,13 @@ const STATUS = {
   pending: { label: "Waiting for confirmation", cls: "pending" },
   confirmed: { label: "Confirmed", cls: "confirmed" },
   declined: { label: "Declined", cls: "declined" },
-  completed: { label: "Completed", cls: "completed" }
+  completed: { label: "Completed", cls: "completed" },
+  late_cancel: { label: "Late cancel · charged", cls: "declined" },
+  no_show: { label: "No-show · charged", cls: "declined" },
+  expired: { label: "Expired", cls: "declined" }
 };
+const CHARGED = ["late_cancel", "no_show"];
+const fmtDeadline = (iso) => new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const statusChip = (status) => `<span class="status-chip ${STATUS[status]?.cls || ""}">${STATUS[status]?.label || status}</span>`;
 
 function renderSessions() {
@@ -85,8 +90,14 @@ function renderSessions() {
     let side = "";
     if (open) side = `<button type="button" class="btn btn-small btn-ghost" data-cancel-booking="${b.id}">${b.status === "pending" ? "Withdraw" : "Cancel"}</button>`;
     else if (b.status === "completed") side = `<span class="log-xp">+${b.xp} XP</span>`;
-    const note = b.status === "confirmed" && past ? "Waiting for your trainer to reward the session" : "";
-    const price = b.status === "declined" ? "" : ` · ${LevelUp.euro(b.price ?? LevelUp.SESSION_PRICE)}`;
+    let note = "";
+    if (b.status === "confirmed" && past) note = "Waiting for your trainer to reward the session";
+    else if (b.status === "confirmed" && open) note = LevelUp.isLateCancel(b)
+      ? "Cancelling now is charged in full"
+      : `Free cancellation until ${fmtDeadline(b.freeCancelUntil || LevelUp.slotStart(b.date, b.hour) - LevelUp.FREE_CANCEL_HOURS * 3600e3)}`;
+    else if (CHARGED.includes(b.status)) note = "Charged in full";
+    else if (b.status === "expired") note = "Not confirmed in time · no costs";
+    const price = ["declined", "expired"].includes(b.status) ? "" : ` · ${LevelUp.euro(b.price ?? LevelUp.SESSION_PRICE)}`;
     return `
       <li class="session-row" style="--c:${trainer.color}">
         <img src="${trainer.img}" alt="">
@@ -104,7 +115,8 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
-      <p class="muted small-text">A 1-hour session costs <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong>. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
+      <p class="muted small-text">A 1-hour session costs <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong>. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.
+        Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
         : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
@@ -163,12 +175,12 @@ function renderEarnings() {
   }
   return `
     <div class="earnings">
-      <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} × ${eur(e.fee)}</span></div>
+      <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} × ${eur(e.fee)}${e.charged ? ` · incl. ${e.charged} no-show/late cancel` : ""}</span></div>
       <div class="tile highlight"><span class="tile-label">To receive</span><span class="tile-value">${eur(e.owed)}</span><span class="tile-note">From LEVEL-UP</span></div>
       <div class="tile"><span class="tile-label">Paid out</span><span class="tile-value">${eur(e.paid)}</span><span class="tile-note">${e.lastPayout ? `Last on ${formatDate(e.lastPayout)}` : "No payouts yet"}</span></div>
       <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed sessions</span></div>
     </div>
-    <p class="muted small-text">You earn ${eur(e.fee)} of the ${eur(e.price)} per session, counted once you reward the session. LEVEL-UP pays out what you've earned.</p>`;
+    <p class="muted small-text">You earn ${eur(e.fee)} of the ${eur(e.price)} per session. It counts once you reward the session or mark a no-show (within ${LevelUp.REWARD_WINDOW_DAYS} days); late cancellations by the client count too. LEVEL-UP pays out what you've earned.</p>`;
 }
 
 // Trainers: answer requests, see upcoming sessions and reward today's sessions
@@ -178,9 +190,10 @@ function renderCoachPanel() {
   const today = LevelUp.dateKey();
   const all = LevelUp.getCoachBookings();
   const requests = all.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now);
-  const todayList = all.filter((b) => b.date === today && ["confirmed", "completed"].includes(b.status));
+  const toSettle = all.filter((b) => LevelUp.canSettle(b));
   const upcoming = all.filter((b) => b.status === "confirmed" && b.date > today);
-  const missed = all.filter((b) => b.status === "confirmed" && b.date < today);
+  const missed = all.filter((b) => b.status === "confirmed" && b.date < today && !LevelUp.canSettle(b));
+  const settledToday = all.filter((b) => b.date === today && ["completed", "no_show", "late_cancel"].includes(b.status));
 
   const row = (b, actions = "") => `
     <li class="session-row coach-row">
@@ -205,13 +218,15 @@ function renderCoachPanel() {
           <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
           <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
         : `<p class="muted">No open requests.</p>`}
-      <h3 class="panel-sub">Today</h3>
-      ${todayList.length ? `<ul class="session-list">${todayList.map((b) => row(b, b.status === "confirmed"
-          ? `<button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>`
-          : `<span class="log-xp">Rewarded</span>`)).join("")}</ul>`
-        : `<p class="muted">No sessions today. The reward button appears here on the day of a confirmed session.</p>`}
+      <h3 class="panel-sub">To settle ${toSettle.length ? `<span class="count-chip">${toSettle.length}</span>` : ""}</h3>
+      ${toSettle.length ? `<p class="muted small-text">Reward the session after training, or mark a no-show (charged in full). You have ${LevelUp.REWARD_WINDOW_DAYS} days.</p>
+        <ul class="session-list">${toSettle.map((b) => row(b, `
+          <button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>
+          ${LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-coach="noshow" data-id="${b.id}">No-show</button>` : ""}`)).join("")}</ul>`
+        : `<p class="muted">Nothing to settle. From the day of a confirmed session you can reward it here.</p>`}
+      ${settledToday.length ? `<h3 class="panel-sub">Settled today</h3><ul class="session-list">${settledToday.map((b) => row(b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul>` : ""}
       ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3><ul class="session-list">${upcoming.map((b) => row(b)).join("")}</ul>` : ""}
-      ${missed.length ? `<h3 class="panel-sub">Not rewarded</h3><p class="muted small-text">Sessions can only be rewarded on the day itself.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
+      ${missed.length ? `<h3 class="panel-sub">Past the ${LevelUp.REWARD_WINDOW_DAYS}-day window</h3><p class="muted small-text">Ask Pieter to settle these in the admin dashboard.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
     </section>`;
 }
 
@@ -546,7 +561,11 @@ function bindEvents(player) {
       button.disabled = true;
       try {
         if (button.dataset.coach === "reward") await LevelUp.rewardSession(button.dataset.id);
-        else await LevelUp.respondBooking(button.dataset.id, button.dataset.coach === "confirm");
+        else if (button.dataset.coach === "noshow") {
+          const b = LevelUp.getCoachBookings().find((x) => x.id === button.dataset.id);
+          if (!confirm(`Mark ${b.name} as no-show? The session is charged in full (${LevelUp.euro(b.price)}) and they get an email.`)) { button.disabled = false; return; }
+          await LevelUp.markNoShow(button.dataset.id);
+        } else await LevelUp.respondBooking(button.dataset.id, button.dataset.coach === "confirm");
       } catch (err) {
         button.disabled = false;
         button.closest(".session-row").querySelector(".form-error").textContent = err.message;
@@ -589,7 +608,11 @@ function bindEvents(player) {
 
   root.querySelectorAll("[data-cancel-booking]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!confirm("Cancel this session? Your trainer gets an email.")) return;
+      const b = LevelUp.playerBookings().find((x) => x.id === button.dataset.cancelBooking);
+      const late = b && LevelUp.isLateCancel(b);
+      if (!confirm(late
+        ? `This session starts in less than ${LevelUp.FREE_CANCEL_HOURS} hours. Cancelling now is charged in full (${LevelUp.euro(b.price)}). Cancel anyway?`
+        : "Cancel this session? It's free, and your trainer gets an email.")) return;
       button.disabled = true;
       try {
         await LevelUp.cancelBooking(button.dataset.cancelBooking);

@@ -1218,6 +1218,7 @@ textarea { resize: vertical; min-height: 130px; }
 .booking-when { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; }
 .booking-price { font-size: 0.9rem; color: var(--muted); margin-bottom: 18px; }
 .booking-price strong { color: var(--gold); }
+.booking-warning { margin: 0 0 12px; padding: 10px 12px; font-size: 0.9rem; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
 .booking-reward { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); }
 .booking-login { display: grid; gap: 12px; padding: 16px; border: 2px dashed var(--gold); }
 .booking-login p { margin: 0; }

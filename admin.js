@@ -24,7 +24,11 @@ const fmtDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "n
 const fmtShort = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const isUpcoming = (b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
-const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed" };
+const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", late_cancel: "Late cancel · charged", no_show: "No-show · charged", expired: "Expired" };
+const STATUS_CLASS = { late_cancel: "declined", no_show: "declined", expired: "declined" };
+const BILLABLE = ["completed", "no_show", "late_cancel"];
+// Confirmed sessions from their day on that nobody rewarded or marked as no-show yet
+const toSettle = (b) => b.status === "confirmed" && b.date <= LevelUp.dateKey();
 const slotLabel = (b) => {
   const d = LevelUp.parseDate(b.date);
   return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${String(b.hour).padStart(2, "0")}:00`;
@@ -51,7 +55,7 @@ async function loadData() {
     rawBookings: bookings,
     players: rows,
     members: rows.filter((p) => !p.admin),
-    active: bookings.filter((b) => b.status !== "declined"),
+    active: bookings.filter((b) => ["pending", "confirmed", "completed"].includes(b.status)),
     bookings: [...bookings].sort((a, b) => LevelUp.slotStart(a.date, a.hour) - LevelUp.slotStart(b.date, b.hour))
   };
 }
@@ -238,7 +242,7 @@ function financeRows() {
   const trainerIds = [...new Set([...TRAINERS.map((t) => t.id), ...rawBookings.map((b) => b.trainerId)])];
   return trainerIds.map((id) => {
     const own = rawBookings.filter((b) => b.trainerId === id);
-    const done = own.filter((b) => b.status === "completed");
+    const done = own.filter((b) => BILLABLE.includes(b.status));
     const upcoming = own.filter(isUpcoming);
     const isOwner = id === pricing.ownerTrainerId;
     const earned = done.reduce((s, b) => s + b.trainerFee, 0);
@@ -278,7 +282,7 @@ function renderFinances() {
       <span class="muted">${money(pricing.price)} per session · trainer gets ${money(pricing.fee)} · you keep ${money(pricing.price - pricing.fee)} (and the full ${money(pricing.price)} for your own sessions)</span>
     </div>
     <div class="finance-kpis">
-      ${tile("Session revenue", money(revenue), `${plural(rows.reduce((s, r) => s + r.sessions, 0), "completed session")}`)}
+      ${tile("Session revenue", money(revenue), `${plural(rows.reduce((s, r) => s + r.sessions, 0), "charged session")} (incl. no-shows &amp; late cancels)`)}
       ${tile("Your share", money(revenue - trainerShare), "Venue share + your own sessions", "good")}
       ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
       ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
@@ -302,7 +306,11 @@ function renderFinances() {
         </tbody>
       </table>
     </div>
-    <p class="muted small">A session counts once it is rewarded (completed). "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
+    ${(() => {
+      const open = data.rawBookings.filter(toSettle);
+      return open.length ? `<p class="settle-note">⚠ ${plural(open.length, "confirmed session")} still to settle (reward or no-show). Trainers have ${LevelUp.REWARD_WINDOW_DAYS} days; you can settle any time under Bookings → past.</p>` : "";
+    })()}
+    <p class="muted small">A session counts once it is rewarded, marked as no-show or cancelled late by the client (those two are charged in full). "Expected" is the trainer fee of confirmed upcoming sessions. Online payment comes later; for now "Mark paid" records that you paid the trainer yourself.</p>`;
 }
 
 // ---------- KPI tiles ----------
@@ -768,11 +776,12 @@ function renderBookings() {
         `<span class="nowrap">${slotLabel(b)}</span>`,
         `<span class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.short)}</span>`,
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
-        `<span class="status-chip ${b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
+        `<span class="status-chip ${STATUS_CLASS[b.status] || b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
         `<span class="admin-actions">${[
           b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
-          b.status === "confirmed" && b.date === LevelUp.dateKey() ? `<button type="button" class="btn btn-small btn-primary" data-admin-reward="${b.id}">Reward</button>` : "",
+          toSettle(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-reward="${b.id}">Reward</button>` : "",
+          toSettle(b) && LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-noshow="${b.id}">No-show</button>` : "",
           isUpcoming(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-cancel="${b.id}">Cancel</button>` : ""
         ].join("")}</span>`
       ];
@@ -916,6 +925,14 @@ root.addEventListener("click", (event) => {
     btn.disabled = true;
     const action = reward ? LevelUp.rewardSession(btn.dataset.adminReward) : LevelUp.respondBooking(btn.dataset.id, btn.dataset.adminRespond === "confirm");
     action.catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const noShow = event.target.closest("[data-admin-noshow]");
+  if (noShow) {
+    const b = data.bookings.find((x) => x.id === noShow.dataset.adminNoshow);
+    if (!b || !confirm(`Mark ${b.name} as no-show on ${slotLabel(b)}? The session is charged in full (${money(b.price)}), the trainer keeps ${money(b.trainerFee)} and ${b.name} gets an email.`)) return;
+    noShow.disabled = true;
+    LevelUp.markNoShow(b.id).catch((err) => { noShow.disabled = false; alert(err.message); });
     return;
   }
   const cancel = event.target.closest("[data-admin-cancel]");

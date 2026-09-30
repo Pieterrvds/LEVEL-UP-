@@ -22,6 +22,8 @@ const LevelUp = (() => {
   const TRAINER_FEE = 40;         // the trainer's share; the rest goes to the venue
   const BOOKING_WEEKS_AHEAD = 4;
   const BOOKING_NOTICE_HOURS = 12;
+  const FREE_CANCEL_HOURS = 24;   // later cancellations of a confirmed session are charged in full
+  const REWARD_WINDOW_DAYS = 7;   // trainers can reward / mark a no-show up to 7 days after
   const TRAINER_SESSION_XP = 100; // trainer XP per session
   const TRAINER_CLIENT_XP = 50;   // trainer XP per unique client
   const XP_PER_EURO = 10;
@@ -341,6 +343,7 @@ const LevelUp = (() => {
         const t = trainerById(b.trainerId);
         if (b.status === "confirmed") toast({ title: "Session confirmed", text: `${t.short} · ${formatSlot(b.date, b.hour)}`, icon: "✓", tone: "green" });
         if (b.status === "declined") toast({ title: "Request declined", text: `${t.short} can't make it. Pick another hour.`, icon: "✕" });
+        if (b.status === "expired") toast({ title: "Request expired", text: `${t.short} didn't answer in time. Pick another hour.`, icon: "⌛" });
       });
     }
     write(key, now);
@@ -363,6 +366,7 @@ const LevelUp = (() => {
     if (player) {
       announceBookingChanges();
       await loadCoachBookings();
+      claimBookingNotices();
     }
     return player;
   }
@@ -581,12 +585,29 @@ const LevelUp = (() => {
     return booking;
   }
 
+  // A confirmed session cancelled less than FREE_CANCEL_HOURS before is charged in full
+  function isLateCancel(b) {
+    if (b.status !== "confirmed") return false;
+    const until = b.freeCancelUntil ? new Date(b.freeCancelUntil) : new Date(slotStart(b.date, b.hour) - FREE_CANCEL_HOURS * 3600e3);
+    return new Date() >= until;
+  }
+
   async function cancelBooking(id) {
     const booking = await call("cancel_booking", { p_id: id });
     await Promise.all([refreshPlayer(), loadSlots(), loadCoachBookings()]);
-    notifyBooking({ ...booking, hour: Number(booking.hour) }, "cancelled");
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, booking.late ? "late_cancel" : "cancelled");
     emit();
     return booking;
+  }
+
+  // Expired requests: whichever browser (client, trainer or admin) claims them first sends the email
+  async function claimBookingNotices() {
+    try {
+      const rows = await call("claim_booking_notices");
+      (rows || []).forEach((b) => notifyBooking({ ...b, hour: Number(b.hour) }, "expired"));
+    } catch (err) {
+      console.error("Claiming booking notices failed:", err);
+    }
   }
 
   // ---------- Trainer side: confirm, decline, reward ----------
@@ -630,9 +651,22 @@ const LevelUp = (() => {
     return booking;
   }
 
+  async function markNoShow(id) {
+    const booking = await call("mark_no_show", { p_id: id });
+    await Promise.all([refreshPlayer(), loadCoachBookings()]);
+    notifyBooking({ ...booking, hour: Number(booking.hour) }, "no_show");
+    toast({ title: "Marked as no-show", text: `${booking.name} · charged ${euro(booking.price)}`, icon: "✕" });
+    emit();
+    return booking;
+  }
+
   const isToday = (key) => key === dateKey();
+  const daysAgo = (key) => Math.round((parseDate(dateKey()) - parseDate(key)) / 864e5);
+  // Confirmed sessions from today back to REWARD_WINDOW_DAYS ago still need a Reward or No-show
+  const canSettle = (b, admin = false) => b.status === "confirmed" && daysAgo(b.date) >= 0 && (admin || daysAgo(b.date) <= REWARD_WINDOW_DAYS);
+  const hasStarted = (b) => slotStart(b.date, b.hour) <= new Date();
   const coachRequests = () => coachBookings.filter((b) => b.status === "pending" && slotStart(b.date, b.hour) > new Date());
-  const coachToReward = () => coachBookings.filter((b) => b.status === "confirmed" && isToday(b.date));
+  const coachToReward = () => coachBookings.filter((b) => canSettle(b));
 
   const playerBookings = () =>
     (player?.bookings || []).slice().sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour));
@@ -668,7 +702,19 @@ const LevelUp = (() => {
       },
       cancelled: {
         subject: `Cancelled: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled.`
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled. No costs.`
+      },
+      late_cancel: {
+        subject: `Late cancellation (charged): ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled less than ${FREE_CANCEL_HOURS} hours before the start. As agreed in our cancellation policy, the session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}. LEVEL-UP will send you the payment details.`
+      },
+      no_show: {
+        subject: `No-show (charged): ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, we missed you at your session with ${trainer.name} on ${when}. A missed session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}. LEVEL-UP will send you the payment details. Something came up? Reply to this email.`
+      },
+      expired: {
+        subject: `Request expired: ${trainer.short} · ${when}`,
+        reply: `Hi ${booking.name}, your request for a session with ${trainer.name} on ${when} wasn't confirmed in time, so it has been cancelled. No costs. Pick another hour in the LEVEL-UP schedule.`
       }
     }[action];
     fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
@@ -687,6 +733,7 @@ const LevelUp = (() => {
         note: booking.note || "-",
         price: euro(booking.price ?? SESSION_PRICE),
         booking_id: booking.id,
+        charged: ["late_cancel", "no_show"].includes(action) ? `Yes, ${euro(booking.price ?? SESSION_PRICE)}` : "No",
         next_step: action === "requested" ? `${trainer.short}: log in on the LEVEL-UP website to confirm or decline.` : "-"
       })
     }).catch((error) => console.error("Booking email failed:", error));
@@ -987,7 +1034,11 @@ const LevelUp = (() => {
         const row = btn.closest(".coach-item");
         try {
           if (btn.dataset.coachAction === "reward") await rewardSession(btn.dataset.id);
-          else await respondBooking(btn.dataset.id, btn.dataset.coachAction === "confirm");
+          else if (btn.dataset.coachAction === "noshow") {
+            const b = coachBookings.find((x) => x.id === btn.dataset.id);
+            if (!confirm(`Mark ${b.name} as no-show? The session is charged in full (${euro(b.price)}) and they get an email.`)) { btn.disabled = false; return; }
+            await markNoShow(btn.dataset.id);
+          } else await respondBooking(btn.dataset.id, btn.dataset.coachAction === "confirm");
           showCoachInbox({ force: true });
         } catch (err) {
           btn.disabled = false;
@@ -1007,17 +1058,19 @@ const LevelUp = (() => {
     coachDialog.innerHTML = `
       <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
       <p class="section-kicker">Coach inbox · ${esc(trainerById(player.trainerId).name)}</p>
-      <h2 class="auth-title" id="coachTitle">${requests.length ? `${requests.length} new booking request${requests.length === 1 ? "" : "s"}` : "Sessions to reward"}</h2>
+      <h2 class="auth-title" id="coachTitle">${requests.length ? `${requests.length} new booking request${requests.length === 1 ? "" : "s"}` : `${rewards.length} session${rewards.length === 1 ? "" : "s"} to settle`}</h2>
       ${requests.length ? `
         <ul class="coach-list">${requests.map((b) => item(b, (x) => `
           <button type="button" class="btn btn-small btn-primary" data-coach-action="confirm" data-id="${x.id}">Confirm</button>
           <button type="button" class="btn btn-small btn-ghost" data-coach-action="decline" data-id="${x.id}">Decline</button>`)).join("")}
         </ul>` : ""}
       ${rewards.length ? `
-        <h3 class="panel-sub">Today's sessions · reward after training</h3>
+        <h3 class="panel-sub">Sessions to settle · reward after training, or mark a no-show</h3>
         <ul class="coach-list">${rewards.map((b) => item(b, (x) => `
-          <button type="button" class="btn btn-small btn-primary" data-coach-action="reward" data-id="${x.id}">Reward +${x.xp} XP</button>`)).join("")}
-        </ul>` : ""}
+          <button type="button" class="btn btn-small btn-primary" data-coach-action="reward" data-id="${x.id}">Reward +${x.xp} XP</button>
+          ${hasStarted(x) ? `<button type="button" class="btn btn-small btn-ghost" data-coach-action="noshow" data-id="${x.id}">No-show</button>` : ""}`)).join("")}
+        </ul>
+        <p class="auth-note">Settle within ${REWARD_WINDOW_DAYS} days: your ${euro(TRAINER_FEE)} only counts once a session is rewarded or marked as no-show.</p>` : ""}
       <p class="auth-note">You can also handle these later in your profile, under Coach panel.</p>`;
     if (!coachDialog.open) coachDialog.showModal();
   }
@@ -1379,7 +1432,7 @@ const LevelUp = (() => {
     trainerById, trainerHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
-    SESSION_PRICE, TRAINER_FEE, euro, getCoachEarnings: () => coachEarnings, markPayout,
+    SESSION_PRICE, TRAINER_FEE, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
   };

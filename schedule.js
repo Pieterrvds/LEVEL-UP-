@@ -247,6 +247,7 @@ function renderBookingDialog(message = "") {
         ? `<span class="status-chip pending">Pending</span> ${esc(trainer.short)} still has to confirm this session.`
         : `<span class="status-chip confirmed">Confirmed</span> ${esc(trainer.short)} will reward your +${own?.xp ?? LevelUp.SESSION_XP} XP after the session.`}</p>
       ${own?.note ? `<p class="booking-note-view">“${esc(own.note)}”</p>` : ""}
+      ${own && LevelUp.isLateCancel(own) ? `<p class="booking-warning">Starts in less than ${LevelUp.FREE_CANCEL_HOURS} hours: cancelling now is charged in full (${LevelUp.euro(own.price)}).</p>` : ""}
       <p class="form-error" role="alert">${esc(message)}</p>
       <div class="btn-row">
         <a class="btn btn-ghost btn-small" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
@@ -254,6 +255,7 @@ function renderBookingDialog(message = "") {
       </div>`;
     const cancel = document.getElementById("cancelBooking");
     cancel.addEventListener("click", async () => {
+      if (own && LevelUp.isLateCancel(own) && !confirm(`Cancelling now is charged in full (${LevelUp.euro(own.price)}). Cancel anyway?`)) return;
       cancel.disabled = true;
       cancel.textContent = "Cancelling…";
       try {
@@ -279,7 +281,7 @@ function renderBookingDialog(message = "") {
         <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, rewarded by ${esc(trainer.short)}</span></div>
         <button type="submit" class="btn btn-primary btn-block">Send booking request ▶</button>
       </form>
-      <p class="auth-note">${esc(trainer.short)} gets a notification and confirms or declines. You'll see the status in your profile.</p>` : `
+      <p class="auth-note">${esc(trainer.short)} gets a notification and confirms or declines. Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>` : `
       <div class="booking-login">
         <p>Log in or create your player to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
         <div class="btn-row">
@@ -309,7 +311,7 @@ function showBooked() {
     <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
-    <p class="booking-price">Price: <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> for the hour. You only pay for confirmed sessions; LEVEL-UP sends you the payment details.</p>
+    <p class="booking-price">Price: <strong>${LevelUp.euro(LevelUp.SESSION_PRICE)}</strong> for the hour. You only pay for confirmed sessions; LEVEL-UP sends you the payment details. Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>

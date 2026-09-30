@@ -192,3 +192,4 @@
   .finance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .finance-kpis .kpi-value { font-size: 1.4rem; }
 }
+.settle-note { margin: 14px 0 8px; padding: 10px 12px; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
