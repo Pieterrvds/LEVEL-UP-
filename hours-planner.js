@@ -2,6 +2,7 @@
 //   Every week:    drag in an empty spot to add hours for the selected trainer, drag a bar to
 //                  move it, drag its top/bottom edge to change the times, click it to edit,
 //                  delete or copy it to other days.
+//   Used by the admin (every trainer) and by a trainer in their profile (opts.trainers = [their id]).
 //   A real week:   the actual dates with days off, extra hours and the sessions already booked;
 //                  drag to add extra hours or close a few hours / a whole day.
 // Booked or requested hours stay locked (checked here and in the database).
@@ -20,7 +21,9 @@ window.LevelUpPlanner = (() => {
   let opts = null;
 
   // ---------- helpers ----------
-  const visibleTrainers = () => TRAINERS.filter((t) => !state.hidden.has(t.id));
+  // The trainers this planner may show: all for the admin, only their own card for a trainer
+  const allowed = () => TRAINERS.filter((t) => !opts?.trainers || opts.trainers.includes(t.id));
+  const visibleTrainers = () => allowed().filter((t) => !state.hidden.has(t.id));
   // Lanes per day: only the trainers that have something that day share the column
   const lane = (trainerId, present) => {
     const index = present.indexOf(trainerId);
@@ -58,7 +61,8 @@ window.LevelUpPlanner = (() => {
   function render(el, options) {
     host = el;
     opts = options;
-    if (!state.active || !TRAINERS.some((t) => t.id === state.active)) state.active = TRAINERS[0]?.id;
+    if (!state.active || !allowed().some((t) => t.id === state.active)) state.active = allowed()[0]?.id;
+    const single = allowed().length === 1;
     if (!LevelUp.getOpeningHours()) { el.innerHTML = `${opts.intro}<p class="muted">The opening hours can't be loaded right now.</p>`; return; }
     const range = hourRange();
     const dates = weekDates();
@@ -105,7 +109,7 @@ window.LevelUpPlanner = (() => {
       ${opts.intro}
       <div class="pl-toolbar">
         <div class="pl-trainers" role="group" aria-label="Trainers">
-          ${TRAINERS.map((t) => `
+          ${single ? "" : allowed().map((t) => `
             <span class="pl-trainer${state.active === t.id ? " active" : ""}${state.hidden.has(t.id) ? " off" : ""}" style="--c:${t.chartColor || t.color}">
               <input type="checkbox" data-pl-show="${t.id}" ${state.hidden.has(t.id) ? "" : "checked"} aria-label="Show ${esc(t.short)}">
               <button type="button" data-pl-active="${t.id}" title="Draw hours for ${esc(t.short)}"><img src="${t.img}" alt="">${esc(t.short)}</button>
@@ -126,7 +130,7 @@ window.LevelUpPlanner = (() => {
         </div>
       </div>
       <p class="pl-help muted">${weekly
-        ? `Drag in an empty spot to add hours for <strong style="color:${LevelUp.trainerById(state.active)?.chartColor}">${esc(LevelUp.trainerById(state.active)?.short || "")}</strong> (pick another trainer above). Drag a bar to move it, drag its top or bottom edge to change the times, click it to edit, delete or copy it.`
+        ? `Drag in an empty spot to add hours for <strong style="color:${LevelUp.trainerById(state.active)?.chartColor}">${esc(LevelUp.trainerById(state.active)?.short || "")}</strong>${single ? "" : " (pick another trainer above)"}. Drag a bar to move it, drag its top or bottom edge to change the times, click it to edit, delete or copy it.`
         : `The real week: weekly hours, <span class="pl-key extra">extra hours</span>, <span class="pl-key closed">closed</span> and 🔒 booked sessions. Drag to add extra hours or close hours for <strong style="color:${LevelUp.trainerById(state.active)?.chartColor}">${esc(LevelUp.trainerById(state.active)?.short || "")}</strong>; click a bar to change it.`}</p>
       <div class="pl-grid" style="--row:${ROW}px">
         <div class="pl-head pl-corner"></div>

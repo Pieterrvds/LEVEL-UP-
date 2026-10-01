@@ -58,7 +58,8 @@ trainer, drag a bar to move it, drag its top/bottom edge to change the times, cl
 other days. *Specific week*: the real dates with days off, extra hours and booked sessions; drag to add extra hours,
 drag over (or click) a block to close those hours that day. Trainer checkboxes show or hide trainers; "List view"
 switches to the list editor, which small screens always use. Each trainer also manages their own hours in their
-profile → Coach panel → **My opening hours** (the list editor, `hours-editor.js`). In both, and each
+profile → Coach panel → **My opening hours**: the same week planner on desktop (only their own card), the list
+editor (`hours-editor.js`) on small screens or via "List view". In both, and each
 trainer manages their own in their profile → Coach panel → **My opening hours** (same editor, `hours-editor.js`):
 - **Every week:** blocks like Wednesday 19:00–21:00. Click a block to change or move it, ✕ to delete it.
 - **Extra hours on one date** or **closed on one date** (day off, holiday, all day or a few hours).

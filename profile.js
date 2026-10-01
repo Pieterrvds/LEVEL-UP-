@@ -295,6 +295,30 @@ function renderCoachPanel() {
     </section>`;
 }
 
+// Trainer's own opening hours: the week planner on desktop, the list editor on small screens
+function renderMyHours() {
+  const el = document.getElementById("myHours");
+  if (!el) return;
+  const intro = (extra = "") => `<div class="my-hours-intro"><p class="muted small-text">When players can book you on the schedule. Hours with a booking or request are locked.</p>${extra}</div>`;
+  const trainerId = LevelUp.getPlayer().trainerId;
+  if (window.innerWidth >= 900 && !state.hoursList) {
+    LevelUpPlanner.render(el, {
+      trainers: [trainerId],
+      bookings: () => LevelUp.getCoachBookings(),
+      intro: intro(),
+      onList: () => { state.hoursList = true; renderMyHours(); }
+    });
+    return;
+  }
+  LevelUpHours.render(el, {
+    key: "profile",
+    trainers: [trainerId],
+    bookings: () => LevelUp.getCoachBookings(),
+    intro: intro(window.innerWidth >= 900 ? `<button type="button" class="btn btn-small btn-ghost" data-my-planner>Week planner</button>` : "")
+  });
+  el.querySelector("[data-my-planner]")?.addEventListener("click", () => { state.hoursList = false; renderMyHours(); });
+}
+
 function renderWorkouts(player) {
   const today = LevelUp.dateKey();
   const rewardedToday = player.workouts.filter((w) => w.date === today && w.xp > 0).length;
@@ -624,12 +648,7 @@ function bindEvents(player) {
   });
 
   if (LevelUp.isTrainer()) {
-    LevelUpHours.render(document.getElementById("myHours"), {
-      key: "profile",
-      trainers: [LevelUp.getPlayer().trainerId],
-      bookings: () => LevelUp.getCoachBookings(),
-      intro: `<p class="muted small-text">When players can book you on the schedule. Hours with a booking or request are locked.</p>`
-    });
+    renderMyHours();
     document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
   }
 
