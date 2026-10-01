@@ -4,8 +4,8 @@ Personal training platform with a retro game theme: players and personal trainer
 ## Pages
 - `index.html`: home page: quest board with the next open sessions, the platform + XP table, classes, team with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Replays" pop-up (hero button and footer)
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
-- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their character stats as step 2 of sign-up.
-- `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details
+- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their character stats as step 2 of sign-up. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
+- `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
 

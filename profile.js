@@ -3,7 +3,7 @@
 const root = document.getElementById("profileRoot");
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -521,7 +521,7 @@ function renderAchievements(player) {
 function renderInventory(player) {
   const owned = ITEMS.filter((item) => player.inventory[item.id]);
   return `
-    <section class="panel">
+    <section class="panel panel-wide">
       <div class="panel-head">
         <h2>Inventory</h2>
         <a href="shop.html" class="btn btn-small">Item shop</a>
@@ -577,7 +577,7 @@ function renderHealth(player) {
   const h = player.healthForm;
   const until = h ? new Date(new Date(h.acceptedAt).setFullYear(new Date(h.acceptedAt).getFullYear() + 1)) : null;
   return `
-    <section class="panel" id="health">
+    <section class="panel panel-wide" id="health">
       <div class="panel-head">
         <h2>Health check</h2>
         ${h ? `<span class="status-chip ${h.valid ? "confirmed" : "pending"}">${h.valid ? "Up to date" : "Please confirm again"}</span>` : `<span class="status-chip pending">Not filled in</span>`}
@@ -622,24 +622,55 @@ function render() {
     return;
   }
   const p = LevelUp.progress(player.xp);
+  const tabs = profileTabs(player);
+  if (!tabs.some((t) => t.id === state.tab)) state.tab = "overview";
+  const { inTab } = LevelUp;
   root.innerHTML = `
     ${renderHeader(player, p)}
-    ${renderSummary(player)}
+    ${LevelUp.pageTabsHtml(tabs, state.tab)}
+    ${inTab("overview", renderSummary(player))}
     <div class="panel-grid">
-      ${player.application?.status === "pending" ? renderApplication(player) : ""}
-      ${renderCoachPanel()}
-      ${renderSessions()}
-      ${renderPacks(player)}
-      ${renderRewards(player)}
-      ${renderHealth(player)}
-      ${renderInventory(player)}
-      ${renderBodyStats(player)}
-      ${renderAchievements(player)}
-      ${renderRanks(player, p)}
-      ${player.application?.status === "pending" ? "" : renderApplication(player)}
-      ${renderSettings()}
+      ${inTab("overview", renderSessions())}
+      ${inTab("coach", renderCoachPanel())}
+      ${inTab("rewards", renderRewards(player))}
+      ${inTab("rewards", renderAchievements(player))}
+      ${inTab("rewards", renderRanks(player, p))}
+      ${inTab("shop", renderPacks(player))}
+      ${inTab("shop", renderInventory(player))}
+      ${inTab("me", renderBodyStats(player))}
+      ${inTab("me", renderHealth(player))}
+      ${inTab("me", renderApplication(player))}
+      ${inTab("me", renderSettings())}
     </div>`;
+  // first render: open the tab the link points to (profile.html#packs, #rewards …)
+  if (!state.tabFromLink) {
+    state.tabFromLink = true;
+    const fromLink = LevelUp.tabFromHash(root, tabs.map((t) => t.id));
+    if (fromLink) {
+      state.tab = fromLink;
+      const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      LevelUp.showPageTab(root, state.tab);
+      if (target && !target.matches("[data-page-tab]")) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+    }
+  }
+  LevelUp.showPageTab(root, state.tab);
   bindEvents(player);
+}
+
+// Page tabs; the counters show what needs attention
+function profileTabs(player) {
+  const now = new Date();
+  const coach = LevelUp.isTrainer() ? LevelUp.getCoachBookings() : [];
+  const requests = coach.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length;
+  const toSettle = coach.filter((b) => LevelUp.canSettle(b)).length;
+  const needsSetup = (!player.bodyStats.length ? 1 : 0) + (!LevelUp.healthValid() ? 1 : 0);
+  return [
+    { id: "overview", label: "Overview" },
+    LevelUp.isTrainer() && { id: "coach", label: "Coach", badge: requests + toSettle },
+    { id: "rewards", label: "Rewards", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
+    { id: "shop", label: "Packs & shop" },
+    { id: "me", label: "Me", badge: needsSetup ? "!" : 0 }
+  ].filter(Boolean);
 }
 
 function bindEvents(player) {
@@ -663,6 +694,13 @@ function bindEvents(player) {
       form.querySelector('button[type="submit"]').disabled = false;
     }
   });
+
+  root.querySelectorAll("[data-page-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    state.tab = btn.dataset.pageTab;
+    LevelUp.showPageTab(root, state.tab);
+    history.replaceState(null, "", `#${state.tab}`);
+    LevelUp.scrollToTabs(root);
+  }));
 
   document.getElementById("historyBtn")?.addEventListener("click", () => {
     state.historyOpen = !state.historyOpen;

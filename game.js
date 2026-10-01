@@ -777,6 +777,50 @@ const LevelUp = (() => {
     return booking;
   }
 
+  // ---------- Page tabs (My account and admin) ----------
+  // tabs: [{ id, label, badge }]. Panels carry data-pane="<id>"; only the active tab's panels show.
+  function pageTabsHtml(tabs, active) {
+    return `
+      <nav class="page-tabs" aria-label="Sections">
+        <div class="page-tabs-inner" role="tablist">${tabs.map((t) => `
+          <button type="button" role="tab" class="page-tab" data-page-tab="${t.id}" aria-selected="${t.id === active}">
+            ${esc(t.label)}${t.badge ? `<span class="tab-badge">${esc(String(t.badge))}</span>` : ""}</button>`).join("")}
+        </div>
+      </nav>`;
+  }
+
+  function showPageTab(root, id) {
+    root.querySelectorAll("[data-pane]").forEach((el) => { el.hidden = el.dataset.pane !== id; });
+    root.querySelectorAll("[data-page-tab]").forEach((b) => {
+      const on = b.dataset.pageTab === id;
+      b.setAttribute("aria-selected", String(on));
+      // keep the active tab in view in the swipeable bar (phones), without scrolling the page
+      if (on) b.parentElement.scrollLeft = b.offsetLeft - (b.parentElement.clientWidth - b.offsetWidth) / 2;
+    });
+  }
+
+  // The tab to open for the address bar's #hash: a tab id, or the tab holding an element with that id
+  function tabFromHash(root, ids) {
+    const hash = decodeURIComponent(location.hash.slice(1));
+    if (!hash) return null;
+    if (ids.includes(hash)) return hash;
+    const tab = document.getElementById(hash)?.closest("[data-pane]")?.dataset.pane;
+    return ids.includes(tab) ? tab : null;
+  }
+
+  // After switching tabs: if the page was scrolled past the tab bar, go back to the top of the new tab
+  function scrollToTabs(root) {
+    const bar = root.querySelector(".page-tabs");
+    const before = bar?.previousElementSibling;
+    if (!before) return;
+    const hud = (document.getElementById("hud")?.offsetHeight || 0) + 4;
+    const y = before.getBoundingClientRect().bottom + window.scrollY - hud;
+    if (window.scrollY > y) window.scrollTo({ top: y });
+  }
+
+  // Adds data-pane to the first element of a block of HTML
+  const inTab = (tab, html) => html ? html.replace(/<(section|details|div|header)\b/, `<$1 data-pane="${tab}"`) : "";
+
   // ---------- Health questionnaire (PAR-Q style, before the first booking) ----------
   const HEALTH_QUESTIONS = [
     ["q1", "Has a doctor ever said you have a heart condition or high blood pressure?"],
@@ -1866,6 +1910,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
+    pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab,
     LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,

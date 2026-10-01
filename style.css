@@ -1973,3 +1973,22 @@ textarea { resize: vertical; min-height: 130px; }
 .reward-use small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
 .reward-use:has(input:disabled) { opacity: 0.5; }
 .kind-price[hidden] { display: none; }
+
+/* ---------- Page tabs (My account and admin) ---------- */
+.page-tabs { position: sticky; top: calc(var(--hud-h) + 4px); z-index: 50; margin: 0 0 24px; background: rgba(5, 8, 7, 0.96);
+  border-bottom: 2px solid var(--line); }
+.page-tabs-inner { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.page-tabs-inner::-webkit-scrollbar { display: none; }
+.page-tab { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 14px 18px 12px; font-family: var(--pixel); font-size: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent;
+  margin-bottom: -2px; cursor: pointer; white-space: nowrap; }
+.page-tab:hover { color: var(--text); }
+.page-tab[aria-selected="true"] { color: var(--green-bright); border-bottom-color: var(--green-bright); }
+.page-tab:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; }
+.tab-badge { font-size: 0.5rem; color: #000; background: var(--gold); padding: 3px 5px; line-height: 1; }
+[data-pane][hidden] { display: none !important; }
+@media (max-width: 640px) {
+  .page-tabs { margin: 0 -20px 18px; padding: 0 12px; }
+  .page-tab { padding: 13px 12px 11px; font-size: 0.55rem; }
+}
+[data-pane], #sessionHistory, #health { scroll-margin-top: calc(var(--hud-h) + 64px); }

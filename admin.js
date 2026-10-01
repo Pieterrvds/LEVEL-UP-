@@ -15,6 +15,8 @@ const state = {
   bookingView: "upcoming",
   bookingTrainer: "all",
   tables: {}, // chart key -> showing table view
+  tab: "overview", // open page tab (see ADMIN_TABS)
+  tabFromLink: false,
   fin: { mode: "month", offset: 0, statementMonth: null }
 };
 let data = null;
@@ -116,6 +118,9 @@ async function render() {
       <p class="data-note"><strong>Live data</strong> from the LEVEL-UP server. Schedule: ${LevelUp.calendarStatus() === "ok" ? "open hours come from the Google Calendar." : "the Google Calendar couldn't be read, so the fallback hours are used."}</p>
     </header>
 
+    ${LevelUp.pageTabsHtml(adminTabs(), state.tab)}
+
+    <div data-pane="overview">
     ${LevelUp.getPricing().onlinePayments ? "" : `
     <section class="panel admin-panel todo-panel">
       <div class="panel-head"><h2>To do: online payments</h2><span class="status-chip pending">Not active</span></div>
@@ -133,27 +138,32 @@ async function render() {
 
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
 
-    <section class="panel admin-panel finances" id="finances"></section>
-
-    <section class="panel admin-panel" id="packsPanel"></section>
-
-    <section class="panel admin-panel" id="rewardsPanel"></section>
-
     <section class="chart-grid">
       ${chartCard("weekly", "Sessions per week", "Last 4 weeks and the next 4, by trainer", true)}
       ${chartCard("trainers", "Sessions by trainer", "All-time sessions, including sessions from before the online schedule")}
       ${chartCard("growth", "Members", "Total members over time")}
       ${chartCard("ranks", "Members by rank", "Where your players are on the ladder")}
     </section>
+    </div>
+
+    <div data-pane="finances">
+    <section class="panel admin-panel finances" id="finances"></section>
+
+    <section class="panel admin-panel" id="packsPanel"></section>
+
+    <section class="panel admin-panel" id="rewardsPanel"></section>
+    </div>
+
+    <div data-pane="team">
+    <section class="panel admin-panel" id="hoursPanel"></section>
 
     <section class="panel admin-panel">
       <div class="panel-head"><h2>Trainers</h2><span class="muted">Occupancy = booked hours of all open hours in the next ${LevelUp.BOOKING_WEEKS_AHEAD} weeks</span></div>
       <div class="trainer-admin-grid" id="trainerCards"></div>
     </section>
+    </div>
 
-    <section class="panel admin-panel" id="hoursPanel"></section>
-
-    <section class="panel admin-panel">
+    <section class="panel admin-panel" data-pane="bookings">
       <div class="panel-head">
         <h2>Bookings</h2>
         <div class="admin-filters">
@@ -168,7 +178,7 @@ async function render() {
       <div id="bookingTable"></div>
     </section>
 
-    <section class="panel admin-panel">
+    <section class="panel admin-panel" data-pane="members">
       <div class="panel-head">
         <h2>Members</h2>
         <div class="admin-filters">
@@ -191,6 +201,12 @@ async function render() {
       <div id="memberContent"></div>
     </dialog>`;
 
+  // first render: open the tab the link points to (admin.html#finances, #applications …)
+  if (!state.tabFromLink) {
+    state.tabFromLink = true;
+    state.tab = LevelUp.tabFromHash(root, ADMIN_TABS.map((t) => t.id)) || state.tab;
+  }
+  LevelUp.showPageTab(root, state.tab);
   renderApplications();
   if (location.hash === "#applications" && !render.scrolled) {
     render.scrolled = true;
@@ -206,6 +222,38 @@ async function render() {
   renderBookings();
   renderMembers();
 }
+
+// ---------- Page tabs ----------
+const ADMIN_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "bookings", label: "Bookings" },
+  { id: "finances", label: "Finances" },
+  { id: "team", label: "Team" },
+  { id: "members", label: "Members" }
+];
+
+// Counters on the tabs: things waiting for the admin
+function adminTabs() {
+  const now = new Date();
+  const badge = {
+    overview: data.applications.filter((a) => a.status === "pending").length,
+    bookings: data.rawBookings.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length,
+    finances: data.packs.filter((pk) => pk.status === "requested").length
+      + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
+      + data.rawBookings.filter((b) => b.refundStatus === "manual").length
+  };
+  return ADMIN_TABS.map((t) => ({ ...t, badge: badge[t.id] || 0 }));
+}
+
+root.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-page-tab]");
+  if (!tab) return;
+  state.tab = tab.dataset.pageTab;
+  LevelUp.showPageTab(root, state.tab);
+  history.replaceState(null, "", `#${state.tab}`);
+  if (state.tab === "overview") renderCharts(); // charts measure their width, which is 0 while hidden
+  LevelUp.scrollToTabs(root);
+});
 
 function chartCard(key, title, subtitle, legend = false) {
   return `
