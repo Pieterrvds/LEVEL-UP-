@@ -3,7 +3,7 @@
 const root = document.getElementById("profileRoot");
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -75,8 +75,8 @@ function renderSessions() {
   const upcoming = bookings.filter((b) => ["awaiting_payment", "pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > now);
   const history = bookings
     .filter((b) => !upcoming.includes(b))
-    .sort((a, b) => LevelUp.slotStart(b.date, b.hour) - LevelUp.slotStart(a.date, a.hour))
-    .slice(0, 6);
+    .sort((a, b) => LevelUp.slotStart(b.date, b.hour) - LevelUp.slotStart(a.date, a.hour));
+  const toPay = history.filter(LevelUp.canPayOnline).length;
 
   const row = (b) => {
     const trainer = LevelUp.trainerById(b.trainerId);
@@ -121,7 +121,10 @@ function renderSessions() {
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
         : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
-      ${history.length ? `<h3 class="panel-sub">History</h3><ul class="session-list">${history.map(row).join("")}</ul>` : ""}
+      ${history.length ? `
+        <button type="button" class="btn btn-ghost btn-small history-btn" id="historyBtn" aria-controls="sessionHistory" aria-expanded="${Boolean(state.historyOpen)}">
+          ${state.historyOpen ? "Hide history ▲" : `History · ${history.length} past session${history.length === 1 ? "" : "s"}${toPay ? ` · ${toPay} to pay` : ""} ▼`}</button>
+        <ul class="session-list" id="sessionHistory" ${state.historyOpen ? "" : "hidden"}>${history.map(row).join("")}</ul>` : ""}
     </section>`;
 }
 
@@ -307,7 +310,7 @@ function renderCoachPanel() {
       <div>
         <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
         ${LevelUp.healthFlagHtml(b.health)}
-        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : b.payMethod === "reward" ? " · free session 🎁" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
         <p class="form-error" role="alert"></p>
       </div>
       <div class="coach-actions">${actions}</div>
@@ -659,6 +662,12 @@ function bindEvents(player) {
       form.querySelector(".form-error").textContent = err.message;
       form.querySelector('button[type="submit"]').disabled = false;
     }
+  });
+
+  document.getElementById("historyBtn")?.addEventListener("click", () => {
+    state.historyOpen = !state.historyOpen;
+    render();
+    if (state.historyOpen) document.getElementById("sessionHistory")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 
   document.getElementById("achMore")?.addEventListener("click", (event) => {

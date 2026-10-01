@@ -265,3 +265,5 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .rank-rewards li { grid-template-columns: 1fr auto; }
   .rank-rewards li span { grid-column: 1 / -1; grid-row: 2; color: var(--muted); }
 }
+.history-btn { margin-top: 14px; }
+#sessionHistory { margin-top: 10px; }

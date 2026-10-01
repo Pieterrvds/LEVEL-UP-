@@ -469,7 +469,7 @@ const LevelUp = (() => {
 
   // Short description of what a booking costs, for rows and emails
   function priceLabel(b) {
-    if (b.priceType === "reward") return "free session (reward)";
+    if (b.priceType === "reward") return "free session 🎁";
     if (b.priceType === "pack") return "pack credit";
     if (b.priceType === "intro") return `${euro(b.price)} first session`;
     if (b.kind === "duo") return `${euro(b.price)} duo${b.partner ? ` with ${b.partner}` : ""}`;
@@ -878,7 +878,7 @@ const LevelUp = (() => {
   // How a booking is paid, for rows and emails
   function payLabel(b) {
     if (b.payMethod === "pack") return "";
-    if (b.payMethod === "reward") return "Free session 🎁";
+    if (b.payMethod === "reward") return "";
     if (b.refundStatus === "manual") return "Refund at the HQ";
     if (b.refundStatus === "due" || b.refundStatus === "processing") return "Refund on its way";
     if (b.payStatus === "refunded") return "Refunded";

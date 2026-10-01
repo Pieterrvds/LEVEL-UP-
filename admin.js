@@ -1027,7 +1027,7 @@ function renderBookings() {
         `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${LevelUp.healthFlagHtml(b.health)}`,
         `<span class="status-chip ${STATUS_CLASS[b.status] || b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
         `<span class="nowrap">${esc(LevelUp.priceLabel(b))}</span>`,
-        `<span class="nowrap">${esc(LevelUp.payLabel(b) || (b.payMethod === "pack" ? "Pack credit" : "–"))}</span>`,
+        `<span class="nowrap">${esc(LevelUp.payLabel(b) || (b.payMethod === "pack" ? "Pack credit" : b.payMethod === "reward" ? "Free session 🎁" : "–"))}</span>`,
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
         `<span class="admin-actions">${[
           b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
