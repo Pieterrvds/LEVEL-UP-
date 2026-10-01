@@ -84,9 +84,6 @@
 .log-xp { font-family: var(--pixel); font-size: 0.5rem; color: var(--green-bright); white-space: nowrap; }
 
 .table-wrap { overflow-x: auto; }
-.stats-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.stats-table th, .stats-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.stats-table th { font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); font-weight: 400; }
 
 .inventory { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .inventory li {

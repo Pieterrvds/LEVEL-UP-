@@ -434,16 +434,6 @@ function renderBodyStats(player) {
           <p class="muted small-text">Estimates only. Want a plan built for you? <a href="index.html#contact" class="text-link">Ask your coach</a>.</p>
         </div>
       </div>
-      <h3 class="panel-sub">History</h3>
-      <div class="table-wrap">
-        <table class="stats-table">
-          <thead><tr><th>Date</th><th>Weight</th><th>BMI</th><th>Target</th><th>Goal</th></tr></thead>
-          <tbody>
-            ${entries.slice(0, 10).map((e) => `
-              <tr><td>${formatDate(e.date)}</td><td>${e.weight} kg</td><td>${e.bmi}</td><td>${fmtNum(e.target)} kcal</td><td>${LevelUp.GOALS[e.goal] || ""}</td></tr>`).join("")}
-          </tbody>
-        </table>
-      </div>
     </section>`;
 }
 
