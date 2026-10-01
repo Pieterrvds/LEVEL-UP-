@@ -163,6 +163,59 @@ function renderApplication(player) {
 }
 
 // Session packs: credits for 1:1 sessions, active once LEVEL-UP has the payment
+// Loyalty card (a free 1:1 every N completed sessions) and the rank rewards
+function renderRewards(player) {
+  const r = player.rewards;
+  const stamped = r.count % r.every;
+  const toGo = r.every - stamped;
+  const open = LevelUp.availableVouchers(player);
+  const done = r.vouchers.filter((v) => !LevelUp.voucherOpen(v));
+  const xp = player.xp;
+  const source = (v) => LevelUp.REWARD_SOURCES[v.source];
+  const ranks = [
+    { title: "Warrior", level: 8, gift: "Bragging rights" },
+    { title: "Champion", level: 12, gift: "Free 1:1 session", id: "champion" },
+    { title: "Legend", level: 16, gift: "Free 1:1 session + LEVEL-UP hoodie", id: "legend" }
+  ];
+  return `
+    <section class="panel panel-wide" id="rewards">
+      <div class="panel-head">
+        <h2>Rewards</h2>
+        <span class="xp-chip ${open.length ? "gold" : ""}">${open.length ? `🎁 ${open.length} free session${open.length === 1 ? "" : "s"}` : `${toGo} to your next free session`}</span>
+      </div>
+      ${open.length ? `<ul class="voucher-list">${open.map((v) => `
+        <li class="voucher">
+          <span class="voucher-icon" aria-hidden="true">🎁</span>
+          <span><strong>Free 1:1 session</strong><small>${source(v).icon} ${source(v).title} · use by ${LevelUp.shortDate(v.expiresAt)}</small></span>
+          <a class="btn btn-small btn-primary" href="index.html#schedule">Book it ▶</a>
+        </li>`).join("")}</ul>` : ""}
+      <div class="rewards-layout">
+        <div>
+          <h3 class="panel-sub first">Loyalty card</h3>
+          <p class="muted small-text">Every ${r.every} completed sessions = a free 1:1 session.</p>
+          <ol class="stamp-card" aria-label="${stamped} of ${r.every} sessions">
+            ${Array.from({ length: r.every }, (_, i) => `<li class="${i < stamped ? "on" : ""}">${i === r.every - 1 ? "🎁" : ""}</li>`).join("")}
+          </ol>
+          <p class="stamp-note"><strong>${stamped}/${r.every}</strong> · ${toGo === 1 ? "1 more session" : `${toGo} more sessions`} to your next free session</p>
+        </div>
+        <div>
+          <h3 class="panel-sub first">Rank rewards</h3>
+          <ul class="rank-rewards">${ranks.map((k) => {
+            const need = 50 * k.level * (k.level - 1);
+            const got = k.id && r.vouchers.some((v) => v.source === k.id);
+            const reached = xp >= need || got;
+            return `<li class="${reached ? "reached" : ""}"><b>${k.title}</b><span>${esc(k.gift)}</span>
+              <small>${reached ? "✓ Reached" : `LVL ${k.level} · ${(need - xp).toLocaleString("en-US")} XP to go`}</small></li>`;
+          }).join("")}</ul>
+        </div>
+      </div>
+      ${done.length ? `<h3 class="panel-sub">Earlier rewards</h3><ul class="detail-list">${done.map((v) => `
+        <li><span>${source(v).icon} ${source(v).title}${v.hoodie ? " · hoodie" : ""}</span><span class="muted small">${v.bookingId ? "Used" : "Expired"} · earned ${LevelUp.shortDate(v.earnedAt)}</span></li>`).join("")}</ul>` : ""}
+      <p class="muted small-text">A free session is a 1:1 with any trainer, booked like a normal session: choose "Use a free session" in the booking window.
+      Book it within ${r.validMonths} months. A declined request or a cancellation in time gives it back; a late cancellation or no-show uses it up.</p>
+    </section>`;
+}
+
 function renderPacks(player) {
   const euro = LevelUp.euro;
   const credits = LevelUp.packCredits();
@@ -574,6 +627,7 @@ function render() {
       ${renderCoachPanel()}
       ${renderSessions()}
       ${renderPacks(player)}
+      ${renderRewards(player)}
       ${renderHealth(player)}
       ${renderInventory(player)}
       ${renderBodyStats(player)}

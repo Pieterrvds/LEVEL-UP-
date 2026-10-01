@@ -1611,6 +1611,8 @@ textarea { resize: vertical; min-height: 130px; }
 .price-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 1.5rem; padding: 0; list-style: none; }
 .price-card { display: grid; gap: 4px; align-content: start; padding: 14px 16px; background: var(--panel); border: 2px solid var(--line); }
 .price-card.featured { border-color: var(--gold); }
+.price-loyalty { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; padding: 10px 14px; font-size: 0.9rem; color: var(--text);
+  background: rgba(255, 210, 63, 0.08); border: 2px dashed var(--gold); }
 .price-card .price-tag { font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
 .price-card strong { font-size: 1.5rem; color: var(--text); }
 .price-card span:last-child { font-size: 0.85rem; color: var(--muted); }
@@ -1963,3 +1965,11 @@ textarea { resize: vertical; min-height: 130px; }
 .health-flag.missing summary { color: var(--muted); font-weight: 400; cursor: default; }
 .health-flag ul { margin: 6px 0 0; padding-left: 18px; color: var(--text); }
 .health-flag p { margin: 6px 0 0; color: var(--muted); }
+
+/* Free session option in the booking window */
+.reward-use { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; background: rgba(255, 210, 63, 0.08); border: 2px solid var(--gold);
+  font-family: var(--sans); font-size: 0.9rem; text-transform: none; color: var(--text); cursor: pointer; }
+.reward-use input { width: 18px; height: 18px; padding: 0; margin-top: 2px; flex: none; accent-color: var(--gold); }
+.reward-use small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.reward-use:has(input:disabled) { opacity: 0.5; }
+.kind-price[hidden] { display: none; }

@@ -44,8 +44,10 @@ insert into public.app_config (key, value) values
   ('duo_price', '80'),            -- one trainer, two people, one hour (total)
   ('duo_trainer_fee', '50'),      -- the trainer's share of a duo session
   ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]'), -- session packs: credits for 1:1 sessions
-  ('online_payments', 'off'),
-  ('health_form_months', '12'),   -- the health questionnaire is confirmed again after this many months     -- 'on' once the payments Edge Function and the Mollie key are set up
+  ('online_payments', 'off'),     -- 'on' once the payments Edge Function and the Mollie key are set up
+  ('health_form_months', '12'),   -- the health questionnaire is confirmed again after this many months
+  ('loyalty_sessions', '20'),     -- every this many completed (paid) sessions earn a free 1:1 session
+  ('reward_valid_months', '3'),   -- a free session voucher must be booked within this many months
   ('payment_hold_minutes', '20')  -- how long an unpaid online booking holds the hour
 on conflict (key) do nothing;
 
@@ -224,6 +226,23 @@ returns boolean language sql stable security definer set search_path = public as
     and h.accepted_at > now() - make_interval(months => public._config('health_form_months')::int));
 $$;
 
+-- Free 1:1 session vouchers: one for every loyalty_sessions completed sessions (source 'loyalty',
+-- seq 1, 2, 3 …) and rank rewards (Champion, Legend: Legend also gets a LEVEL-UP hoodie, handed out
+-- at the desk). A booking that uses a voucher has price 0; LEVEL-UP still pays the trainer's fee.
+-- A declined, expired or freely cancelled booking gives the voucher back (like a pack credit).
+create table if not exists public.reward_vouchers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  source text not null check (source in ('loyalty', 'champion', 'legend')),
+  seq integer not null default 1,
+  earned_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  hoodie boolean not null default false,
+  hoodie_given_at timestamptz,
+  unique (user_id, source, seq)
+);
+alter table public.bookings add column if not exists voucher_id uuid references public.reward_vouchers (id) on delete set null;
+
 -- Per-trainer price and fee (empty = the defaults in app_config). Not public.
 create table if not exists public.trainer_pricing (
   trainer_id text primary key references public.trainers (id) on delete cascade,
@@ -267,7 +286,7 @@ update public.bookings set request_at = created_at where request_at is null;
 update public.bookings set pay_method = 'pack', pay_status = 'n/a' where price_type = 'pack' and pay_method <> 'pack';
 alter table public.bookings drop constraint if exists bookings_pay_check;
 alter table public.bookings add constraint bookings_pay_check
-  check (pay_method in ('online', 'in_person', 'pack') and pay_status in ('unpaid', 'paid', 'refunded', 'n/a'));
+  check (pay_method in ('online', 'in_person', 'pack', 'reward') and pay_status in ('unpaid', 'paid', 'refunded', 'n/a'));
 create index if not exists bookings_mollie_idx on public.bookings (mollie_id);
 -- A declined request frees the hour again, so uniqueness only counts active bookings
 alter table public.bookings drop constraint if exists bookings_trainer_id_day_hour_key;
@@ -286,13 +305,43 @@ alter table public.bookings add column if not exists payout_at timestamptz; -- w
 update public.bookings set trainer_fee = price
   where trainer_id = public._config('owner_trainer_id') and trainer_fee <> price;
 
+-- A voucher is used while a booking holds it (declined, expired and cancelled bookings don't)
+create or replace function public._voucher_used(p_voucher uuid)
+returns uuid language sql stable security definer set search_path = public as $$
+  select id from public.bookings where voucher_id = p_voucher and status not in ('declined', 'expired', 'cancelled') limit 1;
+$$;
+
+create or replace function public._voucher_json(v public.reward_vouchers)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', v.id, 'source', v.source, 'seq', v.seq, 'earnedAt', v.earned_at, 'expiresAt', v.expires_at,
+    'hoodie', v.hoodie, 'hoodieGivenAt', v.hoodie_given_at, 'bookingId', public._voucher_used(v.id),
+    'name', p.name, 'email', p.email)
+  from public.profiles p where p.id = v.user_id;
+$$;
+
+-- Completed sessions that count for the loyalty card (free sessions themselves don't)
+create or replace function public._loyalty_count(p_user uuid)
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.bookings where user_id = p_user and status = 'completed' and price_type <> 'reward';
+$$;
+
+create or replace function public._rewards_json(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'every', public._config('loyalty_sessions')::int,
+    'count', public._loyalty_count(p_user),
+    'validMonths', public._config('reward_valid_months')::int,
+    'vouchers', coalesce((select jsonb_agg(public._voucher_json(v) order by v.earned_at desc, v.seq desc)
+                          from public.reward_vouchers v where v.user_id = p_user), '[]'::jsonb));
+$$;
+
 create or replace function public._booking_json(b public.bookings)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'id', b.id, 'trainerId', b.trainer_id, 'date', b.day, 'hour', b.hour, 'note', b.note, 'xp', b.xp,
     'status', b.status, 'createdAt', b.created_at, 'respondedAt', b.responded_at, 'rewardedAt', b.rewarded_at,
     'price', b.price, 'trainerFee', b.trainer_fee, 'payoutAt', b.payout_at,
-    'kind', b.kind, 'partner', b.partner, 'priceType', b.price_type, 'packId', b.pack_id,
+    'kind', b.kind, 'partner', b.partner, 'priceType', b.price_type, 'packId', b.pack_id, 'voucherId', b.voucher_id,
     'payMethod', b.pay_method, 'payStatus', b.pay_status, 'paidAt', b.paid_at, 'refundStatus', b.refund_status,
     'freeCancelUntil', ((b.day + make_interval(hours => b.hour)) at time zone 'Europe/Brussels')
                        - make_interval(hours => public._config('free_cancel_hours')::int),
@@ -367,6 +416,9 @@ alter table public.trainer_hours enable row level security;
 alter table public.health_forms enable row level security;
 drop policy if exists "own health form or admin" on public.health_forms;
 create policy "own health form or admin" on public.health_forms for select using (user_id = auth.uid() or public.is_admin());
+alter table public.reward_vouchers enable row level security;
+drop policy if exists "own vouchers or admin" on public.reward_vouchers;
+create policy "own vouchers or admin" on public.reward_vouchers for select using (user_id = auth.uid() or public.is_admin());
 
 drop policy if exists "own packs or admin" on public.session_packs;
 create policy "own packs or admin" on public.session_packs for select using (user_id = auth.uid() or public.is_admin());
@@ -407,6 +459,33 @@ begin
   if p_amount = 0 then return; end if;
   update public.profiles set xp = greatest(0, xp + p_amount) where id = p_user;
   insert into public.xp_log (user_id, amount, reason) values (p_user, p_amount, p_reason);
+  perform public._check_rewards(p_user);
+end $$;
+
+-- Hands out the free session vouchers a player has earned (safe to run again: one per card / rank)
+create or replace function public._check_rewards(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  cards integer;
+  valid interval := make_interval(months => public._config('reward_valid_months')::int);
+begin
+  select * into p from public.profiles where id = p_user;
+  if not found then return; end if;
+  cards := public._loyalty_count(p_user) / greatest(1, public._config('loyalty_sessions')::int);
+  insert into public.reward_vouchers (user_id, source, seq, expires_at)
+    select p_user, 'loyalty', g, now() + valid from generate_series(1, cards) g
+    on conflict (user_id, source, seq) do nothing;
+  -- rank rewards are for clients: trainers earn their XP by coaching
+  if exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email)) then return; end if;
+  if p.xp >= 6600 then   -- Champion, LVL 12
+    insert into public.reward_vouchers (user_id, source, expires_at) values (p_user, 'champion', now() + valid)
+      on conflict (user_id, source, seq) do nothing;
+  end if;
+  if p.xp >= 12000 then  -- Legend, LVL 16
+    insert into public.reward_vouchers (user_id, source, expires_at, hoodie) values (p_user, 'legend', now() + valid, true)
+      on conflict (user_id, source, seq) do nothing;
+  end if;
 end $$;
 
 create or replace function public._unlock(p_user uuid, p_id text, p_xp integer, p_title text)
@@ -563,6 +642,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
     'healthForm', public._health_brief(p.id),
+    'rewards', public._rewards_json(p.id),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
                                  and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
   )
@@ -715,6 +795,7 @@ declare
   horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
                    + 7 * public._config('booking_weeks_ahead')::int);
   b public.bookings;
+  voucher uuid;
 begin
   if uid is null then raise exception 'Log in to book a session.'; end if;
   perform public._expire_requests();
@@ -723,7 +804,8 @@ begin
   if p_hour < 0 or p_hour > 23 then raise exception 'Invalid time.'; end if;
   if p_kind not in ('solo', 'duo') then raise exception 'Invalid session type.'; end if;
   if p_kind = 'duo' and trim(coalesce(p_partner, '')) = '' then raise exception 'Enter the name of the person you train with.'; end if;
-  if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
+  if p_pay not in ('online', 'in_person', 'reward') then raise exception 'Invalid payment method.'; end if;
+  if p_pay = 'reward' and p_kind <> 'solo' then raise exception 'A free session voucher is for a 1:1 session.'; end if;
   if not public._health_valid(uid) then
     raise exception 'Fill in the health questionnaire before you book a session.';
   end if;
@@ -747,16 +829,26 @@ begin
   -- one booking at a time per player, so two tabs can't spend the same pack credit
   perform 1 from public.profiles where id = uid for update;
   q := public._quote(uid, p_trainer, p_kind);
+  if p_pay = 'reward' then
+    select id into voucher from public.reward_vouchers v
+      where v.user_id = uid and v.expires_at > now() and public._voucher_used(v.id) is null
+      order by v.expires_at limit 1;
+    if voucher is null then raise exception 'You have no free session voucher to use.'; end if;
+    q := jsonb_build_object('type', 'reward', 'price', 0,
+      'fee', case when p_trainer = public._config('owner_trainer_id') then 0
+                  else coalesce((select tp.fee from public.trainer_pricing tp where tp.trainer_id = p_trainer),
+                                public._config('trainer_fee')::numeric) end);
+  end if;
   begin
     insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee,
-                                 kind, partner, price_type, pack_id, pay_method, pay_status, request_at, request_notice_sent)
+                                 kind, partner, price_type, pack_id, voucher_id, pay_method, pay_status, request_at, request_notice_sent)
     values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int,
             case when q ->> 'type' <> 'pack' and p_pay = 'online' then 'awaiting_payment' else 'pending' end,
             (q ->> 'price')::numeric, (q ->> 'fee')::numeric,
             p_kind, case when p_kind = 'duo' then left(trim(p_partner), 40) else '' end,
-            q ->> 'type', (q ->> 'packId')::uuid,
-            case when q ->> 'type' = 'pack' then 'pack' else p_pay end,
-            case when q ->> 'type' = 'pack' then 'n/a' else 'unpaid' end,
+            q ->> 'type', (q ->> 'packId')::uuid, voucher,
+            case when q ->> 'type' in ('pack', 'reward') then q ->> 'type' else p_pay end,
+            case when q ->> 'type' in ('pack', 'reward') then 'n/a' else 'unpaid' end,
             case when q ->> 'type' <> 'pack' and p_pay = 'online' then null else now() end,
             not (q ->> 'type' <> 'pack' and p_pay = 'online'))
     returning * into b;
@@ -1423,7 +1515,7 @@ begin
   if p_type = 'booking' then
     select * into b from public.bookings where id = p_id and user_id = auth.uid();
     if not found then raise exception 'Booking not found.'; end if;
-    if b.pay_method = 'pack' or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
+    if b.pay_method in ('pack', 'reward') or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
     if b.status not in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel') then
       raise exception 'This booking can''t be paid anymore.';
     end if;
@@ -1529,7 +1621,7 @@ begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   select * into b from public.bookings where id = p_id;
   if not found then raise exception 'Booking not found.'; end if;
-  if b.pay_method = 'pack' or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
+  if b.pay_method in ('pack', 'reward') or b.pay_status <> 'unpaid' then raise exception 'This session doesn''t need a payment.'; end if;
   update public.bookings set pay_status = 'paid', pay_method = 'in_person', paid_at = now(),
          status = case when status = 'awaiting_payment' then 'pending' else status end,
          request_at = case when status = 'awaiting_payment' then now() else request_at end
@@ -1565,6 +1657,18 @@ begin
   return public._booking_json(b);
 end $$;
 
+-- Admin: the Legend hoodie was handed out at the desk
+create or replace function public.mark_hoodie_given(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v public.reward_vouchers;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.reward_vouchers set hoodie_given_at = now()
+    where id = p_id and hoodie and hoodie_given_at is null returning * into v;
+  if not found then raise exception 'No hoodie to hand out for this reward.'; end if;
+  return public._voucher_json(v);
+end $$;
+
 -- ---------------------------------------------------------
 -- Admin dashboard data
 -- ---------------------------------------------------------
@@ -1590,6 +1694,7 @@ begin
                                   'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, jsonb_build_object('price', tp.price, 'fee', tp.fee))
                                                         from public.trainer_pricing tp), '{}'::jsonb)),
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc) from public.session_packs sp), '[]'::jsonb),
+    'vouchers', coalesce((select jsonb_agg(public._voucher_json(v) order by v.earned_at desc) from public.reward_vouchers v), '[]'::jsonb),
     'hours', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
                           'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'note', h.note) order by h.weekday, h.day, h.start_hour)
                        from public.trainer_hours h where h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1), '[]'::jsonb)
@@ -1690,6 +1795,13 @@ revoke execute on function public._health_brief(uuid) from public, anon, authent
 revoke execute on function public._health_valid(uuid) from public, anon, authenticated;
 revoke execute on function public.save_health_form(jsonb, text, text) from public, anon;
 grant execute on function public.save_health_form(jsonb, text, text) to authenticated;
+revoke execute on function public._voucher_used(uuid) from public, anon, authenticated;
+revoke execute on function public._voucher_json(public.reward_vouchers) from public, anon, authenticated;
+revoke execute on function public._loyalty_count(uuid) from public, anon, authenticated;
+revoke execute on function public._rewards_json(uuid) from public, anon, authenticated;
+revoke execute on function public._check_rewards(uuid) from public, anon, authenticated;
+revoke execute on function public.mark_hoodie_given(uuid) from public, anon;
+grant execute on function public.mark_hoodie_given(uuid) to authenticated;
 revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
 revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
 revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;
@@ -1708,3 +1820,6 @@ grant execute on function public.slot_status(date, date) to anon, authenticated;
 grant execute on function public.trainer_stats() to anon, authenticated;
 grant execute on function public.record_order(text, jsonb) to anon, authenticated;
 grant execute on function public.calendar_feed() to anon, authenticated;
+
+-- Hand out the free session vouchers members already earned before rewards existed
+do $$ begin perform public._check_rewards(id) from public.profiles; end $$;

@@ -20,6 +20,7 @@ const LevelUp = (() => {
 
   // Keep these in sync with app_config in supabase/schema.sql
   const SESSION_XP = 75;
+  const LOYALTY_SESSIONS = 20;    // every 20 completed sessions earn a free 1:1 session (app_config loyalty_sessions)
   const SESSION_PRICE = 60;       // euro per 1-hour session (the server's app_config decides the real price)
   const TRAINER_FEE = 40;         // the trainer's share; the rest goes to the venue
   const BOOKING_WEEKS_AHEAD = 4;
@@ -324,9 +325,17 @@ const LevelUp = (() => {
         trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
       })),
       packs: (data.packs || []).map(normalisePack),
+      rewards: normaliseRewards(data.rewards),
       introEligible: Boolean(data.introEligible)
     };
   }
+
+  const normaliseRewards = (r) => ({
+    every: Number(r?.every) || LOYALTY_SESSIONS,
+    count: Number(r?.count) || 0,
+    validMonths: Number(r?.validMonths) || 3,
+    vouchers: r?.vouchers || []
+  });
 
   const normalisePack = (pk) => ({ ...pk, size: Number(pk.size), price: Number(pk.price), used: Number(pk.used), remaining: Number(pk.remaining) });
 
@@ -353,6 +362,13 @@ const LevelUp = (() => {
       if (seenPacks[pk.id] === "requested" && pk.status === "paid") toast({ title: "Pack active", text: `${pk.size} session credits ready to use`, icon: "★", tone: "green" });
     });
     write(packKey, Object.fromEntries(player.packs.map((pk) => [pk.id, pk.status])));
+    const rewardKey = `levelup.vouchers.${player.id}`;
+    const seenVouchers = read(rewardKey, null);
+    if (seenVouchers) player.rewards.vouchers.filter((v) => !seenVouchers.includes(v.id)).forEach((v) => {
+      toast({ title: v.source === "legend" ? "Legend reward!" : v.source === "champion" ? "Champion reward!" : "Free session earned!",
+        text: v.hoodie ? "A free 1:1 session + a LEVEL-UP hoodie" : "A free 1:1 session is waiting for you", icon: "🎁", tone: "green" });
+    });
+    write(rewardKey, player.rewards.vouchers.map((v) => v.id));
   }
 
   async function refreshPlayer({ announce = false } = {}) {
@@ -436,8 +452,24 @@ const LevelUp = (() => {
     return { type: "standard", price: priceFor(trainerId) };
   }
 
+  // ---------- Rewards: a free 1:1 session every LOYALTY_SESSIONS sessions, and at Champion and Legend ----------
+  const REWARD_SOURCES = {
+    loyalty: { title: "Loyalty card", icon: "🎟" },
+    champion: { title: "Champion rank", icon: "♛" },
+    legend: { title: "Legend rank", icon: "★" }
+  };
+  const voucherOpen = (v) => !v.bookingId && new Date(v.expiresAt) > new Date();
+  const availableVouchers = (p = player) => (p?.rewards?.vouchers || []).filter(voucherOpen)
+    .sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+  const shortDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+  async function markHoodieGiven(id) {
+    await call("mark_hoodie_given", { p_id: id });
+  }
+
   // Short description of what a booking costs, for rows and emails
   function priceLabel(b) {
+    if (b.priceType === "reward") return "free session (reward)";
     if (b.priceType === "pack") return "pack credit";
     if (b.priceType === "intro") return `${euro(b.price)} first session`;
     if (b.kind === "duo") return `${euro(b.price)} duo${b.partner ? ` with ${b.partner}` : ""}`;
@@ -841,11 +873,12 @@ const LevelUp = (() => {
   }
 
   const PAYABLE = ["awaiting_payment", "pending", "confirmed", "completed", "no_show", "late_cancel"];
-  const canPayOnline = (b) => pricing.onlinePayments && b.payMethod !== "pack" && b.payStatus === "unpaid" && PAYABLE.includes(b.status);
+  const canPayOnline = (b) => pricing.onlinePayments && !["pack", "reward"].includes(b.payMethod) && b.payStatus === "unpaid" && PAYABLE.includes(b.status);
 
   // How a booking is paid, for rows and emails
   function payLabel(b) {
     if (b.payMethod === "pack") return "";
+    if (b.payMethod === "reward") return "Free session 🎁";
     if (b.refundStatus === "manual") return "Refund at the HQ";
     if (b.refundStatus === "due" || b.refundStatus === "processing") return "Refund on its way";
     if (b.payStatus === "refunded") return "Refunded";
@@ -1026,7 +1059,7 @@ const LevelUp = (() => {
       },
       confirmed: {
         subject: `Confirmed: ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. ${booking.priceType === "pack" ? "This session uses one of your pack credits." : booking.payStatus === "paid" ? `Price: ${priceLabel(booking)}, already paid.` : `Price: ${priceLabel(booking)}: pay at the headquarters (${HQ_ADDRESS}) or online in your LEVEL-UP profile.`} After the session you get +${booking.xp} XP.`
+        reply: `Hi ${booking.name}, good news: ${trainer.name} confirmed your session on ${when}. ${booking.priceType === "pack" ? "This session uses one of your pack credits." : booking.priceType === "reward" ? "This is your free session: nothing to pay." : booking.payStatus === "paid" ? `Price: ${priceLabel(booking)}, already paid.` : `Price: ${priceLabel(booking)}: pay at the headquarters (${HQ_ADDRESS}) or online in your LEVEL-UP profile.`} After the session you get +${booking.xp} XP.`
       },
       declined: {
         subject: `Declined: ${trainer.short} · ${when}`,
@@ -1038,11 +1071,11 @@ const LevelUp = (() => {
       },
       late_cancel: {
         subject: `Late cancellation (charged): ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled less than ${FREE_CANCEL_HOURS} hours before the start. As agreed in our cancellation policy, the session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.${booking.payStatus === "paid" || booking.payMethod === "pack" ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."}`
+        reply: `Hi ${booking.name}, your session with ${trainer.name} on ${when} has been cancelled less than ${FREE_CANCEL_HOURS} hours before the start. As agreed in our cancellation policy, ${booking.priceType === "reward" ? "your free session is used up." : `the session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.`}${booking.payStatus === "paid" || ["pack", "reward"].includes(booking.payMethod) ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."}`
       },
       no_show: {
         subject: `No-show (charged): ${trainer.short} · ${when}`,
-        reply: `Hi ${booking.name}, we missed you at your session with ${trainer.name} on ${when}. A missed session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.${booking.payStatus === "paid" || booking.payMethod === "pack" ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."} Something came up? Reply to this email.`
+        reply: `Hi ${booking.name}, we missed you at your session with ${trainer.name} on ${when}. ${booking.priceType === "reward" ? "A missed free session is used up." : `A missed session is charged in full: ${euro(booking.price ?? SESSION_PRICE)}.`}${booking.payStatus === "paid" || ["pack", "reward"].includes(booking.payMethod) ? "" : " Pay at the headquarters or online in your LEVEL-UP profile."} Something came up? Reply to this email.`
       },
       expired: {
         subject: `Request expired: ${trainer.short} · ${when}`,
@@ -1064,7 +1097,7 @@ const LevelUp = (() => {
         email: booking.email,
         note: booking.note || "-",
         price: priceLabel(booking),
-        payment: booking.payMethod === "pack" ? "Pack credit" : booking.payStatus === "paid" ? `Paid ${booking.payMethod === "online" ? "online" : "at the HQ"}` : "Pays at the HQ",
+        payment: booking.payMethod === "pack" ? "Pack credit" : booking.payMethod === "reward" ? "Free session (reward)" : booking.payStatus === "paid" ? `Paid ${booking.payMethod === "online" ? "online" : "at the HQ"}` : "Pays at the HQ",
         session: booking.kind === "duo" ? `Duo with ${booking.partner}` : "1:1",
         booking_id: booking.id,
         charged: ["late_cancel", "no_show"].includes(action) ? `Yes, ${euro(booking.price ?? SESSION_PRICE)}` : "No",
@@ -1146,6 +1179,7 @@ const LevelUp = (() => {
       unlinkedTrainers: data.unlinkedTrainers || [],
       hours: data.hours ? data.hours.map((r) => ({ ...r, weekday: r.weekday === null ? null : Number(r.weekday), start: Number(r.start), end: Number(r.end) })) : null,
       packs: (data.packs || []).map(normalisePack),
+      vouchers: data.vouchers || [],
       pricing: {
         price: Number(data.pricing?.price ?? SESSION_PRICE),
         fee: Number(data.pricing?.fee ?? TRAINER_FEE),
@@ -1832,6 +1866,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
+    LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,

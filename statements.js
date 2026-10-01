@@ -15,9 +15,9 @@ window.LevelUpStatements = (() => {
   };
 
   const STATUS = { completed: "Completed", no_show: "No-show (charged)", late_cancel: "Late cancellation (charged)" };
-  const TYPE = { standard: "1:1", intro: "1:1 first session", pack: "1:1 pack credit", duo: "Duo" };
+  const TYPE = { standard: "1:1", intro: "1:1 first session", pack: "1:1 pack credit", reward: "1:1 free session (reward)", duo: "Duo" };
   const sessionType = (b) => b.kind === "duo" ? `Duo${b.partner ? ` (with ${b.partner})` : ""}` : TYPE[b.priceType] || "1:1";
-  const payment = (b) => b.payMethod === "pack" ? "Pack credit" : b.payStatus === "paid" ? (b.payMethod === "online" ? "Paid online" : "Paid at HQ") : b.payStatus === "refunded" ? "Refunded" : "Not paid yet";
+  const payment = (b) => b.payMethod === "pack" ? "Pack credit" : b.payMethod === "reward" ? "Free (reward)" : b.payStatus === "paid" ? (b.payMethod === "online" ? "Paid online" : "Paid at HQ") : b.payStatus === "refunded" ? "Refunded" : "Not paid yet";
 
   // "2026-10" -> first/last day and a label
   function monthRange(ym) {

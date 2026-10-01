@@ -105,6 +105,22 @@ their name. A "yes" asks for a short explanation and advises them to check with 
 - Trainers see a ⚠ **Health info** flag (the yes answers and the explanation) on the bookings of their
   clients; the admin sees it in the admin panel. Nobody else can read the answers (`health_forms` RLS).
 
+## Rewards (free sessions)
+
+- **Loyalty card:** every `loyalty_sessions` (20) completed sessions earn a free 1:1 session. Free sessions
+  themselves don't count towards the card.
+- **Rank rewards:** a free 1:1 session at **Champion** (LVL 12) and at **Legend** (LVL 16), where Legend also gets
+  a LEVEL-UP hoodie. Warrior has no reward. Trainers' own accounts don't get rank rewards (they earn XP by coaching).
+- A voucher is valid for `reward_valid_months` (3) months, for a 1:1 with any trainer, and replaces the intro price,
+  a pack credit or a payment. In the booking window the player ticks "Use a free session".
+- A declined, expired or freely cancelled request gives the voucher back; a late cancellation or a no-show uses it up.
+- Money: the session is booked at €0, and LEVEL-UP still pays the trainer's normal fee (on the owner's own card the
+  fee is €0). It shows in the finance overview as a charged session with €0 revenue.
+- Players see their loyalty card, free sessions and rank rewards under **Rewards** in My account and get a pop-up
+  when they earn one. The admin dashboard has a **Rewards** panel with open free sessions and the Legend hoodies
+  to hand out ("Hoodie given").
+- When the SQL runs, members who already earned rewards get them right away.
+
 ## Cancellations
 - Players cancel for free up to **24 hours** before the session (and can always withdraw a pending request).
 - A confirmed session cancelled later is a **late cancellation**: charged in full, the trainer keeps their fee,

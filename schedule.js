@@ -396,7 +396,8 @@ function renderBookingDialog(message = "") {
     submit.textContent = "Booking…";
     try {
       const form = event.target.elements;
-      const pay = needsPayment(pendingSlot.trainerId, form.kind.value) ? (form.pay?.value || "in_person") : "in_person";
+      const pay = usesReward(form.kind.value) ? "reward"
+        : needsPayment(pendingSlot.trainerId, form.kind.value) ? (form.pay?.value || "in_person") : "in_person";
       const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value, pay });
       if (booked.status === "awaiting_payment") {
         submit.textContent = "To the payment page…";
@@ -424,19 +425,25 @@ function bookingOptions(trainerId) {
     intro: `${euro(solo.price)} <small>first session, normally ${euro(solo.normal)}</small>`,
     standard: euro(solo.price)
   }[solo.type];
+  const vouchers = LevelUp.availableVouchers();
   return `
+    ${vouchers.length ? `
+      <label class="reward-use"><input type="checkbox" name="useReward" checked>
+        <span><strong>🎁 Use a free session</strong>
+        <small>${vouchers.length === 1 ? "You have 1 free session" : `You have ${vouchers.length} free sessions`} · use by ${LevelUp.shortDate(vouchers[0].expiresAt)} · 1:1 only</small></span></label>` : ""}
     <fieldset class="kind-picker">
       <legend>Session</legend>
       <label class="kind-option"><input type="radio" name="kind" value="solo" checked>
-        <span><strong>1:1</strong><span class="kind-price">${soloText}</span></span></label>
+        <span><strong>1:1</strong><span class="kind-price" data-solo-price>${soloText}</span>${vouchers.length ? `<span class="kind-price" data-solo-free hidden>Free 🎁 <small>your reward</small></span>` : ""}</span></label>
       <label class="kind-option"><input type="radio" name="kind" value="duo">
         <span><strong>Duo</strong><span class="kind-price">${euro(duo.price)} <small>for the two of you</small></span></span></label>
     </fieldset>
     ${solo.type === "standard" && LevelUp.getPricing().packs.length ? `<p class="kind-tip">Training often? <a href="profile.html#packs">Session packs</a> from ${euro(Math.min(...LevelUp.getPricing().packs.map((p) => p.price / p.size)))} per session.</p>` : ""}`;
 }
 
-// Pack credits cover 1:1 sessions; everything else is paid online (preferred) or at the HQ
-const needsPayment = (trainerId, kind) => kind === "duo" || LevelUp.quote(trainerId, "solo").type !== "pack";
+// A free session voucher or a pack credit covers a 1:1 session; everything else is paid online (preferred) or at the HQ
+const usesReward = (kind) => kind === "solo" && Boolean(document.querySelector('#bookingForm [name="useReward"]')?.checked);
+const needsPayment = (trainerId, kind) => kind === "duo" || (!usesReward(kind) && LevelUp.quote(trainerId, "solo").type !== "pack");
 
 function paymentOptions(trainerId) {
   const online = LevelUp.getPricing().onlinePayments;
@@ -460,9 +467,14 @@ function updateSubmitLabel() {
   const pays = needsPayment(pendingSlot.trainerId, kind);
   form.querySelector(".pay-picker").hidden = !pays;
   const q = LevelUp.quote(pendingSlot.trainerId, kind);
+  const free = form.querySelector("[data-solo-free]");
+  if (free) {
+    free.hidden = !usesReward("solo");
+    form.querySelector("[data-solo-price]").hidden = !free.hidden;
+  }
   document.getElementById("bookSubmit").textContent = pays && form.elements.pay?.value === "online"
     ? `Pay ${LevelUp.euro(q.price)} & send request ▶`
-    : "Send booking request ▶";
+    : usesReward(kind) ? "Book my free session ▶" : "Send booking request ▶";
 }
 
 bookingDialog.addEventListener("change", (event) => {
@@ -470,8 +482,14 @@ bookingDialog.addEventListener("change", (event) => {
     const field = bookingDialog.querySelector(".partner-field");
     field.hidden = event.target.value !== "duo";
     field.querySelector("input").required = event.target.value === "duo";
+    // a free session is for 1:1 only
+    const reward = bookingDialog.querySelector('[name="useReward"]');
+    if (reward) {
+      reward.disabled = event.target.value === "duo";
+      if (reward.disabled) reward.checked = false;
+    }
   }
-  if (["kind", "pay"].includes(event.target.name)) updateSubmitLabel();
+  if (["kind", "pay", "useReward"].includes(event.target.name)) updateSubmitLabel();
 });
 
 // Online payment couldn't start: offer to pay at the HQ so the request still goes out
@@ -512,6 +530,8 @@ function showBooked(booked) {
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
     <p class="booking-price">${booked?.priceType === "pack"
       ? "Paid with <strong>1 pack credit</strong>. A declined request gives it back."
+      : booked?.priceType === "reward"
+      ? "This is your <strong>free session</strong> 🎁. A declined request gives it back."
       : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. Pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)})${LevelUp.getPricing().onlinePayments ? " or online from your profile" : ""}.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     <div class="btn-row">
@@ -682,7 +702,8 @@ function renderPriceList() {
     { tag: "Duo session", price: euro(p.duoPrice), note: "Train with a friend, 1 hour" },
     best && { tag: `${best.size}-session pack`, price: euro(best.price), note: `${euro(best.price / best.size)} per session` }
   ].filter(Boolean).map((c) => `
-    <li class="price-card${c.featured ? " featured" : ""}"><span class="price-tag">${c.tag}</span><strong>${c.price}</strong><span>${c.note}</span></li>`).join("");
+    <li class="price-card${c.featured ? " featured" : ""}"><span class="price-tag">${c.tag}</span><strong>${c.price}</strong><span>${c.note}</span></li>`).join("")
+    + `<li class="price-loyalty"><span aria-hidden="true">🎁</span><span><strong>Loyalty reward:</strong> every ${LevelUp.LOYALTY_SESSIONS} sessions your next 1:1 is free. Plus a free session at the Champion and Legend ranks.</span></li>`;
 }
 renderPriceList();
 document.addEventListener("levelup:change", renderPriceList);

@@ -235,3 +235,33 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .bonus-grid.collapsed > :nth-child(n + 5) { display: none; }
   .ach-more { display: flex; justify-content: center; margin-top: 14px; }
 }
+
+/* Rewards: loyalty card and free session vouchers */
+.voucher-list { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 8px; }
+.voucher { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; background: rgba(255, 210, 63, 0.08); border: 2px solid var(--gold); }
+.voucher-icon { font-size: 1.6rem; line-height: 1; }
+.voucher strong { display: block; }
+.voucher small { color: var(--muted); }
+.rewards-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+.rewards-layout > * { min-width: 0; }
+.stamp-card { list-style: none; padding: 0; margin: 10px 0 8px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; max-width: 420px; }
+.stamp-card li { aspect-ratio: 1; display: grid; place-items: center; font-size: 0.9rem; background: #000; border: 2px solid var(--line); }
+.stamp-card li.on { background: var(--green-bright); border-color: var(--green-bright); box-shadow: inset 0 0 0 3px #000; }
+.stamp-card li:last-child { border-color: var(--gold); }
+.stamp-note { margin: 0; font-size: 0.9rem; }
+.rank-rewards { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.rank-rewards li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; background: #000; border-left: 4px solid var(--line); font-size: 0.9rem; }
+.rank-rewards li b { font-family: var(--pixel); font-size: 0.55rem; font-weight: 400; text-transform: uppercase; }
+.rank-rewards li small { color: var(--muted); white-space: nowrap; }
+.rank-rewards li.reached { border-left-color: var(--gold); }
+.rank-rewards li.reached small { color: var(--gold); }
+#rewards .detail-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+#rewards .detail-list li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: #000; border-left: 4px solid var(--green-dark); }
+@media (max-width: 760px) {
+  .rewards-layout { grid-template-columns: 1fr; gap: 18px; }
+  .voucher { grid-template-columns: auto 1fr; }
+  .voucher .btn { grid-column: 1 / -1; }
+  .stamp-card { gap: 4px; }
+  .rank-rewards li { grid-template-columns: 1fr auto; }
+  .rank-rewards li span { grid-column: 1 / -1; grid-row: 2; color: var(--muted); }
+}

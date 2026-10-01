@@ -28,7 +28,7 @@ const isUpcoming = (b) => ["awaiting_payment", "pending", "confirmed"].includes(
 const STATUS_LABEL = { awaiting_payment: "Not paid yet", cancelled: "Cancelled", pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", late_cancel: "Late cancel · charged", no_show: "No-show · charged", expired: "Expired" };
 const STATUS_CLASS = { late_cancel: "declined", no_show: "declined", expired: "declined", cancelled: "declined", awaiting_payment: "pending" };
 // Sessions the player still has to pay (at the HQ, or online later)
-const toCollect = (b) => b.payMethod !== "pack" && b.payStatus === "unpaid" && ["pending", "confirmed", "completed", "no_show", "late_cancel"].includes(b.status);
+const toCollect = (b) => !["pack", "reward"].includes(b.payMethod) && b.payStatus === "unpaid" && ["pending", "confirmed", "completed", "no_show", "late_cancel"].includes(b.status);
 const BILLABLE = ["completed", "no_show", "late_cancel"];
 // Confirmed sessions from their day on that nobody rewarded or marked as no-show yet
 const toSettle = (b) => b.status === "confirmed" && b.date <= LevelUp.dateKey();
@@ -39,7 +39,7 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const { players, bookings, applications, unlinkedTrainers, pricing, packs, hours } = await LevelUp.adminData();
+  const { players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours } = await LevelUp.adminData();
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -56,6 +56,7 @@ async function loadData() {
     unlinkedTrainers,
     pricing,
     packs,
+    vouchers,
     hours,
     rawBookings: bookings,
     players: rows,
@@ -136,6 +137,8 @@ async function render() {
 
     <section class="panel admin-panel" id="packsPanel"></section>
 
+    <section class="panel admin-panel" id="rewardsPanel"></section>
+
     <section class="chart-grid">
       ${chartCard("weekly", "Sessions per week", "Last 4 weeks and the next 4, by trainer", true)}
       ${chartCard("trainers", "Sessions by trainer", "All-time sessions, including sessions from before the online schedule")}
@@ -196,6 +199,7 @@ async function render() {
   renderKpis();
   renderFinances();
   renderPacks();
+  renderRewards();
   renderCharts();
   renderTrainerCards();
   renderHours();
@@ -292,7 +296,8 @@ function periodTotals(r) {
   const revenue = done.reduce((s, b) => s + b.price, 0);
   const fees = done.filter((b) => b.trainerId !== owner).reduce((s, b) => s + b.trainerFee, 0);
   const packs = data.packs.filter((pk) => pk.status === "paid" && inRange(packDay(pk), r)).reduce((s, pk) => s + pk.price, 0);
-  return { ...r, done, sessions: done.length, revenue, fees, share: revenue - fees, packs };
+  const free = done.filter((b) => b.priceType === "reward").length;
+  return { ...r, done, sessions: done.length, free, revenue, fees, share: revenue - fees, packs };
 }
 
 // Per trainer: the period's sessions, plus what is owed right now (all time)
@@ -377,7 +382,7 @@ function renderFinances() {
     </div>
 
     <div class="finance-kpis">
-      ${tile("Session revenue", money(period.revenue), `${plural(period.sessions, "charged session")}`)}
+      ${tile("Session revenue", money(period.revenue), `${plural(period.sessions, "charged session")}${period.free ? ` · ${period.free} free (reward)` : ""}`)}
       ${tile("Trainer fees", money(period.fees), "Earned by the trainers")}
       ${tile("Your share", money(period.share), "Venue share + your own sessions", "good")}
       ${tile("Packs sold", money(period.packs), "Paid up front (their sessions count at pack price)")}
@@ -506,6 +511,33 @@ function renderPacks() {
       </li>`).join("")}</ul>` : `<p class="muted">No pack requests waiting. Players request packs in their profile; you get an email.</p>`}
     ${paid.length ? `<h3 class="panel-sub">Active and used packs</h3><ul class="detail-list">${paid.map((pk) => `
       <li><span>${esc(pk.name)} · ${pk.size}-session pack · ${money(pk.price)}</span><span class="muted small">Paid ${fmtDate(pk.paidAt)} · ${pk.used}/${pk.size} used · ${pk.remaining} left</span></li>`).join("")}</ul>` : ""}`;
+}
+
+// Free sessions earned by members (loyalty card + Champion / Legend) and Legend hoodies to hand out
+function renderRewards() {
+  const el = document.getElementById("rewardsPanel");
+  const source = (v) => `${LevelUp.REWARD_SOURCES[v.source].icon} ${LevelUp.REWARD_SOURCES[v.source].title}${v.source === "loyalty" ? ` #${v.seq}` : ""}`;
+  const hoodies = data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt);
+  const open = data.vouchers.filter(LevelUp.voucherOpen);
+  const used = data.vouchers.filter((v) => v.bookingId);
+  const expired = data.vouchers.filter((v) => !v.bookingId && !LevelUp.voucherOpen(v));
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Rewards ${hoodies.length ? `<span class="count-chip">${hoodies.length}</span>` : ""}</h2>
+      <span class="muted">Free 1:1 every ${LevelUp.LOYALTY_SESSIONS} sessions · Champion · Legend (+ hoodie)</span>
+    </div>
+    ${hoodies.length ? `<h3 class="panel-sub">Hoodies to hand out</h3><ul class="application-list">${hoodies.map((v) => `
+      <li class="application-item">
+        <div>
+          <p class="coach-who">${esc(v.name)} <span class="muted small">· ${esc(v.email)}</span></p>
+          <p><strong>★ Reached Legend</strong> on ${fmtDate(v.earnedAt)}: give them a LEVEL-UP hoodie at the desk.</p>
+        </div>
+        <div class="application-actions"><button type="button" class="btn btn-small btn-primary" data-hoodie="${v.id}">Hoodie given</button></div>
+      </li>`).join("")}</ul>` : ""}
+    ${open.length ? `<h3 class="panel-sub">Free sessions waiting to be booked</h3><ul class="detail-list">${open.map((v) => `
+      <li><span>${esc(v.name)} · ${source(v)}</span><span class="muted small">Earned ${fmtDate(v.earnedAt)} · use by ${fmtDate(v.expiresAt)}</span></li>`).join("")}</ul>`
+      : `<p class="muted">No open free sessions. Members earn one every ${LevelUp.LOYALTY_SESSIONS} completed sessions and at the Champion and Legend ranks.</p>`}
+    <p class="muted small">${plural(used.length, "free session")} booked · ${plural(expired.length, "voucher")} expired unused. A free session costs you the trainer's fee (shown in the finances).</p>`;
 }
 
 // ---------- KPI tiles ----------
@@ -1193,6 +1225,14 @@ root.addEventListener("click", (event) => {
       : `Did you give ${b.name} their ${money(b.price)} back?`)) return;
     btn.disabled = true;
     (paidHq ? LevelUp.markPaidInPerson(b.id) : LevelUp.markRefunded(b.id)).catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const hoodie = event.target.closest("[data-hoodie]");
+  if (hoodie) {
+    const v = data.vouchers.find((x) => x.id === hoodie.dataset.hoodie);
+    if (!v || !confirm(`Did you give ${v.name} their Legend hoodie?`)) return;
+    hoodie.disabled = true;
+    LevelUp.markHoodieGiven(v.id).then(() => render()).catch((err) => { hoodie.disabled = false; alert(err.message); });
     return;
   }
   const packPaid = event.target.closest("[data-pack-paid]");
