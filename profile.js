@@ -504,7 +504,7 @@ function renderInventory(player) {
 
 function renderRanks(player, p) {
   return `
-    <section class="panel">
+    <section class="panel panel-wide">
       <div class="panel-head"><h2>Rank ladder</h2></div>
       <ol class="rank-ladder">
         ${RANKS.map((rank, i) => {
@@ -584,12 +584,12 @@ function render() {
       ${renderCoachPanel()}
       ${renderSessions()}
       ${renderPacks(player)}
+      ${renderHealth(player)}
       ${renderInventory(player)}
       ${renderBodyStats(player)}
       ${renderAchievements(player)}
       ${renderRanks(player, p)}
       ${player.application?.status === "pending" ? "" : renderApplication(player)}
-      ${renderHealth(player)}
       ${renderSettings()}
     </div>`;
   bindEvents(player);
