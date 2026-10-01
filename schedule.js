@@ -16,7 +16,8 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const pad = (n) => String(n).padStart(2, "0");
 const timeText = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 let weekOffset = 0;
-let activeTrainer = "all";
+// ?trainer=pieter (e.g. from a business card QR code) opens the schedule on that trainer
+let activeTrainer = new URLSearchParams(location.search).get("trainer") || "all";
 let pendingSlot = null;
 
 function weekDays(offset) {
@@ -77,6 +78,7 @@ function renderBoard() {
     return;
   }
   const days = weekDays(weekOffset);
+  if (activeTrainer !== "all" && !TRAINERS.some((t) => t.id === activeTrainer)) activeTrainer = "all";
   const trainers = TRAINERS.filter((t) => activeTrainer === "all" || t.id === activeTrainer);
   const hours = boardHours(days, trainers);
   const player = LevelUp.getPlayer();
