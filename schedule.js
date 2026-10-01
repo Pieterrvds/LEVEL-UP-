@@ -45,10 +45,12 @@ function boardHours(days, trainers) {
 // ---------- Trainer filter ----------
 function renderFilter() {
   const tabs = [{ id: "all", short: "All trainers" }, ...TRAINERS];
+  // Phones show the round photo; bigger screens the colour dot and name
   trainerFilter.innerHTML = tabs.map((t) => `
     <button type="button" role="tab" data-trainer="${t.id}" aria-selected="${t.id === activeTrainer}"
       ${t.color ? `style="--c:${t.color}"` : ""}>
-      ${t.color ? `<span class="dot" aria-hidden="true"></span>` : ""}${esc(t.short)}
+      <span class="filter-face" aria-hidden="true">${t.img ? `<img src="${t.img}" alt="">` : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.6-3.6 3-5.4 6-5.4s5.4 1.8 6 5.4M15 14.6c2.6 0 4.6 1.4 5.2 4.4"/></svg>`}</span>
+      ${t.color ? `<span class="dot" aria-hidden="true"></span>` : ""}<span class="filter-name">${esc(t.id === "all" ? "All" : t.short)}</span><span class="filter-name-long">${esc(t.short)}</span>
     </button>`).join("");
 }
 
@@ -75,6 +77,7 @@ function slotState(trainer, key, hour, now) {
 function renderBoard() {
   if (!LevelUp.isReady()) {
     weekBoard.innerHTML = `<p class="board-message">Loading the schedule…</p>`;
+    if (weekList) weekList.innerHTML = `<p class="list-empty">Loading the schedule…</p>`;
     return;
   }
   const days = weekDays(weekOffset);
@@ -149,10 +152,56 @@ function renderBoard() {
       </div>`;
   }).join("");
 
+  renderWeekList(days, trainers, now, todayKey);
   weekBoard.innerHTML = hourColumn + dayColumns
     + (anyOpen ? "" : `<p class="board-week-empty">No open hours left this week.${weekOffset < LevelUp.BOOKING_WEEKS_AHEAD - 1 ? " Tap ▶ for next week." : ""}</p>`);
   weekBoard.classList.toggle("signed-in", Boolean(player));
 }
+
+// ---------- Phones: the week as a list, per day one row per trainer with time buttons ----------
+const weekList = document.getElementById("weekList");
+function renderWeekList(days, trainers, now, todayKey) {
+  if (!weekList) return;
+  const tomorrowKey = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const html = days.map((day) => {
+    const groups = (activeTrainer === "all" ? LevelUp.groupSessions(day.key) : []).filter((g) => g.end > now);
+    const rows = trainers.map((t) => {
+      const chips = LevelUp.trainerHours(t.id, day.key).map((hour) => {
+        const { state } = slotState(t, day.key, hour, now);
+        if (state === "past") return "";
+        const label = { free: `Book ${t.short}`, requested: "Requested", mine: "Confirmed", done: "Done", taken: "Booked" }[state];
+        return `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
+            data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
+            ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
+            aria-label="${esc(t.name)}, ${day.name} ${pad(hour)}:00, ${label}">${pad(hour)}:00</button>`;
+      }).join("");
+      return chips ? `
+        <div class="list-row" style="--c:${t.color}">
+          <span class="list-trainer"><img src="${t.img}" alt=""><b>${esc(t.short)}</b></span>
+          <div class="list-times">${chips}</div>
+        </div>` : "";
+    }).join("");
+    const groupRows = groups.map((g) => `
+      <div class="list-row list-group">
+        <span class="list-trainer"><span class="list-group-icon" aria-hidden="true">👥</span><b>Group</b></span>
+        <p class="list-group-text"><b>${timeText(g.start)}</b> ${esc(g.title)}${g.location ? ` · ${esc(g.location)}` : ""}</p>
+      </div>`).join("");
+    if (!rows && !groupRows) return "";
+    const when = day.key === todayKey ? "Today" : day.key === tomorrowKey ? "Tomorrow" : "";
+    return `
+      <div class="list-day${day.key === todayKey ? " today" : ""}">
+        <h3 class="list-day-head">${day.date.toLocaleDateString("en-GB", { weekday: "long" })} <span>${day.date.getDate()} ${day.date.toLocaleDateString("en-GB", { month: "short" })}</span>${when ? `<em>${when}</em>` : ""}</h3>
+        ${groupRows}${rows}
+      </div>`;
+  }).join("");
+  weekList.innerHTML = html || `<p class="list-empty">No open hours left this week.${weekOffset < LevelUp.BOOKING_WEEKS_AHEAD - 1 ? " Tap ▶ for next week." : ""}</p>`;
+}
+
+weekList?.addEventListener("click", (event) => {
+  const chip = event.target.closest(".time-chip");
+  if (!chip || chip.disabled) return;
+  openSlot({ trainerId: chip.dataset.trainer, date: chip.dataset.date, hour: Number(chip.dataset.hour) });
+});
 
 weekPrev.addEventListener("click", () => { weekOffset = Math.max(0, weekOffset - 1); renderBoard(); });
 weekNext.addEventListener("click", () => { weekOffset = Math.min(LevelUp.BOOKING_WEEKS_AHEAD - 1, weekOffset + 1); renderBoard(); });

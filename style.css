@@ -1786,3 +1786,86 @@ textarea { resize: vertical; min-height: 130px; }
   .read-more:hover, .read-more[aria-expanded="true"] { border-color: var(--green-bright); }
   section:not(.more-open) [data-more] { display: none !important; }
 }
+
+/* ---------- Schedule on phones: a list per day, one row per trainer ---------- */
+.week-list, .list-hint, .filter-face, .filter-name { display: none; }
+@media (max-width: 640px) {
+  .week-board, .board-legend { display: none; }
+  .week-list { display: grid; gap: 14px; }
+  .list-hint { display: block; margin: 14px 0 0; font-size: 0.82rem; color: var(--muted); }
+  .list-hint b { color: var(--green-bright); }
+  .list-hint i { font-style: normal; color: var(--gold); }
+
+  /* week switcher on one compact line */
+  .schedule-toolbar { gap: 14px; margin-bottom: 18px; }
+  .week-nav { gap: 10px; }
+  .week-btn { width: 40px; height: 40px; flex: none; }
+  .week-label { gap: 2px; font-size: 1rem; }
+  .week-label span { font-size: 0.48rem; }
+
+  /* trainer filter: round photos you can swipe */
+  .schedule-toolbar .filter-tabs {
+    width: auto; gap: 14px; margin: 0 -20px; padding: 4px 20px 6px; border: 0;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .schedule-toolbar .filter-tabs::-webkit-scrollbar { display: none; }
+  .schedule-toolbar .filter-tabs button {
+    flex: none; min-height: 0; display: grid; justify-items: center; gap: 6px; padding: 0;
+    font-family: var(--pixel); font-size: 0.45rem; text-transform: uppercase; color: var(--muted);
+    background: none; border: 0;
+  }
+  .schedule-toolbar .filter-tabs button + button { border: 0; }
+  .schedule-toolbar .filter-tabs button[aria-selected="true"] { color: var(--green-bright); background: none; }
+  .filter-tabs .dot, .filter-name-long { display: none; }
+  .filter-face, .filter-name { display: grid; }
+  .filter-face {
+    place-items: center; width: 52px; height: 52px; overflow: hidden; border-radius: 50%;
+    font-size: 0.55rem; color: var(--text); background: var(--panel);
+    border: 3px solid var(--c, var(--line)); opacity: 0.75;
+  }
+  .filter-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+  .filter-face svg { width: 26px; height: 26px; }
+  .filter-tabs button[aria-selected="true"] .filter-face { opacity: 1; border-color: var(--green-bright); box-shadow: 0 0 0 3px rgba(126, 224, 106, 0.3); }
+
+  /* days and trainer rows */
+  .list-day { padding: 12px 14px 14px; background: var(--panel); border: 2px solid var(--line); }
+  .list-day.today { border-color: var(--green-dark); }
+  .list-day-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 1.02rem; font-weight: 700; }
+  .list-day-head span { color: var(--muted); font-weight: 600; }
+  .list-day-head em { margin-left: auto; padding: 3px 7px; font-style: normal; font-family: var(--pixel); font-size: 0.45rem; text-transform: uppercase; color: #000; background: var(--green-bright); }
+  .list-row { display: grid; gap: 8px; padding: 10px 0 4px; }
+  .list-row + .list-row { border-top: 1px solid var(--line); }
+  .list-trainer { display: flex; align-items: center; gap: 8px; }
+  .list-trainer img { width: 30px; height: 30px; object-fit: cover; object-position: 50% 20%; border-radius: 50%; border: 2px solid var(--c); }
+  .list-trainer b { font-size: 0.85rem; color: var(--c, var(--text)); }
+  .list-times { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+
+  /* time buttons */
+  .time-chip {
+    position: relative; white-space: nowrap;
+    min-width: 0; min-height: 42px; padding: 0 4px; font: inherit; font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--text); background: transparent; border: 2px solid var(--c); cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .time-chip.free:active { transform: translateY(1px); background: color-mix(in srgb, var(--c) 22%, transparent); }
+  .time-chip.mine, .time-chip.done { color: #000; background: var(--green-bright); border-color: var(--green-bright); }
+  .time-chip.done { opacity: 0.6; }
+  .time-chip.requested { color: var(--gold); border-color: var(--gold); border-style: dashed;
+    background: repeating-linear-gradient(135deg, rgba(255, 210, 63, 0.14) 0 6px, transparent 6px 12px); }
+  .time-chip.taken { color: var(--muted); border-color: var(--line); text-decoration: line-through; opacity: 0.6; cursor: not-allowed; }
+
+  .list-group-icon { font-size: 1.2rem; }
+  .list-group .list-group-text { grid-column: 1 / -1; }
+  .list-group-text { margin: 2px 0 0; font-size: 0.9rem; color: var(--muted); }
+  .list-group-text b { color: var(--text); }
+  .list-empty { margin: 0; padding: 28px 16px; text-align: center; color: var(--muted); background: var(--panel); border: 2px solid var(--line); }
+}
+@media (max-width: 640px) {
+  /* status badge in the corner, so the time always fits on one line */
+  .time-chip.mine::after, .time-chip.done::after, .time-chip.requested::after {
+    position: absolute; top: -8px; right: -6px; display: grid; place-items: center; width: 18px; height: 18px;
+    font-size: 0.7rem; font-weight: 800; line-height: 1; text-decoration: none; border: 2px solid var(--bg);
+  }
+  .time-chip.mine::after, .time-chip.done::after { content: "✓"; color: #000; background: var(--text); }
+  .time-chip.requested::after { content: "…"; color: #000; background: var(--gold); }
+}
