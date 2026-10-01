@@ -219,3 +219,66 @@
 .statement-actions { display: flex; gap: 8px; }
 @media (max-width: 760px) { .period-nav { flex-basis: 100%; } }
 
+
+/* ---------- Team planner (opening hours, desktop) ---------- */
+#hoursPanel { position: relative; }
+.pl-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 20px; margin-bottom: 10px; }
+.pl-trainers { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl-trainer { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; background: #000; border: 2px solid var(--line); }
+.pl-trainer.active { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+.pl-trainer.off { opacity: 0.45; }
+.pl-trainer input { accent-color: var(--c); width: 16px; height: 16px; cursor: pointer; }
+.pl-trainer button { display: flex; align-items: center; gap: 8px; padding: 0; font: inherit; font-weight: 700; color: var(--text); background: none; border: 0; cursor: pointer; }
+.pl-trainer img { width: 26px; height: 26px; object-fit: cover; object-position: 50% 20%; border-radius: 50%; border: 2px solid var(--c); }
+.pl-modes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pl-weeknav { display: flex; align-items: center; gap: 10px; }
+.pl-weeknav .week-btn { width: 36px; height: 36px; }
+.pl-help { margin: 0 0 12px; font-size: 0.85rem; }
+.pl-key { padding: 0 5px; }
+.pl-key.extra { border: 2px dashed var(--green-bright); }
+.pl-key.closed { color: #fff; background: repeating-linear-gradient(135deg, rgba(255, 90, 95, 0.55) 0 5px, rgba(255, 90, 95, 0.2) 5px 10px); }
+
+.pl-grid { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); border: 2px solid var(--line); background: #000; user-select: none; }
+.pl-head { padding: 8px 6px; text-align: center; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--line); border-left: 1px solid var(--line); }
+.pl-head span { color: var(--text); }
+.pl-head.today { color: #000; background: var(--green-bright); }
+.pl-head.today span { color: #000; }
+.pl-corner { border-left: 0; }
+.pl-hours { position: relative; }
+.pl-hours span { position: absolute; right: 6px; transform: translateY(-50%); font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pl-hours span:first-child { transform: none; }
+.pl-col { position: relative; border-left: 1px solid var(--line); cursor: crosshair; }
+.pl-col.today { background: rgba(126, 224, 106, 0.04); }
+.pl-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgba(36, 56, 43, 0.9); pointer-events: none; }
+
+.pl-bar { position: absolute; z-index: 1; display: flex; flex-direction: column; overflow: hidden; color: #000;
+  background: var(--c); border: 2px solid #000; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); cursor: grab; touch-action: none; }
+.pl-bar:hover { filter: brightness(1.1); }
+.pl-bar.dragging { cursor: grabbing; opacity: 0.85; z-index: 3; outline: 2px solid #fff; }
+.pl-bar.locked { background: repeating-linear-gradient(135deg, var(--c) 0 8px, color-mix(in srgb, var(--c) 75%, #000) 8px 16px); }
+.pl-bar.extra { color: var(--text); background: color-mix(in srgb, var(--c) 18%, #000); border: 2px dashed var(--c); cursor: pointer; }
+.pl-bar.closed { z-index: 2; color: #fff; background: repeating-linear-gradient(135deg, rgba(255, 90, 95, 0.75) 0 6px, rgba(120, 20, 25, 0.75) 6px 12px); border-color: var(--red); cursor: pointer; }
+.pl-bar-label { padding: 3px 5px; font-size: 0.72rem; line-height: 1.25; overflow: hidden; }
+.pl-bar-label b { display: block; font-size: 0.75rem; }
+.pl-grip { position: absolute; left: 0; right: 0; height: 7px; cursor: ns-resize; z-index: 2; }
+.pl-grip.top { top: -2px; }
+.pl-grip.bottom { bottom: -2px; }
+.pl-grip::after { content: ""; position: absolute; left: 35%; right: 35%; top: 2px; height: 2px; background: rgba(0, 0, 0, 0.45); }
+.pl-booking { position: absolute; z-index: 2; padding: 1px 4px; font-size: 0.65rem; font-weight: 700; color: #000; background: #fff; border: 1px solid #000;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.pl-ghost { position: absolute; z-index: 4; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; color: var(--text);
+  background: color-mix(in srgb, var(--c) 30%, transparent); border: 2px dashed var(--c); pointer-events: none; }
+
+.pl-popover { position: absolute; z-index: 20; width: 320px; padding: 16px; background: var(--panel); border: 3px solid var(--text); box-shadow: 6px 6px 0 var(--green-dark); }
+.pl-popover .dialog-close { top: 6px; right: 6px; width: 32px; height: 32px; }
+.pl-form { display: grid; gap: 10px; }
+.pl-form-title { margin: 0 30px 0 0; font-weight: 700; }
+.pl-form-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.pl-form label { display: grid; gap: 4px; font-size: 0.75rem; color: var(--muted); }
+.pl-form select, .pl-form input[type=text] { padding: 6px 8px; color: var(--text); background: #000; border: 2px solid var(--line); font: inherit; font-size: 0.85rem; }
+.pl-copy { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 8px 10px; border: 2px solid var(--line); }
+.pl-copy legend { padding: 0 4px; font-size: 0.75rem; color: var(--muted); }
+.pl-copy label { display: flex; align-items: center; gap: 4px; color: var(--text); font-size: 0.8rem; }
+.pl-form .btn-row { margin: 0; }
+.pl-ghost.closing { color: #fff; background: rgba(255, 90, 95, 0.35); border-color: var(--red); }
+.hours-editor .small, #hoursPanel .small { font-size: 0.8rem; }

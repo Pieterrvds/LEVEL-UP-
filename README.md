@@ -52,7 +52,13 @@ Event titles decide what an event does:
 - **Anything else** (intakes, days off): blocks the trainer named in the title, or Pieter when no trainer is named.
   These titles are never shown on the site.
 
-**Opening hours** are set in the admin dashboard → **Opening hours** (per trainer, including Pieter), and each
+**Opening hours** are set in the admin dashboard → **Opening hours**. On desktop that is a **team planner**
+(`hours-planner.js`): every trainer in one week view. *Every week*: drag in an empty spot to add hours for the selected
+trainer, drag a bar to move it, drag its top/bottom edge to change the times, click it to edit, delete or copy it to
+other days. *Specific week*: the real dates with days off, extra hours and booked sessions; drag to add extra hours,
+drag over (or click) a block to close those hours that day. Trainer checkboxes show or hide trainers; "List view"
+switches to the list editor, which small screens always use. Each trainer also manages their own hours in their
+profile → Coach panel → **My opening hours** (the list editor, `hours-editor.js`). In both, and each
 trainer manages their own in their profile → Coach panel → **My opening hours** (same editor, `hours-editor.js`):
 - **Every week:** blocks like Wednesday 19:00–21:00. Click a block to change or move it, ✕ to delete it.
 - **Extra hours on one date** or **closed on one date** (day off, holiday, all day or a few hours).

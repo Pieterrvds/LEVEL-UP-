@@ -233,5 +233,9 @@ window.LevelUpHours = (() => {
     submit(view, event.target);
   });
 
-  return { render };
+  // For the team planner: sessions that would lose their hours, and the message to show
+  const lost = (bookings, trainerId, after) => bookings
+    .filter((b) => b.trainerId === trainerId && isUpcoming(b) && covers(rows(), b) && !covers(after, b));
+
+  return { render, lost, lockedMessage, isUpcoming, slotLabel };
 })();

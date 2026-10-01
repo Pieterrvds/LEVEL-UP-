@@ -953,11 +953,22 @@ function renderTrainerCards() {
 
 // ---------- Opening hours (shared editor in hours-editor.js) ----------
 function renderHours() {
-  LevelUpHours.render(document.getElementById("hoursPanel"), {
+  const el = document.getElementById("hoursPanel");
+  const head = (extra = "") => `<div class="panel-head"><h2>Opening hours</h2><span class="muted">When players can book each trainer. Trainers can also change their own hours in their profile.</span>${extra}</div>`;
+  // Desktop: the team planner with every trainer; small screens (or "List view"): the list editor
+  if (window.innerWidth >= 900 && !state.hoursList) {
+    LevelUpPlanner.render(el, {
+      bookings: () => data.bookings,
+      intro: head(),
+      onList: () => { state.hoursList = true; renderHours(); }
+    });
+    return;
+  }
+  LevelUpHours.render(el, {
     key: "admin",
     trainers: TRAINERS.map((t) => t.id),
     bookings: () => data.bookings,
-    intro: `<div class="panel-head"><h2>Opening hours</h2><span class="muted">When players can book each trainer. Trainers can also change their own hours in their profile.</span></div>`
+    intro: head(window.innerWidth >= 900 ? `<button type="button" class="btn btn-small btn-ghost" data-hours-planner>Planner view</button>` : "")
   });
 }
 
@@ -1134,6 +1145,11 @@ root.addEventListener("click", (event) => {
     btn.disabled = true;
     const action = reward ? LevelUp.rewardSession(btn.dataset.adminReward) : LevelUp.respondBooking(btn.dataset.id, btn.dataset.adminRespond === "confirm");
     action.catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  if (event.target.closest("[data-hours-planner]")) {
+    state.hoursList = false;
+    renderHours();
     return;
   }
   const finMode = event.target.closest("[data-fin-mode]");
