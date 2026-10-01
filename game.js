@@ -29,7 +29,6 @@ const LevelUp = (() => {
   const TRAINER_SESSION_XP = 100; // trainer XP per session
   const TRAINER_CLIENT_XP = 50;   // trainer XP per unique client
   const XP_PER_EURO = 10;
-  const WORKOUT_XP_DAILY_LIMIT = 3;
 
   // Personal trainers. Open hours come from the Google Calendar (events such
   // as "Filip available"); `availability` is only used while a trainer has no
@@ -134,9 +133,6 @@ const LevelUp = (() => {
     { id: "new_player", icon: "★", title: "New player", desc: "Create your player profile.", xp: 50 },
     { id: "stats_saved", icon: "♥", title: "Know your numbers", desc: "Set your character stats.", xp: 25 },
     { id: "checkins_4", icon: "◷", title: "On track", desc: "Do a weekly check-in in 4 different weeks.", xp: 150 },
-    { id: "first_rep", icon: "▲", title: "First rep", desc: "Log your first workout.", xp: 50 },
-    { id: "workouts_10", icon: "⚡", title: "Consistency", desc: "Log 10 workouts.", xp: 150 },
-    { id: "workouts_50", icon: "♛", title: "Grinder", desc: "Log 50 workouts.", xp: 500 },
     { id: "first_session", icon: "⚔", title: "Party up", desc: "Complete your first session with a trainer.", xp: 100 },
     { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Complete 5 sessions with a trainer.", xp: 250 },
     { id: "full_party", icon: "♞", title: "Full party", desc: "Complete sessions with 3 different trainers.", xp: 200 },
@@ -277,7 +273,6 @@ const LevelUp = (() => {
     const next = new Date(new Date(last.date).getTime() + (6 * 24 + 12) * 3600e3);
     return next > new Date() ? next : null;
   }
-  const workoutXp = (minutes) => 30 + Math.min(30, Math.floor((Number(minutes) || 0) / 10) * 5);
 
   // ---------- Supabase ----------
   const sb = window.supabase?.createClient
@@ -1096,13 +1091,6 @@ const LevelUp = (() => {
   const getPlayer = () => player;
   const isAdmin = (p = player) => Boolean(p?.admin);
 
-  async function logWorkout({ type, minutes }) {
-    const result = await call("log_workout", { p_type: type, p_minutes: Math.round(Number(minutes) || 0) });
-    await Promise.all([refreshPlayer({ announce: true }), loadLeaderboard(), loadTrainerStats()]);
-    emit();
-    return result;
-  }
-
   async function saveBodyStats(input) {
     const stats = computeStats(input);
     const result = await call("save_body_stats", { p: stats });
@@ -1833,12 +1821,12 @@ const LevelUp = (() => {
   initChrome();
 
   return {
-    ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, WORKOUT_XP_DAILY_LIMIT, SESSION_XP, BOOKING_WEEKS_AHEAD, BOOKING_NOTICE_HOURS,
+    ITEMS, TRAINERS, ACHIEVEMENTS, RANKS, XP_PER_EURO, SESSION_XP, BOOKING_WEEKS_AHEAD, BOOKING_NOTICE_HOURS,
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
-    esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp, workoutXp,
+    esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, getLeaderboard: () => leaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
-    logWorkout, saveBodyStats, recordPurchase,
+    saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,

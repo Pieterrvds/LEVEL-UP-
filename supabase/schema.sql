@@ -424,7 +424,6 @@ create or replace function public._check_achievements(p_user uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
-  n_workouts integer;
   owns_all boolean;
 begin
   select * into p from public.profiles where id = p_user;
@@ -436,10 +435,6 @@ begin
     perform public._unlock(p_user, 'stats_saved', 25, 'Know your numbers');
   end if;
 
-  select count(*) into n_workouts from public.workouts where user_id = p_user;
-  if n_workouts >= 1 then perform public._unlock(p_user, 'first_rep', 50, 'First rep'); end if;
-  if n_workouts >= 10 then perform public._unlock(p_user, 'workouts_10', 150, 'Consistency'); end if;
-  if n_workouts >= 50 then perform public._unlock(p_user, 'workouts_50', 500, 'Grinder'); end if;
 
   if (select count(distinct date_trunc('week', day)) from public.body_stats where user_id = p_user) >= 4 then
     perform public._unlock(p_user, 'checkins_4', 150, 'On track');
@@ -1012,23 +1007,8 @@ $$;
 -- ---------------------------------------------------------
 -- Workouts, body stats and orders
 -- ---------------------------------------------------------
-create or replace function public.log_workout(p_type text, p_minutes integer)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare
-  uid uuid := auth.uid();
-  today date := (now() at time zone 'Europe/Brussels')::date;
-  mins integer := least(300, greatest(5, coalesce(p_minutes, 0)));
-  rewarded integer;
-  v_xp integer;
-begin
-  if uid is null then raise exception 'Log in first.'; end if;
-  select count(*) into rewarded from public.workouts w where w.user_id = uid and w.day = today and w.xp > 0;
-  v_xp := case when rewarded < 3 then 30 + least(30, (mins / 10) * 5) else 0 end;
-  insert into public.workouts (user_id, day, type, minutes, xp) values (uid, today, left(coalesce(p_type, 'Other'), 40), mins, v_xp);
-  perform public._grant_xp(uid, v_xp, 'Workout: ' || left(coalesce(p_type, 'Other'), 40));
-  perform public._check_achievements(uid);
-  return jsonb_build_object('xp', v_xp, 'limitReached', v_xp = 0);
-end $$;
+-- "Log a workout" was removed: old logged workouts stay in public.workouts, but nobody can add new ones.
+drop function if exists public.log_workout(text, integer);
 
 drop function if exists public.save_body_stats(jsonb);
 create or replace function public.save_body_stats(p jsonb)
@@ -1664,7 +1644,6 @@ revoke execute on function public.my_data() from public, anon;
 revoke execute on function public.touch_login() from public, anon;
 revoke execute on function public.book_session(text, date, integer, text, text, text, text) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
-revoke execute on function public.log_workout(text, integer) from public, anon;
 revoke execute on function public.save_body_stats(jsonb) from public, anon;
 revoke execute on function public.claim_orders(text[]) from public, anon;
 revoke execute on function public.delete_my_account() from public, anon;
@@ -1719,7 +1698,6 @@ revoke execute on function public.delete_trainer_hours(uuid) from public, anon;
 grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) to authenticated;
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
-grant execute on function public.log_workout(text, integer) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;
 grant execute on function public.claim_orders(text[]) to authenticated;
 grant execute on function public.delete_my_account() to authenticated;

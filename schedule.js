@@ -643,7 +643,7 @@ function renderHighScores() {
   } else if (player.showOnLeaderboard === false) {
     foot.innerHTML = `You're hidden from the high scores. <a href="profile.html#account" class="text-link">Change this in your profile</a>.`;
   } else {
-    foot.textContent = me ? `You're #${me.place}. Every session, check-in and workout moves you up.` : "";
+    foot.textContent = me ? `You're #${me.place}. Every session and check-in moves you up.` : "";
   }
 }
 

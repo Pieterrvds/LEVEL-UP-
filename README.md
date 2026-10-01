@@ -4,7 +4,7 @@ Personal training platform with a retro game theme: players and personal trainer
 ## Pages
 - `index.html`: home page: quest board with the next open sessions, the platform + XP table, classes, team with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Replays" pop-up (hero button and footer)
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
-- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, workout log, achievements, inventory and orders. New players set their character stats as step 2 of sign-up.
+- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their character stats as step 2 of sign-up.
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
@@ -31,7 +31,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 Accounts and all data live in Supabase (project `zdwlihbsmqiggpyensxc`, region eu-west-1). The website only uses
 the public publishable key; the rules in `supabase/schema.sql` decide what each visitor can see and do:
 - players read only their own data; admins (`admin_emails` in the `app_config` table) read everything;
-- nobody writes to the tables directly: booking, cancelling, logging workouts, saving stats and orders go through
+- nobody writes to the tables directly: booking, cancelling, saving stats and orders go through
   database functions that check the rules and award XP on the server;
 - two people can never book the same hour (unique constraint);
 - order totals and XP are recalculated from the prices in the `shop_items` table.

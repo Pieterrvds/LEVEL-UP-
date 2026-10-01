@@ -525,7 +525,8 @@ function renderKpis() {
   }).length;
   const orders = players.flatMap((p) => p.purchases);
   const revenue = orders.reduce((sum, o) => sum + o.total, 0);
-  const workouts = players.reduce((sum, p) => sum + p.workouts.length, 0);
+  const healthDone = members.filter((m) => m.healthForm?.valid).length;
+  const healthRisk = members.filter((m) => m.healthForm?.valid && m.healthForm.hasRisk).length;
   const avgLevel = members.length ? members.reduce((sum, m) => sum + m.prog.level, 0) / members.length : 0;
 
   const tile = (label, value, note, good) => `
@@ -540,7 +541,7 @@ function renderKpis() {
     tile("Upcoming sessions", upcoming.length, requests ? `⚠ ${plural(requests, "request")} waiting for a trainer` : next ? `Next: ${slotLabel(next)} · ${esc(LevelUp.trainerById(next.trainerId).short)}` : "Nothing booked yet", false),
     tile("Sessions this week", thisWeek, `${plural(data.active.filter((b) => b.status === "completed").length, "completed session")} in total`),
     tile("Shop revenue", euro(revenue), plural(orders.length, "order")),
-    tile("Workouts logged", workouts, "By members themselves"),
+    tile("Health checks", `${healthDone}/${members.length}`, healthRisk ? `⚠ ${plural(healthRisk, "member")} with health info` : "Filled in before the first booking"),
     tile("Average level", avgLevel ? avgLevel.toFixed(1) : "–", members.length ? `${plural(members.length, "member")}` : "No members yet")
   ].join("");
 }
@@ -1029,13 +1030,12 @@ function renderMembers() {
     return;
   }
   el.innerHTML = tableView(
-    ["Player", "Level", "XP", "Sessions", "Workouts", "Spent", "Joined", "Last login", ""],
+    ["Player", "Level", "XP", "Sessions", "Spent", "Joined", "Last login", ""],
     list.map((p) => [
       `<span class="member-cell">${LevelUp.avatarHtml(p)}<span><strong>${esc(p.name)}</strong>${p.admin ? ` <span class="admin-tag">Admin</span>` : ""}<br><span class="muted small">${esc(p.email)}</span></span></span>`,
       `<span class="nowrap">LVL ${p.prog.level} · ${p.prog.rank.title}</span>`,
       `<span class="num">${p.xp.toLocaleString("en-US")}</span>`,
       `<span class="num">${p.sessions}${p.upcoming ? ` <span class="muted small">(${p.upcoming} upcoming)</span>` : ""}</span>`,
-      `<span class="num">${p.workouts.length}</span>`,
       `<span class="num">${euro(p.spent)}</span>`,
       `<span class="nowrap">${fmtDate(p.createdAt)}</span>`,
       `<span class="nowrap">${fmtDate(p.lastSeen)}</span>`,
@@ -1072,7 +1072,7 @@ function openMember(email) {
 
     <div class="member-grid">
       <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${own.length}</span></div>
-      <div class="tile"><span class="tile-label">Workouts</span><span class="tile-value">${p.workouts.length}</span></div>
+      <div class="tile"><span class="tile-label">Health check</span><span class="tile-value">${!p.healthForm?.valid ? "–" : p.healthForm.hasRisk ? "⚠" : "✓"}</span></div>
       <div class="tile"><span class="tile-label">Spent</span><span class="tile-value">${euro(p.spent)}</span></div>
       <div class="tile"><span class="tile-label">Achievements</span><span class="tile-value">${unlocked.length}/${LevelUp.ACHIEVEMENTS.length}</span></div>
     </div>
@@ -1089,7 +1089,7 @@ function openMember(email) {
 
     ${p.purchases.length ? `<h3 class="panel-sub">Orders</h3><ul class="detail-list">${p.purchases.map((o) => `<li><span>${fmtDate(o.date)} · ${euro(o.total)}</span><span class="muted small">${o.items.map((i) => `${i.qty}× ${esc(i.name)}${i.size ? ` (${i.size})` : ""}`).join(", ")}</span></li>`).join("")}</ul>` : ""}
 
-    ${p.workouts.length ? `<h3 class="panel-sub">Recent workouts</h3><ul class="detail-list">${p.workouts.slice(0, 5).map((w) => `<li><span>${esc(w.type)} · ${w.minutes} min</span><span class="muted small">${fmtDate(w.date)}</span></li>`).join("")}</ul>` : ""}`;
+    ${p.healthForm?.hasRisk ? LevelUp.healthFlagHtml(p.healthForm) : ""}`;
   document.getElementById("memberDialog").showModal();
 }
 

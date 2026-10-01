@@ -3,13 +3,6 @@
 const root = document.getElementById("profileRoot");
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const WORKOUT_TYPES = [
-  "Personal Training", "Group Training", "CrossFit", "Muay Thai",
-  "Calisthenics", "HIIT", "Running", "Cycling", "Strength", "Other"
-];
-
-let workoutMessage = "";
-let lastWorkout = { type: "CrossFit", minutes: 60 };
 const state = { hoursOpen: false, achOpen: false, healthEdit: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -21,7 +14,7 @@ function renderLoggedOut() {
       <span class="pixel-heart" aria-hidden="true"></span>
       <p class="section-kicker">No save file loaded</p>
       <h1 class="section-title">Player profile</h1>
-      <p>Log in to see your level, XP, workouts, body stats, achievements and gear. New here? Create a player and start at LVL 1.</p>
+      <p>Log in to see your level, XP, sessions, body stats, achievements and gear. New here? Create a player and start at LVL 1.</p>
       <div class="btn-row">
         <button type="button" class="btn btn-primary" data-auth-open="signup">Create your player</button>
         <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>
@@ -51,12 +44,11 @@ function renderHeader(player, p) {
 }
 
 function renderSummary(player) {
-  const unlocked = Object.keys(player.achievements).length;
-  const minutes = player.workouts.reduce((sum, w) => sum + w.minutes, 0);
+  const unlocked = ACHIEVEMENTS.filter((a) => player.achievements[a.id]).length;
   return `
     <section class="summary-tiles">
       <div class="tile"><span class="tile-label">Total XP</span><span class="tile-value">${player.xp.toLocaleString("en-US")}</span></div>
-      <div class="tile"><span class="tile-label">Workouts</span><span class="tile-value">${player.workouts.length}</span><span class="tile-note">${Math.round(minutes / 60)} h trained</span></div>
+      <div class="tile"><span class="tile-label">Rank</span><span class="tile-value">${esc(LevelUp.progress(player.xp).rank.title)}</span><span class="tile-note">LVL ${LevelUp.progress(player.xp).level}</span></div>
       <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${LevelUp.playerBookings().filter((b) => b.status === "completed").length}</span><span class="tile-note">completed</span></div>
       <div class="tile"><span class="tile-label">Achievements</span><span class="tile-value">${unlocked}/${ACHIEVEMENTS.length}</span></div>
     </section>`;
@@ -318,45 +310,6 @@ function renderMyHours() {
     intro: intro(window.innerWidth >= 900 ? `<button type="button" class="btn btn-small btn-ghost" data-my-planner>Week planner</button>` : "")
   });
   el.querySelector("[data-my-planner]")?.addEventListener("click", () => { state.hoursList = false; renderMyHours(); });
-}
-
-function renderWorkouts(player) {
-  const today = LevelUp.dateKey();
-  const rewardedToday = player.workouts.filter((w) => w.date === today && w.xp > 0).length;
-  const left = Math.max(0, LevelUp.WORKOUT_XP_DAILY_LIMIT - rewardedToday);
-  const recent = player.workouts.slice(0, 6);
-
-  return `
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Log a workout</h2>
-        <span class="xp-chip">${left} XP drops left today</span>
-      </div>
-      <form class="workout-form" id="workoutForm">
-        <label>Training
-          <select name="type">
-            ${WORKOUT_TYPES.map((type) => `<option ${type === lastWorkout.type ? "selected" : ""}>${type}</option>`).join("")}
-          </select>
-        </label>
-        <label>Minutes
-          <input type="number" name="minutes" min="5" max="300" step="5" value="${lastWorkout.minutes}" required inputmode="numeric">
-        </label>
-        <button type="submit" class="btn btn-primary">
-          Log it · <span id="workoutXpPreview">+${left ? LevelUp.workoutXp(lastWorkout.minutes) : 0}</span> XP
-        </button>
-      </form>
-      ${workoutMessage ? `<p class="form-success">${esc(workoutMessage)}</p>` : ""}
-      <h3 class="panel-sub">Recent workouts</h3>
-      ${recent.length ? `
-        <ul class="log-list">
-          ${recent.map((w) => `
-            <li>
-              <span>${esc(w.type)}</span>
-              <span class="muted">${w.minutes} min · ${formatDate(w.date)}</span>
-              <span class="log-xp">${w.xp ? `+${w.xp} XP` : "no XP"}</span>
-            </li>`).join("")}
-        </ul>` : `<p class="muted">No workouts yet. Log your first one to unlock <strong>First rep</strong>.</p>`}
-    </section>`;
 }
 
 const MEAL_PLANS = {
@@ -631,7 +584,6 @@ function render() {
       ${renderCoachPanel()}
       ${renderSessions()}
       ${renderPacks(player)}
-      ${renderWorkouts(player)}
       ${renderInventory(player)}
       ${renderBodyStats(player)}
       ${renderAchievements(player)}
@@ -644,31 +596,6 @@ function render() {
 }
 
 function bindEvents(player) {
-  const form = document.getElementById("workoutForm");
-  const preview = document.getElementById("workoutXpPreview");
-  const today = LevelUp.dateKey();
-  const limitReached = player.workouts.filter((w) => w.date === today && w.xp > 0).length >= LevelUp.WORKOUT_XP_DAILY_LIMIT;
-
-  form.elements.minutes.addEventListener("input", () => {
-    preview.textContent = `+${limitReached ? 0 : LevelUp.workoutXp(form.elements.minutes.value)}`;
-  });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = form.querySelector('button[type="submit"]');
-    submit.disabled = true;
-    lastWorkout = { type: form.elements.type.value, minutes: Number(form.elements.minutes.value) || 30 };
-    try {
-      const result = await LevelUp.logWorkout(lastWorkout);
-      workoutMessage = result.limitReached
-        ? "Workout logged. You've reached today's XP limit, so this one earns no XP. Rest up and come back tomorrow!"
-        : `Workout logged: +${result.xp} XP. Keep grinding!`;
-    } catch (err) {
-      workoutMessage = `Not logged: ${err.message}`;
-    }
-    render();
-  });
-
   if (LevelUp.isTrainer()) {
     renderMyHours();
     document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
@@ -842,7 +769,7 @@ function bindEvents(player) {
   });
 
   document.getElementById("deleteProfile").addEventListener("click", async () => {
-    if (!confirm("Delete your account? Your level, XP, sessions, workouts and stats will be gone for good.")) return;
+    if (!confirm("Delete your account? Your level, XP, sessions and stats will be gone for good.")) return;
     try {
       await LevelUp.deleteProfile();
     } catch (err) {
