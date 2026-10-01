@@ -1934,3 +1934,32 @@ textarea { resize: vertical; min-height: 130px; }
 .hours-editor .small, #hoursPanel .small { font-size: 0.8rem; }
 .my-hours-intro { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
 .my-hours-intro p { margin: 0; }
+
+/* Health questionnaire */
+.health-form { display: grid; gap: 14px; }
+.health-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: hq; }
+.health-list li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; background: #000; border: 2px solid var(--line); counter-increment: hq; }
+.health-list li p { margin: 0; font-size: 0.9rem; line-height: 1.4; }
+.health-list li p::before { content: counter(hq) ". "; color: var(--green-bright); font-weight: 700; }
+.health-yn { display: flex; gap: 6px; }
+.health-yn label { display: flex; align-items: center; gap: 4px; padding: 6px 10px; font-size: 0.85rem; font-family: var(--sans); text-transform: none; letter-spacing: normal;
+  color: var(--text); border: 2px solid var(--line); cursor: pointer; }
+.health-yn label:has(input:checked) { border-color: var(--green-bright); background: rgba(126, 224, 106, 0.1); }
+.health-yn label:has(input[value=yes]:checked) { border-color: var(--gold); background: rgba(255, 210, 63, 0.12); }
+.health-yn input { width: auto; padding: 0; margin: 0; accent-color: var(--green-bright); }
+.health-notes { display: grid; gap: 6px; }
+.health-notes[hidden], .health-advice[hidden] { display: none; }
+.health-notes textarea { width: 100%; padding: 10px; color: var(--text); background: #000; border: 2px solid var(--gold); font: 500 0.95rem/1.4 var(--sans); text-transform: none; }
+.health-advice { margin: 0; padding: 10px 12px; font-size: 0.9rem; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
+.health-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 0.85rem; line-height: 1.45; font-family: var(--sans); text-transform: none; letter-spacing: normal; color: var(--text); }
+.health-consent input { width: 18px; height: 18px; padding: 0; margin-top: 2px; accent-color: var(--green-bright); flex: none; }
+.health-consent span { flex: 1; min-width: 0; }
+.booking-dialog:has(.health-form) { width: min(620px, calc(100% - 24px)); max-height: 92vh; overflow-y: auto; }
+@media (max-width: 560px) { .health-list li { grid-template-columns: 1fr; } }
+
+/* Health flag for trainers and admin */
+.health-flag { margin-top: 6px; font-size: 0.85rem; }
+.health-flag summary { display: inline-flex; gap: 6px; cursor: pointer; color: var(--gold); font-weight: 700; }
+.health-flag.missing summary { color: var(--muted); font-weight: 400; cursor: default; }
+.health-flag ul { margin: 6px 0 0; padding-left: 18px; color: var(--text); }
+.health-flag p { margin: 6px 0 0; color: var(--muted); }

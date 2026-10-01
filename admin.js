@@ -991,7 +991,7 @@ function renderBookings() {
       return [
         `<span class="nowrap">${slotLabel(b)}</span>`,
         `<span class="nowrap"><span class="dot" style="--c:${t.chartColor}" aria-hidden="true"></span>${esc(t.short)}</span>`,
-        `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>`,
+        `<button type="button" class="link-btn" data-member="${esc(b.email)}">${esc(b.name)}</button><br><a class="muted small" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${LevelUp.healthFlagHtml(b.health)}`,
         `<span class="status-chip ${STATUS_CLASS[b.status] || b.status}">${STATUS_LABEL[b.status] || b.status}</span>`,
         `<span class="nowrap">${esc(LevelUp.priceLabel(b))}</span>`,
         `<span class="nowrap">${esc(LevelUp.payLabel(b) || (b.payMethod === "pack" ? "Pack credit" : "–"))}</span>`,

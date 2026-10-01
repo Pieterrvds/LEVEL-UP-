@@ -10,7 +10,7 @@ const WORKOUT_TYPES = [
 
 let workoutMessage = "";
 let lastWorkout = { type: "CrossFit", minutes: 60 };
-const state = { hoursOpen: false, achOpen: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -261,6 +261,7 @@ function renderCoachPanel() {
       <span class="avatar" aria-hidden="true">${esc((b.name || "?").charAt(0).toUpperCase())}</span>
       <div>
         <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
+        ${LevelUp.healthFlagHtml(b.health)}
         <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
         <p class="form-error" role="alert"></p>
       </div>
@@ -572,6 +573,26 @@ function renderRanks(player, p) {
     </section>`;
 }
 
+// The player's own health questionnaire: status, answers, update
+function renderHealth(player) {
+  const h = player.healthForm;
+  const until = h ? new Date(new Date(h.acceptedAt).setFullYear(new Date(h.acceptedAt).getFullYear() + 1)) : null;
+  return `
+    <section class="panel" id="health">
+      <div class="panel-head">
+        <h2>Health check</h2>
+        ${h ? `<span class="status-chip ${h.valid ? "confirmed" : "pending"}">${h.valid ? "Up to date" : "Please confirm again"}</span>` : `<span class="status-chip pending">Not filled in</span>`}
+      </div>
+      ${h ? `
+        <p class="muted small-text">Confirmed on ${formatDate(h.acceptedAt)}${h.valid ? `, valid until ${formatDate(until)}` : ""}. Only you, your trainers and LEVEL-UP see it.</p>
+        ${h.hasRisk ? `<ul class="health-summary">${LevelUp.healthYes(h).map((q) => `<li>⚠ ${esc(q)}</li>`).join("")}</ul>${h.notes ? `<p class="small-text">“${esc(h.notes)}”</p>` : ""}`
+          : `<p class="small-text">✓ No health issues reported.</p>`}`
+        : `<p class="muted small-text">A few quick health questions so your trainer can train you safely. You fill them in before your first booking.</p>`}
+      <div id="healthEdit" ${state.healthEdit ? "" : "hidden"}>${state.healthEdit ? LevelUp.healthFormHtml() : ""}</div>
+      ${state.healthEdit ? "" : `<button type="button" class="btn btn-small ${h?.valid ? "btn-ghost" : "btn-primary"}" id="healthEditBtn">${h ? "Update my answers" : "Fill in now"}</button>`}
+    </section>`;
+}
+
 function renderSettings() {
   return `
     <section class="panel panel-wide settings" id="account">
@@ -616,6 +637,7 @@ function render() {
       ${renderAchievements(player)}
       ${renderRanks(player, p)}
       ${player.application?.status === "pending" ? "" : renderApplication(player)}
+      ${renderHealth(player)}
       ${renderSettings()}
     </div>`;
   bindEvents(player);
@@ -651,6 +673,22 @@ function bindEvents(player) {
     renderMyHours();
     document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
   }
+
+  document.getElementById("healthEditBtn")?.addEventListener("click", () => { state.healthEdit = true; render(); document.getElementById("health")?.scrollIntoView({ block: "start" }); });
+  document.querySelector("#healthEdit [data-health-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    form.querySelector('button[type="submit"]').disabled = true;
+    try {
+      state.healthEdit = false;
+      await LevelUp.saveHealthForm(form);
+      LevelUp.toast({ title: "Health check saved", text: "Thanks! Your trainer can train you safely.", icon: "✓", tone: "green" });
+    } catch (err) {
+      state.healthEdit = true;
+      form.querySelector(".form-error").textContent = err.message;
+      form.querySelector('button[type="submit"]').disabled = false;
+    }
+  });
 
   document.getElementById("achMore")?.addEventListener("click", (event) => {
     state.achOpen = !state.achOpen;

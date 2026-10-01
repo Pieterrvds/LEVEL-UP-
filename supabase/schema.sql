@@ -44,7 +44,8 @@ insert into public.app_config (key, value) values
   ('duo_price', '80'),            -- one trainer, two people, one hour (total)
   ('duo_trainer_fee', '50'),      -- the trainer's share of a duo session
   ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]'), -- session packs: credits for 1:1 sessions
-  ('online_payments', 'off'),     -- 'on' once the payments Edge Function and the Mollie key are set up
+  ('online_payments', 'off'),
+  ('health_form_months', '12'),   -- the health questionnaire is confirmed again after this many months     -- 'on' once the payments Edge Function and the Mollie key are set up
   ('payment_hold_minutes', '20')  -- how long an unpaid online booking holds the hour
 on conflict (key) do nothing;
 
@@ -199,6 +200,30 @@ create table if not exists public.trainer_hours (
 );
 create index if not exists trainer_hours_trainer_idx on public.trainer_hours (trainer_id);
 
+-- Health questionnaire (PAR-Q style), filled in before the first booking. Health data is
+-- sensitive: only the player, their trainers (for their bookings) and admins can see it.
+create table if not exists public.health_forms (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  answers jsonb not null default '{}'::jsonb,   -- {"q1": false, …, "q8": true}
+  has_risk boolean not null default false,       -- at least one "yes"
+  notes text not null default '',
+  signed_name text not null default '',
+  accepted_at timestamptz not null default now()
+);
+
+create or replace function public._health_brief(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('hasRisk', h.has_risk, 'answers', h.answers, 'notes', h.notes, 'acceptedAt', h.accepted_at,
+    'valid', h.accepted_at > now() - make_interval(months => public._config('health_form_months')::int))
+  from public.health_forms h where h.user_id = p_user;
+$$;
+
+create or replace function public._health_valid(p_user uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.health_forms h where h.user_id = p_user
+    and h.accepted_at > now() - make_interval(months => public._config('health_form_months')::int));
+$$;
+
 -- Per-trainer price and fee (empty = the defaults in app_config). Not public.
 create table if not exists public.trainer_pricing (
   trainer_id text primary key references public.trainers (id) on delete cascade,
@@ -339,6 +364,9 @@ alter table public.trainer_applications enable row level security;
 alter table public.session_packs enable row level security;
 alter table public.trainer_pricing enable row level security;
 alter table public.trainer_hours enable row level security;
+alter table public.health_forms enable row level security;
+drop policy if exists "own health form or admin" on public.health_forms;
+create policy "own health form or admin" on public.health_forms for select using (user_id = auth.uid() or public.is_admin());
 
 drop policy if exists "own packs or admin" on public.session_packs;
 create policy "own packs or admin" on public.session_packs for select using (user_id = auth.uid() or public.is_admin());
@@ -539,6 +567,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb),
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
+    'healthForm', public._health_brief(p.id),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
                                  and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
   )
@@ -700,6 +729,9 @@ begin
   if p_kind not in ('solo', 'duo') then raise exception 'Invalid session type.'; end if;
   if p_kind = 'duo' and trim(coalesce(p_partner, '')) = '' then raise exception 'Enter the name of the person you train with.'; end if;
   if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
+  if not public._health_valid(uid) then
+    raise exception 'Fill in the health questionnaire before you book a session.';
+  end if;
   if p_pay = 'online' and public._config('online_payments') <> 'on' then raise exception 'Online payment is not available yet. Choose to pay at the headquarters.'; end if;
   if public._slot_start(p_day, p_hour) <= now() then raise exception 'This time slot has already passed.'; end if;
   if public._slot_start(p_day, p_hour) < now() + make_interval(hours => public._config('booking_notice_hours')::int) then
@@ -844,7 +876,8 @@ create or replace function public.coach_bookings()
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
   perform public._expire_requests();
-  return (select coalesce(jsonb_agg(public._booking_json(b) order by b.day, b.hour), '[]'::jsonb)
+  return (select coalesce(jsonb_agg(public._booking_json(b) || jsonb_build_object('health', public._health_brief(b.user_id))
+                                   order by b.day, b.hour), '[]'::jsonb)
           from public.bookings b
           join public.trainers t on t.id = b.trainer_id
           where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
@@ -1368,6 +1401,33 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
+-- Health questionnaire
+-- ---------------------------------------------------------
+create or replace function public.save_health_form(p_answers jsonb, p_notes text, p_name text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  k text;
+  risk boolean := false;
+  clean jsonb := '{}'::jsonb;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  foreach k in array array['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8'] loop
+    if jsonb_typeof(p_answers -> k) is distinct from 'boolean' then raise exception 'Answer every question with yes or no.'; end if;
+    clean := clean || jsonb_build_object(k, (p_answers ->> k)::boolean);
+    risk := risk or (p_answers ->> k)::boolean;
+  end loop;
+  if length(trim(coalesce(p_name, ''))) < 3 then raise exception 'Type your full name to sign.'; end if;
+  if risk and length(trim(coalesce(p_notes, ''))) < 3 then
+    raise exception 'You answered yes to a question: tell your trainer a bit more about it.';
+  end if;
+  insert into public.health_forms (user_id, answers, has_risk, notes, signed_name, accepted_at)
+  values (auth.uid(), clean, risk, left(trim(coalesce(p_notes, '')), 600), left(trim(p_name), 80), now())
+  on conflict (user_id) do update set answers = excluded.answers, has_risk = excluded.has_risk, notes = excluded.notes,
+    signed_name = excluded.signed_name, accepted_at = now();
+  return public._health_brief(auth.uid());
+end $$;
+
+-- ---------------------------------------------------------
 -- Payments (Mollie through the 'payments' Edge Function)
 -- ---------------------------------------------------------
 -- The logged-in player asks to pay a booking or pack online: checks it's theirs and still payable
@@ -1535,7 +1595,8 @@ begin
   perform public._expire_requests();
   return jsonb_build_object(
     'players', coalesce((select jsonb_agg(public._player_json(p.id)) from public.profiles p), '[]'::jsonb),
-    'bookings', coalesce((select jsonb_agg(public._booking_json(b) order by b.day, b.hour)
+    'bookings', coalesce((select jsonb_agg(public._booking_json(b) || jsonb_build_object('health', public._health_brief(b.user_id))
+                                    order by b.day, b.hour)
                          from public.bookings b), '[]'::jsonb),
     'applications', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', p.name, 'email', p.email,
                            'role', a.role_title, 'specialties', a.specialties, 'bio', a.bio, 'status', a.status,
@@ -1646,6 +1707,10 @@ grant execute on function public.mark_pack_paid(uuid) to authenticated;
 grant execute on function public.set_trainer_pricing(text, numeric, numeric) to authenticated;
 grant execute on function public.pricing_info() to anon, authenticated;
 grant execute on function public.trainer_hours_list() to anon, authenticated;
+revoke execute on function public._health_brief(uuid) from public, anon, authenticated;
+revoke execute on function public._health_valid(uuid) from public, anon, authenticated;
+revoke execute on function public.save_health_form(jsonb, text, text) from public, anon;
+grant execute on function public.save_health_form(jsonb, text, text) to authenticated;
 revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
 revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
 revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;

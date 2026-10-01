@@ -336,6 +336,31 @@ function renderBookingDialog(message = "") {
     return;
   }
 
+  // First booking (or the questionnaire is older than a year): health questions first
+  if (player && !LevelUp.healthValid()) {
+    const renewing = Boolean(player.healthForm);
+    bookingContent.innerHTML = `
+      <p class="section-kicker">Before your ${renewing ? "next" : "first"} session</p>
+      <h2 class="auth-title" id="bookingTitle">Health check</h2>
+      <p class="booking-when">${when} · ${esc(trainer.short)}</p>
+      <p class="muted">${renewing ? "It's been a year: please confirm your answers again." : "A few quick questions so your trainer can train you safely. Only you, your trainer and LEVEL-UP see your answers."}</p>
+      ${LevelUp.healthFormHtml()}`;
+    bookingContent.querySelector("[data-health-form]").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      try {
+        await LevelUp.saveHealthForm(form);
+        renderBookingDialog();
+      } catch (err) {
+        form.querySelector(".form-error").textContent = err.message;
+        submit.disabled = false;
+      }
+    });
+    return;
+  }
+
   bookingContent.innerHTML = `
     <p class="section-kicker">New quest</p>
     <h2 class="auth-title" id="bookingTitle">Book this session</h2>

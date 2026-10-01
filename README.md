@@ -93,6 +93,18 @@ XP goes to the trainer's own account, so the level on the team card and in the p
    and Coach panel list every session still to settle, the admin dashboard shows a reminder in Finances.
 Players see the status (pending, confirmed, declined, completed, expired, no-show, late cancel) in their profile and on the schedule.
 
+## Health questionnaire
+
+Before a client's first booking, the booking pop-up asks 8 short health questions (heart, chest pain,
+dizziness, joints, medication, pregnancy, recent surgery, other) plus a disclaimer they tick and sign with
+their name. A "yes" asks for a short explanation and advises them to check with a doctor first.
+
+- The server refuses a booking without a valid questionnaire (`book_session`). It stays valid for
+  `health_form_months` (12) months; after that the client confirms it again at their next booking.
+- Clients can view and update their answers under **Health check** in My account.
+- Trainers see a ⚠ **Health info** flag (the yes answers and the explanation) on the bookings of their
+  clients; the admin sees it in the admin panel. Nobody else can read the answers (`health_forms` RLS).
+
 ## Cancellations
 - Players cancel for free up to **24 hours** before the session (and can always withdraw a pending request).
 - A confirmed session cancelled later is a **late cancellation**: charged in full, the trainer keeps their fee,

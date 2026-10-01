@@ -750,6 +750,73 @@ const LevelUp = (() => {
     return booking;
   }
 
+  // ---------- Health questionnaire (PAR-Q style, before the first booking) ----------
+  const HEALTH_QUESTIONS = [
+    ["q1", "Has a doctor ever said you have a heart condition or high blood pressure?"],
+    ["q2", "Do you feel pain in your chest at rest, in daily life or when you exercise?"],
+    ["q3", "Do you lose your balance because of dizziness, or did you faint in the last 12 months?"],
+    ["q4", "Do you have a bone, joint or muscle problem (back, knee, shoulder…) that could get worse by exercising?"],
+    ["q5", "Do you take medication for a condition (e.g. blood pressure, diabetes, asthma, epilepsy)?"],
+    ["q6", "Are you pregnant, or did you give birth in the last 6 months?"],
+    ["q7", "Did you have surgery or a serious injury in the last 12 months?"],
+    ["q8", "Is there any other reason you shouldn't be physically active?"]
+  ];
+  const healthValid = () => Boolean(player?.healthForm?.valid);
+  const healthYes = (form) => HEALTH_QUESTIONS.filter(([k]) => form?.answers?.[k]).map(([, q]) => q);
+
+  // The form, prefilled with earlier answers when there are any
+  function healthFormHtml(prev = player?.healthForm) {
+    return `
+      <form class="health-form" data-health-form>
+        <ol class="health-list">${HEALTH_QUESTIONS.map(([k, q]) => `
+          <li><p>${q}</p>
+            <span class="health-yn" role="radiogroup" aria-label="${esc(q)}">
+              <label><input type="radio" name="${k}" value="no" ${prev && prev.answers?.[k] === false ? "checked" : ""} required> No</label>
+              <label><input type="radio" name="${k}" value="yes" ${prev?.answers?.[k] ? "checked" : ""}> Yes</label>
+            </span>
+          </li>`).join("")}
+        </ol>
+        <label class="health-notes" ${prev?.hasRisk ? "" : "hidden"}>You answered yes: tell your trainer a bit more (what, since when, what to avoid)
+          <textarea name="notes" rows="3" maxlength="600" placeholder="e.g. old knee injury on the left, no jumping">${esc(prev?.notes || "")}</textarea>
+        </label>
+        <p class="health-advice" ${prev?.hasRisk ? "" : "hidden"}>⚠ With a yes answer we advise you to check with your doctor before your first session.</p>
+        <label class="health-consent"><input type="checkbox" name="consent" required>
+          <span>I answered honestly. I train at my own risk, follow my trainer's instructions and tell my trainer when my health changes. LEVEL-UP only uses these answers to train me safely.</span>
+        </label>
+        <label>Your full name (as signature)<input type="text" name="name" maxlength="80" required autocomplete="name"></label>
+        <p class="form-error" role="alert"></p>
+        <button type="submit" class="btn btn-primary btn-block">Save and continue ▶</button>
+      </form>`;
+  }
+
+  // Show the notes box and advice as soon as one answer is "yes"
+  document.addEventListener("change", (event) => {
+    const form = event.target.closest?.("[data-health-form]");
+    if (!form || event.target.type !== "radio") return;
+    const anyYes = HEALTH_QUESTIONS.some(([k]) => form.elements[k]?.value === "yes");
+    form.querySelector(".health-notes").hidden = !anyYes;
+    form.querySelector(".health-advice").hidden = !anyYes;
+    form.elements.notes.required = anyYes;
+  });
+
+  // For trainers and admin: ⚠ with the "yes" answers and notes of a client (health = booking.health)
+  function healthFlagHtml(health) {
+    if (!health) return `<details class="health-flag missing"><summary>No health questionnaire yet</summary></details>`;
+    if (!health.hasRisk) return "";
+    return `<details class="health-flag"><summary>⚠ Health info</summary>
+      <ul>${healthYes(health).map((q) => `<li>${esc(q)}</li>`).join("")}</ul>
+      ${health.notes ? `<p>“${esc(health.notes)}”</p>` : ""}
+    </details>`;
+  }
+
+  async function saveHealthForm(form) {
+    const f = form.elements;
+    const answers = Object.fromEntries(HEALTH_QUESTIONS.map(([k]) => [k, f[k].value === "yes"]));
+    await call("save_health_form", { p_answers: answers, p_notes: f.notes.value, p_name: f.name.value });
+    await refreshPlayer();
+    emit();
+  }
+
   // ---------- Payments (Mollie) ----------
   // Sends the player to Mollie's payment page for a booking or pack
   async function startPayment(type, id) {
@@ -1777,6 +1844,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
+    HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
     openAuth, toast
