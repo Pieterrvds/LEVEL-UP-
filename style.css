@@ -1676,7 +1676,6 @@ textarea { resize: vertical; min-height: 130px; }
   .quest-list > li:nth-child(n + 3) { display: none; }
 
   /* Level 01: one paragraph, the steps as a swipe row, the XP table on request */
-  .about-more { display: none; }
   .quest-steps {
     display: flex; gap: 12px; margin: 0 -20px; padding: 4px 20px 14px;
     overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none;
@@ -1774,4 +1773,16 @@ textarea { resize: vertical; min-height: 130px; }
   body.has-tabbar .whatsapp-float { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .toast { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .footer-inner { padding-bottom: 32px; }
+}
+
+/* ---------- Phones: descriptions (and the price cards) behind "Read more" ---------- */
+.read-more { display: none; }
+@media (max-width: 640px) {
+  .read-more {
+    display: inline-flex; align-items: center; gap: 6px; margin: -6px 0 18px; padding: 8px 12px;
+    font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright);
+    background: rgba(126, 224, 106, 0.08); border: 2px solid var(--line); cursor: pointer;
+  }
+  .read-more:hover, .read-more[aria-expanded="true"] { border-color: var(--green-bright); }
+  section:not(.more-open) [data-more] { display: none !important; }
 }

@@ -80,6 +80,26 @@ classToggle.addEventListener("click", () => {
   if (!open) document.getElementById("programs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+// ===== Phones: section descriptions behind "Read more" (always shown on bigger screens) =====
+document.querySelectorAll("section").forEach((section, i) => {
+  const parts = section.querySelectorAll("[data-more]");
+  const title = section.querySelector(".section-title");
+  if (!parts.length || !title) return;
+  parts.forEach((el, j) => { el.id ||= `more-${i}-${j}`; });
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "read-more";
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-controls", [...parts].map((el) => el.id).join(" "));
+  button.textContent = "Read more ▼";
+  title.after(button);
+  button.addEventListener("click", () => {
+    const open = section.classList.toggle("more-open");
+    button.setAttribute("aria-expanded", String(open));
+    button.textContent = open ? "Read less ▲" : "Read more ▼";
+  });
+});
+
 // ===== Phones: XP table and map open on request (always open on bigger screens) =====
 function foldToggle(buttonId, targetId, openText, closedText) {
   const button = document.getElementById(buttonId);

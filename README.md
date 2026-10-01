@@ -11,6 +11,8 @@ Personal training platform with a retro game theme: players and personal trainer
 
 ## Phones
 - A bar at the bottom (Home · Book · Contact · Profile · Menu) replaces the ☰ button; Menu opens the same menu.
+- Section descriptions (and the price cards in Level 04) sit behind a "Read more" button; elements marked
+  `data-more` in `index.html` are hidden on phones until it's tapped.
 - Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
   the map behind a button, the schedule as a compact week (only days with open hours, times as small buttons).
 - In the profile the first 4 achievements show (unlocked first), the rest behind "See all".

@@ -104,10 +104,10 @@
           <div>
             <p class="section-kicker">Level 01 · The platform</p>
             <h2 class="section-title">Hey there!</h2>
-            <p class="text-lg">
+            <p class="text-lg" data-more>
               <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player, pick a coach from our team and book a one-hour session straight from their weekly schedule.
             </p>
-            <p class="about-more">
+            <p class="about-more" data-more>
               Your training becomes a game. Every session, workout and weekly check-in earns XP, and you climb from <strong>Rookie</strong> to <strong>Legend</strong>. Our trainers level up too: the more players they coach, the higher their level.
             </p>
             <div class="btn-row" id="aboutCta">
@@ -166,7 +166,7 @@
       <div class="container">
         <p class="section-kicker">Level 02 · Character select</p>
         <h2 class="section-title">Choose your class</h2>
-        <p class="section-intro">Every class builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
+        <p class="section-intro" data-more>Every class builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
 
         <div class="class-grid collapsed" id="classGrid">
           <article class="class-card">
@@ -235,7 +235,7 @@
               <div class="class-head"><h3>Group Training</h3><span class="badge">Co-op</span></div>
               <p>Train together in the open air or at the gym. We plan the location and time, you bring the energy. Find the next group session in the schedule.</p>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li><li><span>END</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li></ul>
-              <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"><img src="img/filipironmancoach.jpg" alt="" loading="lazy"><img src="img/teammembermaximtshirt.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter, Filip &amp; Maxim</strong></span></div>
+              <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"><img src="img/filipironmancoach.jpg" alt=""><img src="img/teammembermaximtshirt.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter, Filip &amp; Maxim</strong></span></div>
               <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="all">See group sessions ▶</a>
             </div>
           </article>
@@ -254,7 +254,7 @@
         <h2 class="section-title">Meet the team</h2>
         <div class="team-grid">
           <article class="team-card team-card-lead">
-            <img src="img/pf.jpg" alt="Pieter Van den Spiegel" loading="lazy" class="team-photo" loading="lazy">
+            <img src="img/pf.jpg" alt="Pieter Van den Spiegel" class="team-photo" loading="lazy">
             <div class="team-body">
               <p class="team-role">Head coach · Founder</p>
               <h3>Pieter Van den Spiegel</h3>
@@ -268,7 +268,7 @@
           </article>
 
           <article class="team-card">
-            <img src="img/teammembermaximtshirt.jpg" alt="Maxim Buyl" loading="lazy" class="team-photo" loading="lazy">
+            <img src="img/teammembermaximtshirt.jpg" alt="Maxim Buyl" class="team-photo" loading="lazy">
             <div class="team-body">
               <p class="team-role">Cycling coach</p>
               <h3>Maxim Buyl</h3>
@@ -282,7 +282,7 @@
           </article>
 
           <article class="team-card">
-            <img src="img/filipironmancoach.jpg" alt="Filip De Meyst" loading="lazy" class="team-photo" loading="lazy">
+            <img src="img/filipironmancoach.jpg" alt="Filip De Meyst" class="team-photo" loading="lazy">
             <div class="team-body">
               <p class="team-role">Triathlon coach</p>
               <h3>Filip De Meyst</h3>
@@ -295,7 +295,7 @@
           </article>
 
           <article class="team-card team-card-recruit">
-            <img src="img/pfdefault.png" alt="" loading="lazy" class="team-photo" loading="lazy">
+            <img src="img/pfdefault.png" alt="" class="team-photo" loading="lazy">
             <div class="team-body">
               <p class="team-role">Slot open</p>
               <h3 id="recruitTitle">Player 4?</h3>
@@ -322,9 +322,9 @@
       <div class="container">
         <p class="section-kicker">Level 04 · Quest board</p>
         <h2 class="section-title">Book your trainer</h2>
-        <p class="section-intro">Live from the LEVEL-UP calendar. Every open square is a one-hour session: send a request, your trainer confirms it, and after the session you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
+        <p class="section-intro" data-more>Live from the LEVEL-UP calendar. Every open square is a one-hour session: send a request, your trainer confirms it, and after the session you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
 
-        <ul class="price-list" id="priceList" aria-label="Prices"></ul>
+        <ul class="price-list" id="priceList" aria-label="Prices" data-more></ul>
 
         <div class="schedule-toolbar">
           <div class="week-nav">
@@ -360,7 +360,7 @@
         <div class="contact-info">
           <p class="section-kicker">Final level · Join the party</p>
           <h2 class="section-title">Let's connect!</h2>
-          <p class="contact-intro">Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
+          <p class="contact-intro" data-more>Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
 
           <article class="hq-card pixel-frame" aria-labelledby="hqTitle">
             <header class="hq-head">
