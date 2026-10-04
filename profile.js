@@ -592,6 +592,25 @@ function renderHealth(player) {
     </section>`;
 }
 
+// Install LEVEL-UP as an app (or confirm it already is)
+function renderAppPanel() {
+  const app = LevelUp.appInstallState();
+  return `
+    <section class="panel panel-wide app-panel" id="app">
+      <div class="panel-head">
+        <h2>LEVEL-UP app</h2>
+        ${app.standalone ? `<span class="status-chip confirmed">Installed ✓</span>` : ""}
+      </div>
+      <div class="app-panel-body">
+        <img src="img/app/icon-192.png" alt="" width="72" height="72">
+        ${app.standalone
+          ? `<p>You're using the app. Updates arrive by themselves: no app store needed.</p>`
+          : `<p>Put LEVEL-UP on your home screen: it opens full screen like an app, so booking your trainer is one tap away. Free, no app store needed.</p>
+             <button type="button" class="btn btn-primary" data-install-app>📲 ${app.canPrompt ? "Install the app" : "How to install"}</button>`}
+      </div>
+    </section>`;
+}
+
 function renderSettings() {
   return `
     <section class="panel panel-wide settings" id="account">
@@ -640,6 +659,7 @@ function render() {
       ${inTab("me", renderBodyStats(player))}
       ${inTab("me", renderHealth(player))}
       ${inTab("me", renderApplication(player))}
+      ${inTab("me", renderAppPanel())}
       ${inTab("me", renderSettings())}
     </div>`;
   // first render: open the tab the link points to (profile.html#packs, #rewards …)

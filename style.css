@@ -1992,3 +1992,26 @@ textarea { resize: vertical; min-height: 130px; }
   .page-tab { padding: 13px 12px 11px; font-size: 0.55rem; }
 }
 [data-pane], #sessionHistory, #health { scroll-margin-top: calc(var(--hud-h) + 64px); }
+
+/* ---------- Installable app ---------- */
+.nav-install { display: none; font-family: var(--pixel); font-size: 0.62rem; text-transform: uppercase; color: var(--green-bright);
+  padding: 10px 12px; background: none; border: 2px dashed var(--green-dark); cursor: pointer; text-align: left; }
+@media (max-width: 900px) { .nav-install:not([hidden]) { display: block; margin-top: 8px; } }
+.is-app .nav-install, .is-app .app-banner { display: none !important; }
+
+.app-banner { position: fixed; left: 12px; right: 12px; bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px) + 12px); z-index: 990;
+  display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 10px 10px 10px 12px;
+  background: var(--panel); border: 2px solid var(--green); box-shadow: 4px 4px 0 var(--green-dark); animation: app-banner-in 0.3s ease-out; }
+.app-banner img { width: 44px; height: 44px; border: 2px solid var(--line); }
+.app-banner p { margin: 0; display: grid; font-size: 0.85rem; line-height: 1.3; }
+.app-banner p span { color: var(--muted); font-size: 0.78rem; }
+.app-banner-close { width: 32px; height: 32px; padding: 0; color: var(--muted); background: none; border: 0; font-size: 1rem; cursor: pointer; }
+@keyframes app-banner-in { from { transform: translateY(20px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .app-banner { animation: none; } }
+
+.app-dialog { width: min(440px, calc(100% - 24px)); }
+.app-dialog-head { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
+.app-dialog-head img { width: 64px; height: 64px; border: 2px solid var(--line); flex: none; }
+.app-dialog-head .auth-title { margin: 0; }
+.app-steps { margin: 0 0 14px; padding-left: 1.4rem; display: grid; gap: 10px; line-height: 1.5; }
+.ios-share { width: 20px; height: 20px; vertical-align: -4px; color: #4da3ff; }

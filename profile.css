@@ -267,3 +267,6 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 }
 .history-btn { margin-top: 14px; }
 #sessionHistory { margin-top: 10px; }
+.app-panel-body { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.app-panel-body img { width: 72px; height: 72px; border: 2px solid var(--line); flex: none; }
+.app-panel-body p { margin: 0; flex: 1 1 260px; }

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Offline | LEVEL-UP</title>
+  <meta name="theme-color" content="#050807">
+  <link rel="icon" href="img/app/favicon-64.png">
+  <style>
+    :root { color-scheme: dark; --bg: #050807; --panel: #101a14; --line: #24382b; --text: #f2f5f0; --muted: #a6b3a9; --green: #7ee06a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background-image: linear-gradient(rgba(126,224,106,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(126,224,106,.04) 1px, transparent 1px);
+      background-size: 32px 32px; }
+    main { width: min(420px, 100%); padding: 28px 24px; text-align: center; background: var(--panel); border: 2px solid var(--line); box-shadow: 6px 6px 0 #1e5e1a; }
+    img { width: 96px; height: 96px; }
+    h1 { margin: 14px 0 6px; font-family: ui-monospace, "Courier New", monospace; font-size: 1.15rem; letter-spacing: .08em; text-transform: uppercase; }
+    p { margin: 0 0 18px; color: var(--muted); }
+    button { font: 700 .95rem/1 system-ui, sans-serif; padding: 14px 18px; width: 100%; color: #000; background: var(--green); border: 2px solid #000; box-shadow: 3px 3px 0 #000; cursor: pointer; }
+    small { display: block; margin-top: 14px; color: var(--muted); }
+    a { color: var(--green); white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="img/app/icon-192.png" alt="">
+    <h1>Connection lost</h1>
+    <p>You're offline. Bookings, your XP and your account need an internet connection. Check your Wi-Fi or mobile data and try again.</p>
+    <button type="button" onclick="location.reload()">Try again ▶</button>
+    <small>Questions? Call or WhatsApp <a href="tel:+32471955489">+32 471 95 54 89</a></small>
+  </main>
+  <script>window.addEventListener("online", () => location.reload());</script>
+</body>
+</html>

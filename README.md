@@ -93,6 +93,17 @@ XP goes to the trainer's own account, so the level on the team card and in the p
    and Coach panel list every session still to settle, the admin dashboard shows a reminder in Finances.
 Players see the status (pending, confirmed, declined, completed, expired, no-show, late cancel) in their profile and on the schedule.
 
+## App (installable)
+
+The site is a progressive web app: people can install it on their phone like an app, without an app store.
+
+- `manifest.webmanifest`: name, icons (`img/app/`), colours, full-screen mode and shortcuts (Book, Account, Shop).
+- `sw.js`: the service worker. Pages, scripts and styles always come from the network, so the app is always the
+  newest version; images and fonts are cached. Without a connection pages show `offline.html`. Supabase and payments
+  are never cached. Change `VERSION` in `sw.js` to clear old caches.
+- Install: Android / Chrome shows a "Get the app" button (menu and a banner on phones, at most once every 3 weeks
+  after "Not now"); iPhone shows the Share → Add to Home Screen steps. My account → Me has a "LEVEL-UP app" panel.
+
 ## Health questionnaire
 
 Before a client's first booking, the booking pop-up asks 8 short health questions (heart, chest pain,

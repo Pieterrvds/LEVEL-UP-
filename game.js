@@ -1832,7 +1832,121 @@ const LevelUp = (() => {
     if (year) year.textContent = new Date().getFullYear();
 
     initTabBar(menuToggle);
+    initApp(nav);
     renderHud();
+  }
+
+  // ---------- Installable app (PWA): manifest.webmanifest + sw.js ----------
+  // Android / desktop Chrome and Edge fire beforeinstallprompt: we show our own "Get the app" button.
+  // iPhone and iPad have no install prompt: the button opens the Add to Home Screen steps instead.
+  let installPrompt = null;
+  const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const appInstallState = () => ({ standalone: isStandalone(), canPrompt: Boolean(installPrompt), ios: isIOS() });
+  const canInstall = () => !isStandalone() && (Boolean(installPrompt) || isIOS());
+
+  function initApp(nav) {
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => { /* the site works without it */ }));
+    }
+    if (isStandalone()) document.documentElement.classList.add("is-app");
+
+    if (nav) {
+      nav.insertAdjacentHTML("beforeend", `<button type="button" class="nav-install" data-install-app hidden>📲 Get the app</button>`);
+    }
+    const refresh = () => {
+      document.querySelectorAll(".nav-install").forEach((b) => { b.hidden = !canInstall(); });
+      maybeShowAppBanner();
+      emit();
+    };
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault(); // we show our own button instead of the browser's mini bar
+      installPrompt = event;
+      refresh();
+    });
+    window.addEventListener("appinstalled", () => {
+      installPrompt = null;
+      document.querySelector(".app-banner")?.remove();
+      toast({ title: "App installed", text: "Find LEVEL-UP on your home screen", icon: "📲", tone: "green" });
+      refresh();
+    });
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-install-app]")) return;
+      event.preventDefault();
+      installApp();
+    });
+    refresh();
+  }
+
+  async function installApp() {
+    if (installPrompt) {
+      const prompt = installPrompt;
+      installPrompt = null;
+      prompt.prompt();
+      await prompt.userChoice.catch(() => null);
+      document.querySelectorAll(".nav-install").forEach((b) => { b.hidden = !canInstall(); });
+      emit();
+      return;
+    }
+    showInstallSteps();
+  }
+
+  function showInstallSteps() {
+    let dialog = document.getElementById("appDialog");
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.id = "appDialog";
+      dialog.className = "auth-dialog app-dialog";
+      dialog.setAttribute("aria-labelledby", "appDialogTitle");
+      document.body.appendChild(dialog);
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog || event.target.closest("[data-close-app]")) dialog.close();
+      });
+    }
+    const share = `<svg class="ios-share" viewBox="0 0 24 24" aria-label="Share" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 11v10h14V11"/></svg>`;
+    const steps = isIOS()
+      ? [`Tap the Share button ${share} in Safari (at the bottom, or at the top on iPad).`,
+         `Scroll down and tap <strong>Add to Home Screen</strong>.`,
+         `Tap <strong>Add</strong>. LEVEL-UP is now on your home screen.`]
+      : [`Open your browser menu (<strong>⋮</strong> or <strong>…</strong>).`,
+         `Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>. On a computer, click the install icon in the address bar.`,
+         `Confirm. LEVEL-UP opens like an app from now on.`];
+    dialog.innerHTML = `
+      <button type="button" class="dialog-close" data-close-app aria-label="Close">✕</button>
+      <div class="app-dialog-head">
+        <img src="img/app/icon-192.png" alt="" width="64" height="64">
+        <div>
+          <p class="section-kicker">Get the app</p>
+          <h2 class="auth-title" id="appDialogTitle">LEVEL-UP on your home screen</h2>
+        </div>
+      </div>
+      <ol class="app-steps">${steps.map((t) => `<li>${t}</li>`).join("")}</ol>
+      <p class="muted small-text">Free, no app store needed. It opens full screen, and you always get the newest version.</p>
+      <button type="button" class="btn btn-primary btn-block" data-close-app>Got it</button>`;
+    if (!dialog.open) dialog.showModal();
+  }
+
+  // Phones: a small banner, not on the admin page, at most once every 3 weeks after "Not now"
+  let bannerPlanned = false;
+  function maybeShowAppBanner() {
+    if (bannerPlanned || !canInstall() || window.innerWidth > 760) return;
+    if (/admin\.html$/.test(location.pathname)) return;
+    const key = "levelup.appBanner";
+    const dismissed = Number(read(key, 0));
+    if (dismissed && Date.now() - dismissed < 21 * 864e5) return;
+    const banner = document.createElement("div");
+    banner.className = "app-banner";
+    banner.setAttribute("role", "region");
+    banner.setAttribute("aria-label", "Get the app");
+    banner.innerHTML = `
+      <img src="img/app/icon-192.png" alt="" width="44" height="44">
+      <p><strong>LEVEL-UP app</strong><span>Book your trainer straight from your home screen</span></p>
+      <button type="button" class="btn btn-small btn-primary" data-install-app>Install</button>
+      <button type="button" class="app-banner-close" aria-label="Not now">✕</button>`;
+    banner.querySelector(".app-banner-close").addEventListener("click", () => { write(key, Date.now()); banner.remove(); });
+    banner.querySelector("[data-install-app]").addEventListener("click", () => { write(key, Date.now()); banner.remove(); });
+    bannerPlanned = true;
+    setTimeout(() => { if (canInstall()) document.body.appendChild(banner); }, 2500);
   }
 
   // ---------- Phones: app-style bar at the bottom (Home · Book · Contact · Profile · Menu) ----------
@@ -1910,7 +2024,7 @@ const LevelUp = (() => {
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
-    pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab,
+    pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab, appInstallState, installApp,
     LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
