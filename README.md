@@ -93,6 +93,11 @@ XP goes to the trainer's own account, so the level on the team card and in the p
    and Coach panel list every session still to settle, the admin dashboard shows a reminder in Finances.
 Players see the status (pending, confirmed, declined, completed, expired, no-show, late cancel) in their profile and on the schedule.
 
+## Updates show up right away
+The pages load `style.css?v=…`, `game.js?v=…` etc. Change that number (in all four HTML pages) with every update,
+so browsers and the installed app fetch the new files instead of a saved copy (GitHub Pages lets them keep files
+for 10 minutes).
+
 ## Loading screen
 Every page has a game-style loading screen (`#boot`: logo, progress bar, current step and a random tip). It only
 appears when loading takes longer than 0.35 s, shows the real progress of the startup requests (which now run in
