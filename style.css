@@ -2024,3 +2024,9 @@ textarea { resize: vertical; min-height: 130px; }
 .push-setting { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .push-setting p { margin: 0; flex: 1 1 280px; }
 .push-setting.push-denied p, .push-setting.push-ios-install p { color: var(--muted); }
+
+/* Tab rows (trainer pickers, booking filters): wrap onto a second line on phones instead of being cut off */
+@media (max-width: 640px) {
+  .filter-tabs:not(.schedule-toolbar .filter-tabs) { flex-wrap: wrap; }
+  .filter-tabs:not(.schedule-toolbar .filter-tabs) button { flex: 1 1 auto; padding: 12px 10px; border: 0; box-shadow: inset 0 0 0 1px var(--line); }
+}
