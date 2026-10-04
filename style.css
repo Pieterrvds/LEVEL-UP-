@@ -2080,3 +2080,4 @@ textarea { resize: vertical; min-height: 130px; }
 
 /* Looping swipe rows (script.js): no snapping, it would fight the gliding */
 .looping { scroll-snap-type: none !important; scroll-behavior: auto !important; }
+#highScores { scroll-margin-top: calc(var(--hud-h) + 20px); }

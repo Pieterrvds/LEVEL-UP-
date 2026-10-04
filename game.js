@@ -2145,11 +2145,11 @@ const LevelUp = (() => {
     setTimeout(() => { if (canInstall()) document.body.appendChild(banner); }, 2500);
   }
 
-  // ---------- Phones: app-style bar at the bottom (Home · Book · Contact · Profile · Menu) ----------
+  // ---------- Phones: app-style bar at the bottom (Home · Book · Scores · Profile · Menu) ----------
   const TAB_ICONS = {
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     book: '<rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/>',
-    contact: '<path d="M4 5h16v11H9l-5 4z"/>',
+    scores: '<path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 20h8M9 17h6"/>',
     profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.5-6 8-6s7 1.5 8 6"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
   };
@@ -2165,7 +2165,7 @@ const LevelUp = (() => {
     bar.innerHTML = `
       <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
       <a href="${link("schedule")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
-      <a href="${link("contact")}" data-tab="contact">${tabIcon("contact")}<span>Contact</span></a>
+      <a href="${link("highScores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>
       <a href="profile.html" data-tab="profile">${tabIcon("profile")}<span data-tab-label>Profile</span></a>
       <button type="button" data-tab="menu" aria-controls="nav" aria-expanded="false">${tabIcon("menu")}<span>Menu</span></button>`;
     document.body.appendChild(bar);
@@ -2175,7 +2175,7 @@ const LevelUp = (() => {
     if (page === "profile.html") setActive("profile");
     else if (home) {
       // Highlight the tab of the section on screen
-      const sections = { home: "home", about: "home", programs: "home", team: "home", schedule: "book", contact: "contact" };
+      const sections = { home: "home", about: "home", programs: "home", team: "home", highScores: "scores", schedule: "book", contact: "home" };
       const onScreen = () => {
         let current = "home";
         Object.keys(sections).forEach((id) => {
