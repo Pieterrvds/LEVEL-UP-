@@ -264,6 +264,14 @@ with how much XP you need to pass the player above you. Player name and level on
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
 
+## Profile photos
+Players upload a photo with the 📷 button on their avatar (Me → top of the page) or under Account → Profile photo.
+The photo is cropped square and shrunk to 320 px in the browser before upload (so it stays small and fast), then
+stored in the Supabase Storage bucket `avatars`, in a folder named after the player's id. Everyone can only upload,
+change or delete files in their own folder. The photo shows on the high scores (podium and rows), the page header,
+the account page, coach booking requests and in admin. Remove sets it back to the letter. As admin you can remove
+someone's photo in the member details (Remove photo). The bucket and its rules are created by `supabase/schema.sql`.
+
 ## Adding a shop item
 Add an entry to `ITEMS` in `game.js` (id, name, price, category `merch` or `tools`, rarity, image, optional sizes,
 perks, description) and the same id, name and price to the `shop_items` table in Supabase.

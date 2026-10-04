@@ -48,6 +48,7 @@ insert into public.app_config (key, value) values
   ('health_form_months', '12'),   -- the health questionnaire is confirmed again after this many months
   ('loyalty_sessions', '20'),     -- every this many completed (paid) sessions earn a free 1:1 session
   ('reward_valid_months', '3'),   -- a free session voucher must be booked within this many months
+  ('storage_host', 'zdwlihbsmqiggpyensxc.supabase.co'), -- profile photos must come from this project's Storage
   ('payment_hold_minutes', '20')  -- how long an unpaid online booking holds the hour
 on conflict (key) do nothing;
 
@@ -107,6 +108,8 @@ create table if not exists public.profiles (
   last_login timestamptz not null default now()
 );
 alter table public.profiles add column if not exists show_on_leaderboard boolean not null default true;
+-- Profile photo: a public URL in the Storage bucket "avatars" (folder = the player's id)
+alter table public.profiles add column if not exists avatar_url text;
 
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
@@ -345,7 +348,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'payMethod', b.pay_method, 'payStatus', b.pay_status, 'paidAt', b.paid_at, 'refundStatus', b.refund_status,
     'freeCancelUntil', ((b.day + make_interval(hours => b.hour)) at time zone 'Europe/Brussels')
                        - make_interval(hours => public._config('free_cancel_hours')::int),
-    'name', p.name, 'email', p.email,
+    'name', p.name, 'email', p.email, 'avatar', p.avatar_url,
     'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id)
   )
   from public.profiles p where p.id = b.user_id;
@@ -622,6 +625,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'createdAt', p.created_at,
     'lastLogin', p.last_login,
     'showOnLeaderboard', p.show_on_leaderboard,
+    'avatarUrl', p.avatar_url,
     'application', (select jsonb_build_object('status', a.status, 'role', a.role_title, 'specialties', a.specialties,
                       'bio', a.bio, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at)
                     from public.trainer_applications a where a.user_id = p.id),
@@ -1082,10 +1086,10 @@ $$;
 drop function if exists public.leaderboard();
 drop function if exists public.leaderboard(text);
 create or replace function public.leaderboard(p_period text default 'all')
-returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean)
+returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean, avatar_url text)
 language sql stable security definer set search_path = public as $$
   with players as (
-    select p.id, p.name, p.xp as total_xp, p.created_at,
+    select p.id, p.name, p.xp as total_xp, p.created_at, p.avatar_url,
       case when p_period = 'month' then coalesce((
         select sum(x.amount) from public.xp_log x
         where x.user_id = p.id
@@ -1098,7 +1102,7 @@ language sql stable security definer set search_path = public as $$
     select *, row_number() over (order by score desc, created_at) as place from players  -- equal scores: who got there first
     where p_period <> 'month' or score > 0
   )
-  select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false)
+  select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false), r.avatar_url
   from ranked r
   where r.place <= 25 or r.id = auth.uid()
   order by r.place;
@@ -1943,6 +1947,52 @@ returns void language sql security definer set search_path = public as $$
 $$;
 
 -- ---------------------------------------------------------
+-- Profile photos (Storage bucket "avatars", public to view; players only write in their own folder)
+-- ---------------------------------------------------------
+do $$
+begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('avatars', 'avatars', true, 1048576, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists "avatars: read own" on storage.objects;
+    drop policy if exists "avatars: upload own" on storage.objects;
+    drop policy if exists "avatars: change own" on storage.objects;
+    drop policy if exists "avatars: delete own" on storage.objects;
+    create policy "avatars: read own" on storage.objects for select to authenticated
+      using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+    create policy "avatars: upload own" on storage.objects for insert to authenticated
+      with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+    create policy "avatars: change own" on storage.objects for update to authenticated
+      using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+      with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+    create policy "avatars: delete own" on storage.objects for delete to authenticated
+      using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+  end if;
+end $$;
+
+-- The website saves the photo's public URL; it must point into the player's own folder
+create or replace function public.set_avatar(p_url text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if p_url is not null and p_url !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
+                                     || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Invalid photo.';
+  end if;
+  update public.profiles set avatar_url = p_url where id = auth.uid();
+  return public._player_json(auth.uid());
+end $$;
+
+-- Admin: remove someone's photo (e.g. not suitable for the public high scores)
+create or replace function public.admin_clear_avatar(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.profiles set avatar_url = null where id = p_user;
+end $$;
+
+-- ---------------------------------------------------------
 -- Permissions: helpers are private, the website calls only these
 -- ---------------------------------------------------------
 revoke execute on function public._config(text) from public, anon, authenticated;
@@ -1984,6 +2034,10 @@ grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
+revoke execute on function public.set_avatar(text) from public, anon;
+revoke execute on function public.admin_clear_avatar(uuid) from public, anon;
+grant execute on function public.set_avatar(text) to authenticated;
+grant execute on function public.admin_clear_avatar(uuid) to authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 revoke execute on function public.my_data() from public, anon;

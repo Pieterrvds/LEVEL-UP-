@@ -679,7 +679,7 @@ function renderHighScores() {
       const r = top[i];
       return `
         <div class="hs-pod p${i + 1} ${r.isMe ? "me" : ""}">
-          <div class="hs-pod-av" style="--m:${HS_MEDALS[i]}">${i === 0 ? `<span class="hs-crown" aria-hidden="true">👑</span>` : ""}${esc(r.name.trim().charAt(0).toUpperCase())}</div>
+          <div class="hs-pod-av ${r.avatarUrl ? "photo" : ""}" style="--m:${HS_MEDALS[i]}">${i === 0 ? `<span class="hs-crown" aria-hidden="true">👑</span>` : ""}${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : esc(r.name.trim().charAt(0).toUpperCase())}</div>
           <span class="hs-pod-name">${esc(r.name)}${r.isMe ? ` <span class="hs-you">You</span>` : ""}</span>
           <span class="hs-pod-score">${score(r)}</span>
           <span class="hs-pod-lvl">LVL ${level(r)}</span>
@@ -691,7 +691,7 @@ function renderHighScores() {
       return `
         <li class="hs-row ${r.isMe ? "me" : ""}" style="--c:${HS_ROW_COLORS[k % HS_ROW_COLORS.length]};--tier:${HS_TIER_COLORS[tier] || HS_TIER_COLORS[0]}">
           <span class="hs-rank">${r.isMe ? `<b aria-hidden="true">▶</b>` : ""}${ordinal(r.place)}</span>
-          <span class="hs-name"><i aria-hidden="true"></i><span>${esc(r.name)}</span>${r.isMe ? `<span class="hs-you">You</span>` : ""}</span>
+          <span class="hs-name">${r.avatarUrl ? `<img class="hs-face" src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : `<i aria-hidden="true">${esc(r.name.trim().charAt(0).toUpperCase())}</i>`}<span>${esc(r.name)}</span>${r.isMe ? `<span class="hs-you">You</span>` : ""}</span>
           <span class="hs-lvl">${level(r)}</span>
           <span class="hs-score">${score(r)}</span>
         </li>`;

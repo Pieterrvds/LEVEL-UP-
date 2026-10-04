@@ -2066,6 +2066,8 @@ textarea { resize: vertical; min-height: 130px; }
 .hs-pod.p1 { grid-column: 2; } .hs-pod.p2 { grid-column: 1; grid-row: 1; } .hs-pod.p3 { grid-column: 3; grid-row: 1; }
 .hs-pod-av { position: relative; width: 56px; height: 56px; display: grid; place-items: center; font-family: var(--pixel); font-size: 1.05rem;
   color: #000; background: var(--m); border: 3px solid #000; box-shadow: 4px 4px 0 #000; }
+.hs-pod-av.photo { padding: 0; overflow: visible; }
+.hs-pod-av img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .hs-pod.p1 .hs-pod-av { width: 70px; height: 70px; font-size: 1.35rem; animation: hs-bob 1.4s steps(2) infinite; }
 .hs-crown { position: absolute; top: -24px; left: 50%; transform: translateX(-50%); font-size: 1.2rem; filter: drop-shadow(2px 2px 0 #000); }
 .hs-pod-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; font-size: 0.95rem; }
@@ -2089,7 +2091,9 @@ textarea { resize: vertical; min-height: 130px; }
 .hs-rank b { font-weight: 400; color: var(--green-bright); margin-right: 3px; animation: blink 1s steps(2) infinite; }
 .hs-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--sans); font-weight: 700; font-size: 0.92rem; color: var(--text); }
 .hs-name > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hs-name i { flex: none; width: 8px; height: 8px; background: var(--tier); }
+.hs-name i, .hs-face { flex: none; width: 26px; height: 26px; border: 2px solid var(--tier); }
+.hs-name i { display: grid; place-items: center; font-family: var(--pixel); font-style: normal; font-size: 0.55rem; color: #000; background: var(--tier); }
+.hs-face { object-fit: cover; background: var(--tier); }
 .hs-score { color: var(--text); }
 .hs-row.me { background: rgba(126, 224, 106, 0.14); outline: 2px solid var(--green-bright); outline-offset: -2px; animation: hs-pulse 1.6s ease-in-out infinite; }
 .hs-you { flex: none; font-family: var(--pixel); font-size: 0.45rem; color: #000; background: var(--green-bright); padding: 3px 5px; }
@@ -2111,3 +2115,8 @@ textarea { resize: vertical; min-height: 130px; }
   .hs-name { font-size: 0.85rem; gap: 6px; }
   .hs-pod-name { font-size: 0.82rem; }
 }
+
+/* Profile photos in avatars: the rank colour becomes a frame */
+.avatar.has-photo { padding: 2px; overflow: hidden; }
+.avatar.has-photo img { width: 100%; height: 100%; display: block; object-fit: cover; image-rendering: auto; }
+.avatar.xl.has-photo { padding: 4px; }

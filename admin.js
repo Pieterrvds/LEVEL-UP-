@@ -1162,6 +1162,7 @@ function openMember(email) {
         <p class="section-kicker">${p.admin ? "Admin" : "Player"} · joined ${fmtDate(p.createdAt)}</p>
         <h2 class="auth-title" id="memberTitle">${esc(p.name)}</h2>
         <p><a class="text-link" href="mailto:${esc(p.email)}">${esc(p.email)}</a></p>
+        ${p.avatarUrl ? `<button type="button" class="btn btn-small btn-ghost" data-clear-avatar="${p.id}">Remove photo</button>` : ""}
       </div>
     </div>
     <div class="xp-bar"><i style="width:${p.prog.pct.toFixed(1)}%"></i></div>
@@ -1290,6 +1291,15 @@ root.addEventListener("click", (event) => {
       : `Did you give ${b.name} their ${money(b.price)} back?`)) return;
     btn.disabled = true;
     (paidHq ? LevelUp.markPaidInPerson(b.id) : LevelUp.markRefunded(b.id)).catch((err) => { btn.disabled = false; alert(err.message); });
+    return;
+  }
+  const clearAvatar = event.target.closest("[data-clear-avatar]");
+  if (clearAvatar) {
+    if (!confirm("Remove this player's profile photo? They can upload a new one.")) return;
+    clearAvatar.disabled = true;
+    LevelUp.adminClearAvatar(clearAvatar.dataset.clearAvatar)
+      .then(() => { document.getElementById("memberDialog")?.close(); render(); })
+      .catch((err) => { clearAvatar.disabled = false; alert(err.message); });
     return;
   }
   const hoodie = event.target.closest("[data-hoodie]");

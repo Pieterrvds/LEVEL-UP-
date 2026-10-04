@@ -570,7 +570,7 @@ const LevelUp = (() => {
   }
 
   const scoreRows = (rows) => (rows || []).map((r) => ({
-    place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me)
+    place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me), avatarUrl: r.avatar_url || null
   }));
   async function loadLeaderboard(period = "all") {
     try {
@@ -1767,10 +1767,67 @@ const LevelUp = (() => {
   }
 
   // ---------- HUD (header player chip) ----------
+  // A player's avatar: their photo when they uploaded one, otherwise their first letter (colour = rank)
   function avatarHtml(p, size = "") {
     const letter = esc((p.name || "?").trim().charAt(0).toUpperCase() || "?");
-    const tier = RANKS.indexOf(rankFor(levelFromXp(p.xp)));
+    const tier = RANKS.indexOf(rankFor(levelFromXp(p.xp || 0)));
+    const url = p.avatarUrl || p.avatar;
+    if (url) return `<span class="avatar has-photo ${size}" data-tier="${tier}" aria-hidden="true"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"></span>`;
     return `<span class="avatar ${size}" data-tier="${tier}" aria-hidden="true">${letter}</span>`;
+  }
+
+  // ---------- Profile photo: square-cropped and shrunk in the browser, then stored in Storage "avatars" ----------
+  const AVATAR_SIZE = 320;
+  async function squarePhoto(file) {
+    if (!/^image\//.test(file?.type || "")) throw new Error("Choose a photo (JPG, PNG or WebP).");
+    if (file.size > 15 * 1024 * 1024) throw new Error("That photo is too big. Choose one under 15 MB.");
+    let img;
+    try {
+      img = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+      img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("This photo can't be read. Try a JPG or PNG."));
+        el.src = URL.createObjectURL(file);
+      });
+    }
+    const w = img.width, h = img.height, side = Math.min(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = AVATAR_SIZE;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, (w - side) / 2, Math.max(0, (h - side) * 0.3), side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE); // a bit above centre: faces
+    return new Promise((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't prepare the photo.")), "image/jpeg", 0.86));
+  }
+
+  const avatarPath = (url) => url?.split("/storage/v1/object/public/avatars/")[1] || null;
+
+  async function uploadAvatar(file) {
+    if (!player || !sb) throw new Error("Log in first.");
+    const blob = await squarePhoto(file);
+    const path = `${player.id}/${Date.now()}.jpg`;
+    const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
+    if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
+    const old = avatarPath(player.avatarUrl);
+    const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    await call("set_avatar", { p_url: url });
+    if (old) sb.storage.from("avatars").remove([old]).catch(() => {});
+    await Promise.all([refreshPlayer(), loadLeaderboard()]);
+    emit();
+  }
+
+  async function removeAvatar() {
+    if (!player) return;
+    const old = avatarPath(player.avatarUrl);
+    await call("set_avatar", { p_url: null });
+    if (old && sb) sb.storage.from("avatars").remove([old]).catch(() => {});
+    await Promise.all([refreshPlayer(), loadLeaderboard()]);
+    emit();
+  }
+
+  async function adminClearAvatar(userId) {
+    await call("admin_clear_avatar", { p_user: userId });
   }
 
   function renderHud() {
@@ -2229,6 +2286,7 @@ const LevelUp = (() => {
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
     pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab, appInstallState, installApp,
+    uploadAvatar, removeAvatar, adminClearAvatar,
     getPushStatus: () => pushStatus, refreshPushStatus, enablePush, disablePush, pushCalloutHtml,
     pushServerReady: () => call("push_public_key").then(Boolean, () => false),
     LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,

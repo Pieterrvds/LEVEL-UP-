@@ -26,7 +26,13 @@ function renderHeader(player, p) {
   const since = formatDate(player.createdAt);
   return `
     <section class="player-header pixel-frame">
-      ${LevelUp.avatarHtml(player, "xl")}
+      <div class="avatar-edit">
+        ${LevelUp.avatarHtml(player, "xl")}
+        <label class="avatar-edit-btn" title="${player.avatarUrl ? "Change your photo" : "Add your photo"}">
+          <span aria-hidden="true">📷</span><span class="sr-only">${player.avatarUrl ? "Change your profile photo" : "Add a profile photo"}</span>
+          <input type="file" accept="image/*" data-avatar-input hidden>
+        </label>
+      </div>
       <div class="player-header-info">
         <p class="section-kicker">Player 1 · since ${since}</p>
         <h1 class="player-header-name">${esc(player.name)}</h1>
@@ -305,7 +311,7 @@ function renderCoachPanel() {
 
   const row = (b, actions = "") => `
     <li class="session-row coach-row">
-      <span class="avatar" aria-hidden="true">${esc((b.name || "?").charAt(0).toUpperCase())}</span>
+      ${LevelUp.avatarHtml({ name: b.name, avatar: b.avatar })}
       <div>
         <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
         ${LevelUp.healthFlagHtml(b.health)}
@@ -628,6 +634,12 @@ function renderSettings() {
       <div>
         <h2>Account</h2>
         <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}</p>
+        <div class="photo-setting">
+          ${LevelUp.avatarHtml(LevelUp.getPlayer())}
+          <span>Profile photo</span>
+          <label class="btn btn-small btn-ghost">${LevelUp.getPlayer().avatarUrl ? "Change" : "Upload photo"}<input type="file" accept="image/*" data-avatar-input hidden></label>
+          ${LevelUp.getPlayer().avatarUrl ? `<button type="button" class="btn btn-small btn-ghost" data-avatar-remove>Remove</button>` : ""}
+        </div>
         ${LevelUp.getPlayer().trainerId ? "" : `
         <label class="toggle">
           <input type="checkbox" id="leaderboardToggle" ${LevelUp.getPlayer().showOnLeaderboard !== false ? "checked" : ""}>
@@ -724,6 +736,25 @@ function bindEvents(player) {
       form.querySelector(".form-error").textContent = err.message;
       form.querySelector('button[type="submit"]').disabled = false;
     }
+  });
+
+  root.querySelectorAll("[data-avatar-input]").forEach((input) => input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const label = input.closest("label");
+    label?.classList.add("busy");
+    try {
+      await LevelUp.uploadAvatar(file);
+      LevelUp.toast({ title: "Photo saved", text: "Your face is on the high scores now", icon: "📷", tone: "green" });
+    } catch (err) {
+      label?.classList.remove("busy");
+      LevelUp.toast({ title: "Photo not saved", text: err.message, icon: "!" });
+    }
+  }));
+  root.querySelector("[data-avatar-remove]")?.addEventListener("click", async (event) => {
+    if (!confirm("Remove your profile photo?")) return;
+    event.target.disabled = true;
+    try { await LevelUp.removeAvatar(); } catch (err) { event.target.disabled = false; alert(err.message); }
   });
 
   root.querySelectorAll("[data-page-tab]").forEach((btn) => btn.addEventListener("click", () => {

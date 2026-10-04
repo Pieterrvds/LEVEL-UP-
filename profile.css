@@ -285,3 +285,14 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .info-more summary::-webkit-details-marker { display: none; }
 .info-more[open] summary { margin-bottom: 8px; }
 .info-more p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 70ch; }
+
+/* Profile photo: camera button on the avatar, and the row under Account */
+.avatar-edit { position: relative; flex: none; align-self: start; }
+.avatar-edit-btn { position: absolute; right: -10px; bottom: -10px; width: 38px; height: 38px; display: grid; place-items: center;
+  font-size: 1.05rem; background: var(--green-bright); border: 2px solid #000; box-shadow: 3px 3px 0 #000; cursor: pointer; }
+.avatar-edit-btn:hover { background: #9af087; }
+.avatar-edit-btn.busy, .photo-setting label.busy { opacity: 0.5; pointer-events: none; }
+.photo-setting { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0; }
+.photo-setting > span:not(.avatar) { font-weight: 600; }
+.photo-setting label.btn { cursor: pointer; }
+@media (max-width: 640px) { .avatar-edit-btn { width: 32px; height: 32px; right: -8px; bottom: -8px; font-size: 0.9rem; } }
