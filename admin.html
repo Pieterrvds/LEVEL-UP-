@@ -24,6 +24,17 @@
 </head>
 <body>
 
+  <!-- Loading screen: appears only when loading takes a moment (see #boot in style.css and game.js) -->
+  <div class="boot" id="boot" aria-hidden="true">
+    <div class="boot-inner">
+      <img src="img/app/icon-192.png" alt="" width="84" height="84">
+      <p class="boot-title">Loading<span class="boot-dots" aria-hidden="true"></span></p>
+      <div class="boot-bar"><i id="bootFill"></i></div>
+      <p class="boot-step" id="bootStep">Press start…</p>
+      <p class="boot-tip" id="bootTip"></p>
+    </div>
+  </div>
+
   <div class="xp-track" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
 
   <header class="hud" id="hud">

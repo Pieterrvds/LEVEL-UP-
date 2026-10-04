@@ -93,6 +93,11 @@ XP goes to the trainer's own account, so the level on the team card and in the p
    and Coach panel list every session still to settle, the admin dashboard shows a reminder in Finances.
 Players see the status (pending, confirmed, declined, completed, expired, no-show, late cancel) in their profile and on the schedule.
 
+## Loading screen
+Every page has a game-style loading screen (`#boot`: logo, progress bar, current step and a random tip). It only
+appears when loading takes longer than 0.35 s, shows the real progress of the startup requests (which now run in
+parallel) and closes as soon as the data is in; CSS hides it after 12 s as a safety net. Tips: `BOOT_TIPS` in `game.js`.
+
 ## App (installable)
 
 The site is a progressive web app: people can install it on their phone like an app, without an app store.

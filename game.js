@@ -1602,16 +1602,73 @@ const LevelUp = (() => {
     if (!coachDialog.open) coachDialog.showModal();
   }
 
+  // ---------- Loading screen (#boot in each page) ----------
+  // Pure CSS shows it only when loading takes longer than ~0.35 s and hides it by itself after
+  // 12 s as a safety net; here it gets the real progress and is closed as soon as the data is in.
+  const BOOT_TIPS = [
+    "Every 20 sessions = a free 1:1 session 🎁",
+    "Cancel for free up to 24 hours before your session",
+    "Your first session is only €30",
+    "Train with a friend: a duo session is €80 for the two of you",
+    "Reach Champion and Legend for a free session",
+    "Turn on notifications: hear it when your trainer confirms",
+    "A weekly check-in of your stats earns XP",
+    "Session packs make every session cheaper"
+  ];
+  const bootEl = document.getElementById("boot");
+  let bootTotal = 0;
+  let bootDoneCount = 0;
+  if (bootEl) {
+    const tip = document.getElementById("bootTip");
+    if (tip) tip.textContent = `Tip: ${BOOT_TIPS[Math.floor(Math.random() * BOOT_TIPS.length)]}`;
+  }
+  function bootStep(text) {
+    const el = document.getElementById("bootStep");
+    if (el) el.textContent = text;
+  }
+  const bootPending = [];
+  function bootTask(promise, label) {
+    bootTotal++;
+    bootPending.push(label);
+    bootStep(bootPending[0]);
+    return Promise.resolve(promise).finally(() => {
+      bootPending.splice(bootPending.indexOf(label), 1);
+      if (bootPending.length) bootStep(bootPending[0]);
+      bootDoneCount++;
+      const fill = document.getElementById("bootFill");
+      if (fill) fill.style.width = `${Math.min(95, 10 + (bootDoneCount / Math.max(bootTotal, 1)) * 85)}%`;
+    });
+  }
+  function bootDone() {
+    if (!bootEl) return;
+    const fill = document.getElementById("bootFill");
+    if (fill) fill.style.width = "100%";
+    bootStep("Ready!");
+    bootEl.classList.add("done");
+    setTimeout(() => bootEl.remove(), 600);
+  }
+
   // ---------- Startup ----------
+  // Everything loads at once; only the calendar and the player wait for the trainer list
+  // (so new trainers' hours and names are known). The loading screen shows the real progress.
   const ready = (async () => {
     if (!sb) {
       serverError = "offline";
     } else {
       try {
+        bootStep("Connecting…");
         const { data } = await sb.auth.getSession();
         session = data.session;
-        await Promise.all([loadTrainerList(), loadPricing(), loadOpeningHours()]); // trainers before the calendar, so new trainers' open hours are recognised
-        await Promise.all([session ? refreshPlayer() : null, loadSlots(), loadTrainerStats(), loadCalendar(), loadLeaderboard()]);
+        const trainersLoaded = bootTask(loadTrainerList(), "Loading trainers…");
+        await Promise.all([
+          trainersLoaded.then(() => bootTask(loadCalendar(), "Loading the schedule…")),
+          session ? trainersLoaded.then(() => bootTask(refreshPlayer(), "Loading your save file…")) : null,
+          bootTask(loadPricing(), "Loading prices…"),
+          bootTask(loadOpeningHours(), "Loading opening hours…"),
+          bootTask(loadSlots(), "Loading open sessions…"),
+          bootTask(loadTrainerStats(), "Loading trainer levels…"),
+          bootTask(loadLeaderboard(), "Loading high scores…")
+        ]);
         if (player) {
           welcomed = true;
           call("touch_login").catch(() => {});
@@ -1632,6 +1689,7 @@ const LevelUp = (() => {
     }
     isReady = true;
     emit();
+    bootDone();
   })();
 
   // ---------- Events ----------
