@@ -645,45 +645,87 @@ function renderDynamicTeam() {
   document.getElementById("trainerCount").textContent = TRAINERS.length;
 }
 
-// ---------- High scores ----------
+// ---------- High scores: arcade board with a podium, all time or this month ----------
+let hsPeriod = "all";
+const HS_MEDALS = ["#ffd23f", "#c9d1d9", "#cd7f32"];
+const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7ee06a", "#ffd23f", "#b46cff"];
+const HS_TIER_COLORS = ["#7ee06a", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
+const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "TH" : ["TH", "ST", "ND", "RD"][n % 10] || "TH"}`;
+
 function renderHighScores() {
   const list = document.getElementById("hsList");
+  const podium = document.getElementById("hsPodium");
   const foot = document.getElementById("hsFoot");
-  if (!list) return;
-  if (!LevelUp.isReady()) return;
-  const rows = LevelUp.getLeaderboard();
+  if (!list || !LevelUp.isReady()) return;
+  document.querySelectorAll("[data-hs-period]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.hsPeriod === hsPeriod)));
+  const rows = LevelUp.getLeaderboard(hsPeriod);
+  if (!rows) {
+    podium.innerHTML = "";
+    list.innerHTML = `<li class="hs-empty">Loading…</li>`;
+    return;
+  }
   const player = LevelUp.getPlayer();
-  const top = rows.filter((r) => r.place <= 10);
+  const top = rows.filter((r) => r.place <= 25);
   const me = rows.find((r) => r.isMe);
+  const level = (r) => LevelUp.progress(r.totalXp).level;
+  const score = (r) => r.xp.toLocaleString("en-US");
 
   if (!top.length) {
-    list.innerHTML = `<li class="hs-empty">No scores yet. Create your player and claim the #1 spot!</li>`;
+    podium.innerHTML = "";
+    list.innerHTML = `<li class="hs-empty">${hsPeriod === "month" ? "No XP earned this month yet. Book a session and take the #1 spot!" : "No scores yet. Create your player and claim the #1 spot!"}</li>`;
   } else {
-    const row = (r) => {
-      const p = LevelUp.progress(r.xp);
+    // podium: 2nd · 1st · 3rd
+    podium.innerHTML = [1, 0, 2].filter((i) => top[i]).map((i) => {
+      const r = top[i];
       return `
-        <li class="hs-row ${r.place <= 3 ? `podium p${r.place}` : ""} ${r.isMe ? "me" : ""}">
-          <span class="hs-place">${r.place <= 3 ? ["", "1ST", "2ND", "3RD"][r.place] : `${r.place}TH`}</span>
-          ${LevelUp.avatarHtml({ name: r.name, xp: r.xp })}
-          <span class="hs-name">${esc(r.name)}${r.isMe ? ` <span class="hs-you">You</span>` : ""}</span>
-          <span class="hs-rank"><span class="rank-badge" data-tier="${LevelUp.RANKS.indexOf(p.rank)}">${p.rank.title}</span></span>
-          <span class="hs-level">LVL ${p.level}</span>
-          <span class="hs-xp">${r.xp.toLocaleString("en-US")} XP</span>
+        <div class="hs-pod p${i + 1} ${r.isMe ? "me" : ""}">
+          <div class="hs-pod-av" style="--m:${HS_MEDALS[i]}">${i === 0 ? `<span class="hs-crown" aria-hidden="true">👑</span>` : ""}${esc(r.name.trim().charAt(0).toUpperCase())}</div>
+          <span class="hs-pod-name">${esc(r.name)}${r.isMe ? ` <span class="hs-you">You</span>` : ""}</span>
+          <span class="hs-pod-score">${score(r)}</span>
+          <span class="hs-pod-lvl">LVL ${level(r)}</span>
+          <div class="hs-pod-block" style="--m:${HS_MEDALS[i]}">${r.place}</div>
+        </div>`;
+    }).join("");
+    const row = (r, k) => {
+      const tier = LevelUp.RANKS.indexOf(LevelUp.progress(r.totalXp).rank);
+      return `
+        <li class="hs-row ${r.isMe ? "me" : ""}" style="--c:${HS_ROW_COLORS[k % HS_ROW_COLORS.length]};--tier:${HS_TIER_COLORS[tier] || HS_TIER_COLORS[0]}">
+          <span class="hs-rank">${r.isMe ? `<b aria-hidden="true">▶</b>` : ""}${ordinal(r.place)}</span>
+          <span class="hs-name"><i aria-hidden="true"></i><span>${esc(r.name)}</span>${r.isMe ? `<span class="hs-you">You</span>` : ""}</span>
+          <span class="hs-lvl">${level(r)}</span>
+          <span class="hs-score">${score(r)}</span>
         </li>`;
     };
-    list.innerHTML = top.map(row).join("") + (me && me.place > 10 ? `<li class="hs-gap" aria-hidden="true">···</li>${row(me)}` : "");
+    list.innerHTML = top.slice(3).map(row).join("")
+      + (me && me.place > 25 ? `<li class="hs-gap" aria-hidden="true">···</li>${row(me, 0)}` : "");
   }
 
+  let msg;
   if (!player) {
-    foot.innerHTML = `<button type="button" class="link-btn" data-auth-open="signup">Create your player</button> to get on the board.`;
+    msg = `<button type="button" class="link-btn" data-auth-open="signup">Create your player</button> to get on the board.`;
   } else if (player.trainerId) {
-    foot.textContent = "You're a trainer: your level shows on your team card.";
+    msg = "You're a trainer: your level shows on your team card.";
   } else if (player.showOnLeaderboard === false) {
-    foot.innerHTML = `You're hidden from the high scores. <a href="profile.html#account" class="text-link">Change this in your profile</a>.`;
+    msg = `You're hidden from the high scores. <a href="profile.html#account" class="text-link">Change this</a>.`;
+  } else if (!me) {
+    msg = hsPeriod === "month" ? "Earn XP this month to get on the board." : "";
   } else {
-    foot.textContent = me ? `You're #${me.place}. Every session and check-in moves you up.` : "";
+    const ahead = rows.filter((r) => r.place < me.place).pop();
+    msg = `You're <b>#${me.place}</b>${ahead ? ` · <b>${(ahead.xp - me.xp + 1).toLocaleString("en-US")} XP</b> to pass ${esc(ahead.name)}` : " · You're the champion! 👑"}`;
   }
+  foot.innerHTML = `<span class="hs-next">${msg}</span><a href="#schedule" class="hs-coin">Insert coin ▸ Book +${LevelUp.SESSION_XP} XP</a>`;
 }
+
+document.addEventListener("click", async (event) => {
+  const tab = event.target.closest("[data-hs-period]");
+  if (!tab || tab.dataset.hsPeriod === hsPeriod) return;
+  hsPeriod = tab.dataset.hsPeriod;
+  renderHighScores();
+  if (!LevelUp.getLeaderboard(hsPeriod)) {
+    await LevelUp.loadLeaderboard(hsPeriod);
+    renderHighScores();
+  }
+});
 
 function renderAll() {
   renderDynamicTeam();

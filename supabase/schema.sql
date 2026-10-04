@@ -1076,18 +1076,31 @@ $$;
 
 -- High scores: top 10 players (trainers and hidden players left out), plus
 -- your own position when you're not in the top 10
-create or replace function public.leaderboard()
-returns table (place bigint, name text, xp integer, is_me boolean)
+-- High scores: the top 25 players (and your own place), all time or this month.
+-- "month" = XP earned since the 1st of this month (Brussels time); players with 0 XP that month are left out.
+-- total_xp is always the all-time XP (for the level). Trainers and hidden players are left out.
+drop function if exists public.leaderboard();
+drop function if exists public.leaderboard(text);
+create or replace function public.leaderboard(p_period text default 'all')
+returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean)
 language sql stable security definer set search_path = public as $$
-  with ranked as (
-    select p.id, p.name, p.xp, rank() over (order by p.xp desc, p.created_at) as place
+  with players as (
+    select p.id, p.name, p.xp as total_xp, p.created_at,
+      case when p_period = 'month' then coalesce((
+        select sum(x.amount) from public.xp_log x
+        where x.user_id = p.id
+          and x.created_at >= (date_trunc('month', now() at time zone 'Europe/Brussels') at time zone 'Europe/Brussels')
+      ), 0)::int else p.xp end as score
     from public.profiles p
     where p.show_on_leaderboard
       and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email))
+  ), ranked as (
+    select *, row_number() over (order by score desc, created_at) as place from players  -- equal scores: who got there first
+    where p_period <> 'month' or score > 0
   )
-  select r.place, r.name, r.xp, coalesce(r.id = auth.uid(), false)
+  select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false)
   from ranked r
-  where r.place <= 10 or r.id = auth.uid()
+  where r.place <= 25 or r.id = auth.uid()
   order by r.place;
 $$;
 
@@ -1970,7 +1983,7 @@ grant execute on function public.admin_inbox() to authenticated;
 grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
-grant execute on function public.leaderboard() to anon, authenticated;
+grant execute on function public.leaderboard(text) to anon, authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 revoke execute on function public.my_data() from public, anon;

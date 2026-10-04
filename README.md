@@ -257,10 +257,12 @@ The website never sees the Mollie key: payments go through the Supabase Edge Fun
 To turn online payment off again: set `online_payments` back to `off` (everyone pays at the HQ).
 
 ## High scores
-Under the team cards: the top 10 players by XP (player name and level only, never email). Trainers are left out
-(their level is on their card). Players can hide themselves in their profile under Account.
-Every booking and cancellation is emailed to the LEVEL-UP inbox, the client gets an automatic confirmation and can
-add the session to their own Google Calendar.
+Under the team cards: an arcade-style board with a podium for the top 3 and 25 players in total, with two tabs:
+**All time** (total XP) and **This month** (XP earned since the 1st of the month, Brussels time; a fresh race every
+month). Equal scores are ordered by who got there first. Your own row is highlighted (also when you're below 25th),
+with how much XP you need to pass the player above you. Player name and level only, never email. Trainers are left
+out (their level is on their card). Players can hide themselves in their profile under Account.
+On phones the middle button of the bottom bar (Scores) jumps here.
 
 ## Adding a shop item
 Add an entry to `ITEMS` in `game.js` (id, name, price, category `merch` or `tools`, rarity, image, optional sizes,

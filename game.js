@@ -297,7 +297,8 @@ const LevelUp = (() => {
     packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
-  let leaderboard = [];       // [{ place, name, xp, isMe }]
+  let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
+  let leaderboardMonth = null; // this month (loaded when the tab is opened)
 
   async function call(fn, args) {
     if (!sb) throw new Error("Can't reach the server. Check your connection and try again.");
@@ -568,10 +569,17 @@ const LevelUp = (() => {
     }
   }
 
-  async function loadLeaderboard() {
+  const scoreRows = (rows) => (rows || []).map((r) => ({
+    place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me)
+  }));
+  async function loadLeaderboard(period = "all") {
     try {
-      const rows = await call("leaderboard");
-      leaderboard = (rows || []).map((r) => ({ place: Number(r.place), name: r.name, xp: Number(r.xp), isMe: Boolean(r.is_me) }));
+      const rows = scoreRows(await call("leaderboard", { p_period: period }));
+      if (period === "month") leaderboardMonth = rows;
+      else {
+        leaderboard = rows;
+        if (leaderboardMonth) loadLeaderboard("month").then(emit); // keep the other tab fresh too
+      }
     } catch (err) {
       console.error("Loading the high scores failed:", err);
     }
@@ -2213,7 +2221,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: () => leaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

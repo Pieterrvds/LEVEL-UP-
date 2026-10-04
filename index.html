@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610042127">
+  <link rel="stylesheet" href="style.css?v=202610042136">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -309,11 +309,20 @@
         <p class="swipe-hint" aria-hidden="true">Swipe to meet the team ▸</p>
 
         <div class="high-scores" id="highScores" aria-labelledby="highScoresTitle">
-          <div class="hs-head">
-            <h3 id="highScoresTitle">High scores</h3>
+          <div class="hs-marquee">
+            <h3 id="highScoresTitle"><span class="hs-star" aria-hidden="true">★</span> High scores <span class="hs-star" aria-hidden="true">★</span></h3>
+            <p aria-hidden="true">— Player ranking —</p>
           </div>
-          <ol class="hs-list" id="hsList"><li class="hs-empty">Loading high scores…</li></ol>
-          <p class="hs-foot" id="hsFoot"></p>
+          <div class="hs-seasons" role="tablist" aria-label="Period">
+            <button type="button" role="tab" data-hs-period="all" aria-selected="true">All time</button>
+            <button type="button" role="tab" data-hs-period="month" aria-selected="false">This month</button>
+          </div>
+          <div class="hs-podium" id="hsPodium"></div>
+          <div class="hs-board">
+            <div class="hs-board-head" aria-hidden="true"><span>Rank</span><span>Player</span><span>LVL</span><span>Score</span></div>
+            <ol class="hs-list" id="hsList"><li class="hs-empty">Loading high scores…</li></ol>
+          </div>
+          <div class="hs-foot" id="hsFoot"></div>
         </div>
       </div>
     </section>
@@ -510,8 +519,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202610042127"></script>
-  <script src="script.js?v=202610042127"></script>
-  <script src="schedule.js?v=202610042127"></script>
+  <script src="game.js?v=202610042136"></script>
+  <script src="script.js?v=202610042136"></script>
+  <script src="schedule.js?v=202610042136"></script>
 </body>
 </html>
