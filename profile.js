@@ -323,6 +323,7 @@ function renderCoachPanel() {
         <span class="muted">${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
       </div>
       ${renderEarnings()}
+      ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}
       <h3 class="panel-sub">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
       ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
           <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
@@ -592,14 +593,25 @@ function renderHealth(player) {
     </section>`;
 }
 
-// Install LEVEL-UP as an app (or confirm it already is)
+// Install LEVEL-UP as an app (or confirm it already is), and push notifications
 function renderAppPanel() {
   const app = LevelUp.appInstallState();
+  const push = LevelUp.getPushStatus();
+  const pushText = {
+    on: `<p><strong>Notifications are on ✓</strong> You hear about confirmed sessions, reminders, XP and rewards${LevelUp.isTrainer() ? ", and new requests from your clients" : ""}.</p>
+      <button type="button" class="btn btn-small btn-ghost" data-push-off>Turn off</button>`,
+    off: `<p>Get a message when your trainer confirms, the day before your session, and when you earn XP or a free session${LevelUp.isTrainer() ? ". Trainers also hear about new requests right away" : ""}.</p>
+      <button type="button" class="btn btn-small btn-primary" data-push-on>🔔 Turn on notifications</button>`,
+    "ios-install": `<p>On iPhone, notifications work in the LEVEL-UP app: add it to your home screen first, then turn them on here in the app.</p>`,
+    denied: `<p>Notifications are blocked for LEVEL-UP. Allow them in your phone or browser settings (site settings → Notifications), then come back here.</p>`,
+    unsupported: `<p>This browser can't show notifications. Try Chrome, Edge, Firefox or Safari on your phone.</p>`,
+    unknown: `<p class="muted">Checking…</p>`
+  }[push];
   return `
     <section class="panel panel-wide app-panel" id="app">
       <div class="panel-head">
-        <h2>LEVEL-UP app</h2>
-        ${app.standalone ? `<span class="status-chip confirmed">Installed ✓</span>` : ""}
+        <h2>App &amp; notifications</h2>
+        ${app.standalone ? `<span class="status-chip confirmed">App installed ✓</span>` : ""}
       </div>
       <div class="app-panel-body">
         <img src="img/app/icon-192.png" alt="" width="72" height="72">
@@ -608,6 +620,8 @@ function renderAppPanel() {
           : `<p>Put LEVEL-UP on your home screen: it opens full screen like an app, so booking your trainer is one tap away. Free, no app store needed.</p>
              <button type="button" class="btn btn-primary" data-install-app>📲 ${app.canPrompt ? "Install the app" : "How to install"}</button>`}
       </div>
+      <h3 class="panel-sub">Notifications</h3>
+      <div class="push-setting push-${push}">${pushText}</div>
     </section>`;
 }
 

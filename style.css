@@ -2015,3 +2015,12 @@ textarea { resize: vertical; min-height: 130px; }
 .app-dialog-head .auth-title { margin: 0; }
 .app-steps { margin: 0 0 14px; padding-left: 1.4rem; display: grid; gap: 10px; line-height: 1.5; }
 .ios-share { width: 20px; height: 20px; vertical-align: -4px; color: #4da3ff; }
+
+/* Push notifications */
+.push-callout { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; margin: 14px 0; padding: 10px 12px;
+  background: rgba(126, 224, 106, 0.08); border: 2px dashed var(--green-dark); }
+.push-callout > span { font-size: 1.3rem; line-height: 1; }
+.push-callout p { margin: 0; font-size: 0.9rem; }
+.push-setting { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.push-setting p { margin: 0; flex: 1 1 280px; }
+.push-setting.push-denied p, .push-setting.push-ios-install p { color: var(--muted); }

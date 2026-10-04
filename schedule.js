@@ -534,6 +534,7 @@ function showBooked(booked) {
       ? "This is your <strong>free session</strong> 🎁. A declined request gives it back."
       : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. Pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)})${LevelUp.getPricing().onlinePayments ? " or online from your profile" : ""}.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
+    ${LevelUp.pushCalloutHtml(`Get a notification as soon as ${trainer.short} confirms.`)}
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
       <a href="profile.html" class="btn btn-small">My sessions</a>

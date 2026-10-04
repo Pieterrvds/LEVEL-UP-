@@ -1702,6 +1702,234 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
+-- Push notifications (the app on your phone: "Session confirmed", "New request" …)
+-- The website saves each phone's push subscription; triggers queue messages in push_outbox;
+-- the Edge Function "push" sends them (and makes the VAPID keys the first time).
+-- None of these tables can be read from the website: only through the functions below.
+-- ---------------------------------------------------------
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text not null default '',
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
+
+create table if not exists public.push_outbox (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  title text not null,
+  body text not null default '',
+  url text not null default 'profile.html',
+  tag text not null default '',
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+create index if not exists push_outbox_open_idx on public.push_outbox (id) where sent_at is null;
+
+-- The VAPID key pair (made by the Edge Function). The private key never leaves the server.
+create table if not exists public.push_keys (
+  id integer primary key default 1 check (id = 1),
+  public_key text not null,
+  private_jwk jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.push_subscriptions enable row level security;
+alter table public.push_outbox enable row level security;
+alter table public.push_keys enable row level security;
+revoke all on public.push_subscriptions, public.push_outbox, public.push_keys from anon, authenticated;
+
+alter table public.bookings add column if not exists reminder_pushed_at timestamptz;
+
+-- Queue a message for a player (only when they have notifications on somewhere)
+create or replace function public._push(p_user uuid, p_title text, p_body text, p_url text, p_tag text default '')
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_user is null or not exists (select 1 from public.push_subscriptions where user_id = p_user) then return; end if;
+  insert into public.push_outbox (user_id, title, body, url, tag) values (p_user, p_title, coalesce(p_body, ''), p_url, coalesce(p_tag, ''));
+end $$;
+
+-- The account linked to a trainer card
+create or replace function public._trainer_user(p_trainer text)
+returns uuid language sql stable security definer set search_path = public as $$
+  select p.id from public.trainers t join public.profiles p on lower(p.email) = lower(t.email)
+  where t.id = p_trainer and t.email is not null limit 1;
+$$;
+
+create or replace function public._slot_label(p_day date, p_hour integer)
+returns text language sql immutable as $$
+  select to_char(p_day, 'Dy DD Mon') || ' ' || lpad(p_hour::text, 2, '0') || ':00';
+$$;
+
+-- Booking changes -> messages for the player or the trainer
+create or replace function public._push_booking_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  b public.bookings := case when tg_op = 'DELETE' then old else new end;
+  was text := case when tg_op = 'INSERT' then null else old.status end;
+  coach uuid := public._trainer_user(b.trainer_id);
+  client text := (select name from public.profiles where id = b.user_id);
+  trainer text := (select split_part(name, ' ', 1) from public.trainers where id = b.trainer_id);
+  slot text := public._slot_label(b.day, b.hour);
+  tag text := 'booking-' || b.id;
+  by_player boolean := auth.uid() = b.user_id;
+begin
+  if tg_op = 'DELETE' then
+    if was in ('pending', 'confirmed') then
+      perform public._push(coach, case when was = 'pending' then 'Request withdrawn' else 'Session cancelled' end,
+                           client || ' · ' || slot, 'profile.html#coach', tag);
+      if not by_player then
+        perform public._push(b.user_id, 'Session cancelled', trainer || ' · ' || slot || '. No costs.', 'profile.html', tag);
+      end if;
+    end if;
+    return old;
+  end if;
+  if was is not distinct from new.status or (tg_op = 'INSERT' and new.status <> 'pending') then return new; end if;
+
+  if new.status = 'pending' and (was is null or was = 'awaiting_payment') then
+    perform public._push(coach, 'New session request', client || ' · ' || slot || case when new.kind = 'duo' then ' · duo' else '' end,
+                         'profile.html#coach', tag);
+  elsif new.status = 'confirmed' then
+    perform public._push(new.user_id, 'Session confirmed ✓', trainer || ' · ' || slot, 'profile.html', tag);
+  elsif new.status = 'declined' then
+    perform public._push(new.user_id, 'Request declined', trainer || ' can''t make ' || slot || '. Pick another hour.', 'index.html#schedule', tag);
+  elsif new.status = 'expired' and was = 'pending' then
+    perform public._push(new.user_id, 'Request expired', trainer || ' didn''t confirm ' || slot || ' in time. Pick another hour.', 'index.html#schedule', tag);
+  elsif new.status = 'completed' then
+    perform public._push(new.user_id, '+' || new.xp || ' XP earned!', 'Session with ' || trainer || ' rewarded. Keep levelling up.', 'profile.html', tag);
+  elsif new.status = 'no_show' then
+    perform public._push(new.user_id, 'Missed session', trainer || ' · ' || slot || ' was marked as a no-show.', 'profile.html', tag);
+  elsif new.status in ('late_cancel', 'cancelled') then
+    perform public._push(coach, case when new.status = 'late_cancel' then 'Late cancellation' else 'Session cancelled' end,
+                         client || ' · ' || slot, 'profile.html#coach', tag);
+    if not by_player then
+      perform public._push(new.user_id, 'Session cancelled', trainer || ' · ' || slot, 'profile.html', tag);
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists push_booking_event on public.bookings;
+create trigger push_booking_event after insert or update of status or delete on public.bookings
+  for each row execute function public._push_booking_event();
+
+create or replace function public._push_voucher_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public._push(new.user_id,
+    case new.source when 'legend' then 'Legend reward! 🎁' when 'champion' then 'Champion reward! 🎁' else 'Free session earned! 🎁' end,
+    case when new.hoodie then 'A free 1:1 session + a LEVEL-UP hoodie. ' else 'A free 1:1 session is waiting for you. ' end
+      || 'Book it within ' || public._config('reward_valid_months') || ' months.',
+    'profile.html#rewards', 'voucher-' || new.id);
+  return new;
+end $$;
+
+drop trigger if exists push_voucher_event on public.reward_vouchers;
+create trigger push_voucher_event after insert on public.reward_vouchers
+  for each row execute function public._push_voucher_event();
+
+create or replace function public._push_pack_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.status = 'requested' and new.status = 'paid' then
+    perform public._push(new.user_id, 'Pack active', new.size || ' session credits are ready to use.', 'index.html#schedule', 'pack-' || new.id);
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists push_pack_event on public.session_packs;
+create trigger push_pack_event after update of status on public.session_packs
+  for each row execute function public._push_pack_event();
+
+-- The website: turn notifications on or off for this phone
+create or replace function public.save_push_subscription(p_endpoint text, p_p256dh text, p_auth text, p_user_agent text default '')
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if coalesce(p_endpoint, '') !~ '^https://' or length(p_endpoint) > 1000 then raise exception 'Invalid subscription.'; end if;
+  if length(coalesce(p_p256dh, '')) not between 80 and 100 or length(coalesce(p_auth, '')) not between 16 and 30 then
+    raise exception 'Invalid subscription.';
+  end if;
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+  values (auth.uid(), p_endpoint, p_p256dh, p_auth, left(coalesce(p_user_agent, ''), 200))
+  on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
+                                       user_agent = excluded.user_agent;
+end $$;
+
+create or replace function public.delete_push_subscription(p_endpoint text)
+returns void language sql security definer set search_path = public as $$
+  delete from public.push_subscriptions where endpoint = p_endpoint and user_id = auth.uid();
+$$;
+
+-- A test message for the logged-in player ("Notifications are on")
+create or replace function public.push_test()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  perform public._push(auth.uid(), 'Notifications are on 🎮', 'You''ll hear from LEVEL-UP when something happens with your sessions.',
+                       'profile.html', 'test');
+end $$;
+
+create or replace function public.push_public_key()
+returns text language sql stable security definer set search_path = public as $$
+  select public_key from public.push_keys where id = 1;
+$$;
+
+-- Edge Function only (service role): reminders for tomorrow's / today's confirmed sessions
+create or replace function public.push_due_reminders()
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  b record;
+  n integer := 0;
+  today date := (now() at time zone 'Europe/Brussels')::date;
+begin
+  for b in
+    select k.*, split_part(t.name, ' ', 1) as trainer
+    from public.bookings k join public.trainers t on t.id = k.trainer_id
+    where k.status = 'confirmed' and k.reminder_pushed_at is null
+      and public._slot_start(k.day, k.hour) between now() + interval '1 hour' and now() + interval '26 hours'
+    for update of k skip locked
+  loop
+    perform public._push(b.user_id, 'Session ' || case when b.day = today then 'today' else 'tomorrow' end || ' at ' || lpad(b.hour::text, 2, '0') || ':00',
+      'With ' || b.trainer || ' at Hoogstraat 40, Aalst. See you there!', 'profile.html', 'reminder-' || b.id);
+    update public.bookings set reminder_pushed_at = now() where id = b.id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- Edge Function only: take the waiting messages (each one once) with the phones to send them to
+create or replace function public.push_claim(p_limit integer default 100)
+returns jsonb language sql security definer set search_path = public as $$
+  with picked as (
+    select id from public.push_outbox
+    where sent_at is null and created_at > now() - interval '2 days'
+    order by id limit p_limit for update skip locked
+  ), claimed as (
+    update public.push_outbox o set sent_at = now() from picked where o.id = picked.id
+    returning o.*
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'title', c.title, 'body', c.body, 'url', c.url, 'tag', c.tag,
+    'targets', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth)), '[]'::jsonb)
+                from public.push_subscriptions s where s.user_id = c.user_id))), '[]'::jsonb)
+  from claimed c;
+$$;
+
+-- Edge Function only: forget phones the push service says are gone (404 / 410), note the others as used
+create or replace function public.push_report(p_gone uuid[], p_ok uuid[])
+returns void language sql security definer set search_path = public as $$
+  delete from public.push_subscriptions where id = any (p_gone);
+  update public.push_subscriptions set last_used_at = now() where id = any (p_ok);
+  delete from public.push_outbox where sent_at < now() - interval '30 days';
+$$;
+
+-- ---------------------------------------------------------
 -- Permissions: helpers are private, the website calls only these
 -- ---------------------------------------------------------
 revoke execute on function public._config(text) from public, anon, authenticated;
@@ -1802,6 +2030,24 @@ revoke execute on function public._rewards_json(uuid) from public, anon, authent
 revoke execute on function public._check_rewards(uuid) from public, anon, authenticated;
 revoke execute on function public.mark_hoodie_given(uuid) from public, anon;
 grant execute on function public.mark_hoodie_given(uuid) to authenticated;
+revoke execute on function public._push(uuid, text, text, text, text) from public, anon, authenticated;
+revoke execute on function public._trainer_user(text) from public, anon, authenticated;
+revoke execute on function public._push_booking_event() from public, anon, authenticated;
+revoke execute on function public._push_voucher_event() from public, anon, authenticated;
+revoke execute on function public._push_pack_event() from public, anon, authenticated;
+revoke execute on function public.push_due_reminders() from public, anon, authenticated;
+revoke execute on function public.push_claim(integer) from public, anon, authenticated;
+revoke execute on function public.push_report(uuid[], uuid[]) from public, anon, authenticated;
+grant execute on function public.push_due_reminders() to service_role;
+grant execute on function public.push_claim(integer) to service_role;
+grant execute on function public.push_report(uuid[], uuid[]) to service_role;
+revoke execute on function public.save_push_subscription(text, text, text, text) from public, anon;
+revoke execute on function public.delete_push_subscription(text) from public, anon;
+revoke execute on function public.push_test() from public, anon;
+grant execute on function public.save_push_subscription(text, text, text, text) to authenticated;
+grant execute on function public.delete_push_subscription(text) to authenticated;
+grant execute on function public.push_test() to authenticated;
+grant execute on function public.push_public_key() to anon, authenticated;
 revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
 revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
 revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;

@@ -41,7 +41,10 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const { players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours } = await LevelUp.adminData();
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey] = await Promise.all([
+    LevelUp.adminData(),
+    LevelUp.pushServerReady()
+  ]);
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -59,6 +62,7 @@ async function loadData() {
     pricing,
     packs,
     vouchers,
+    pushReady: Boolean(pushKey),
     hours,
     rawBookings: bookings,
     players: rows,
@@ -132,6 +136,19 @@ async function render() {
         <li>Book a test session and choose "Paid" on Mollie's test page, then swap the secret for your <strong>live key</strong>.</li>
       </ol>
       <p class="muted small">This reminder disappears once online payments are on. Full guide: README → Payments.</p>
+    </section>`}
+
+    ${data.pushReady ? "" : `
+    <section class="panel admin-panel todo-panel">
+      <div class="panel-head"><h2>To do: push notifications</h2><span class="status-chip pending">Not active</span></div>
+      <p>The website is ready; the server part needs to be switched on once:</p>
+      <ol>
+        <li>Supabase → Edge Functions → Deploy a new function → Via Editor: name it <code>push</code>, paste everything from <code>supabase/functions/push/index.ts</code>, deploy.</li>
+        <li>Edge Functions → push → Details: turn <strong>Enforce JWT verification</strong> off → Save.</li>
+        <li>Open your own account → <strong>Me</strong> → <strong>Turn on notifications</strong>. You get a test message, and this card disappears.</li>
+        <li>Optional, for session reminders the day before: run the cron SQL from README → Push notifications.</li>
+      </ol>
+      <p class="muted small">No keys or secrets to copy: the server makes its own. Full guide: README → Push notifications.</p>
     </section>`}
 
     <section class="panel admin-panel applications" id="applications"></section>

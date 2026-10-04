@@ -15,6 +15,7 @@ const LevelUp = (() => {
 
   const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
   const PAYMENTS_URL = `${SUPABASE_URL}/functions/v1/payments`; // Edge Function that talks to Mollie
+  const PUSH_URL = `${SUPABASE_URL}/functions/v1/push`;         // Edge Function that sends push notifications
   const HQ_ADDRESS = "Hoogstraat 40, 9308 Aalst";
   const GUEST_ORDERS_KEY = "levelup.guestOrders.v2";
 
@@ -302,8 +303,13 @@ const LevelUp = (() => {
     if (!sb) throw new Error("Can't reach the server. Check your connection and try again.");
     const { data, error } = await sb.rpc(fn, args);
     if (error) throw new Error(friendly(error));
+    if (PUSH_AFTER.has(fn)) flushPush();
     return data;
   }
+
+  // Changes that can queue a push notification: send it right away
+  const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
+    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -821,6 +827,112 @@ const LevelUp = (() => {
   // Adds data-pane to the first element of a block of HTML
   const inTab = (tab, html) => html ? html.replace(/<(section|details|div|header)\b/, `<$1 data-pane="${tab}"`) : "";
 
+  // ---------- Push notifications ----------
+  // States: "unsupported", "ios-install" (iPhone: only works in the home-screen app), "denied", "on", "off"
+  let pushStatus = "unknown"; // until the service worker answers
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+  async function pushRegistration() {
+    if (!pushSupported()) return null;
+    return Promise.race([navigator.serviceWorker.ready, new Promise((resolve) => setTimeout(() => resolve(null), 4000))]);
+  }
+
+  async function refreshPushStatus() {
+    let next;
+    if (isIOS() && !isStandalone()) next = "ios-install";
+    else if (!pushSupported()) next = "unsupported";
+    else if (Notification.permission === "denied") next = "denied";
+    else {
+      const reg = await pushRegistration();
+      const sub = Notification.permission === "granted" && reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+      next = sub ? "on" : "off";
+    }
+    if (next !== pushStatus) { pushStatus = next; emit(); }
+    return pushStatus;
+  }
+
+  const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(b64.length / 4) * 4, "=")), (c) => c.charCodeAt(0));
+  const sameKey = (a, b) => a && b && a.byteLength === b.byteLength && new Uint8Array(a).every((v, i) => v === b[i]);
+
+  async function pushPublicKey() {
+    const key = await call("push_public_key").catch(() => null);
+    if (key) return key;
+    // first time ever: the Edge Function makes the key pair
+    const res = await fetch(`${PUSH_URL}/setup`, { method: "POST", headers: { apikey: SUPABASE_KEY } }).catch(() => null);
+    const body = res?.ok ? await res.json().catch(() => ({})) : {};
+    return body.publicKey || null;
+  }
+
+  async function saveSubscription(sub) {
+    const j = sub.toJSON();
+    await call("save_push_subscription", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
+      p_user_agent: navigator.userAgent.slice(0, 200) });
+  }
+
+  async function enablePush() {
+    if (!player) throw new Error("Log in first.");
+    if (isIOS() && !isStandalone()) throw new Error("On iPhone, add LEVEL-UP to your home screen first and turn notifications on in the app.");
+    if (!pushSupported()) throw new Error("This browser can't show notifications.");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      await refreshPushStatus();
+      throw new Error("Notifications are blocked. Allow them for this site in your browser or phone settings.");
+    }
+    const key = await pushPublicKey();
+    if (!key) throw new Error("Notifications aren't switched on on the LEVEL-UP server yet. Try again later.");
+    const reg = await pushRegistration();
+    if (!reg) throw new Error("Reload the page and try again.");
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !sameKey(sub.options?.applicationServerKey, keyBytes(key))) { await sub.unsubscribe(); sub = null; }
+    sub = sub || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    await saveSubscription(sub);
+    await call("push_test");
+    await refreshPushStatus();
+  }
+
+  async function disablePush() {
+    await unlinkPushSubscription(true);
+    await refreshPushStatus();
+  }
+
+  async function unlinkPushSubscription(unsubscribe = false) {
+    const reg = pushSupported() && Notification.permission === "granted" ? await pushRegistration() : null;
+    const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+    if (!sub) return;
+    await call("delete_push_subscription", { p_endpoint: sub.endpoint }).catch(() => {});
+    if (unsubscribe) await sub.unsubscribe().catch(() => {});
+  }
+
+  // After logging in: a phone that already has notifications on belongs to this account now
+  async function syncPushSubscription() {
+    flushPush();
+    if (!pushSupported() || Notification.permission !== "granted") return refreshPushStatus();
+    const reg = await pushRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+    if (sub) await saveSubscription(sub).catch(() => {});
+    refreshPushStatus();
+  }
+
+  // Ask the Edge Function to send what's waiting (also session reminders). Calls close together are
+  // combined into one, at most every 5 seconds; none is dropped.
+  let lastFlush = 0;
+  let flushTimer = null;
+  function flushPush() {
+    if (!sb) return;
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => {
+      lastFlush = Date.now();
+      fetch(`${PUSH_URL}/flush`, { method: "POST", headers: { apikey: SUPABASE_KEY }, keepalive: true }).catch(() => {});
+    }, Math.max(300, lastFlush + 5000 - Date.now()));
+  }
+
+  // A small "turn on notifications" prompt, only when it can work and isn't on yet
+  function pushCalloutHtml(text) {
+    if (!player || pushStatus !== "off") return "";
+    return `<div class="push-callout"><span aria-hidden="true">🔔</span><p>${esc(text)}</p>
+      <button type="button" class="btn btn-small btn-primary" data-push-on>Turn on</button></div>`;
+  }
+
   // ---------- Health questionnaire (PAR-Q style, before the first booking) ----------
   const HEALTH_QUESTIONS = [
     ["q1", "Has a doctor ever said you have a heart condition or high blood pressure?"],
@@ -1281,6 +1393,7 @@ const LevelUp = (() => {
   }
 
   async function logOut() {
+    await unlinkPushSubscription(); // this phone stops getting the old account's notifications
     if (sb) await sb.auth.signOut();
   }
 
@@ -1320,6 +1433,7 @@ const LevelUp = (() => {
       welcomed = true;
       call("touch_login").catch(() => {});
       claimGuestOrders();
+      syncPushSubscription();
       setTimeout(showCoachInbox, 900);
       setTimeout(showAdminInbox, 1500);
       if (event === "SIGNED_IN") {
@@ -1502,6 +1616,7 @@ const LevelUp = (() => {
           welcomed = true;
           call("touch_login").catch(() => {});
           claimGuestOrders();
+          syncPushSubscription();
           setTimeout(showCoachInbox, 600);
           setTimeout(showAdminInbox, 1200);
           setTimeout(handlePaymentReturn, 300);
@@ -1847,7 +1962,9 @@ const LevelUp = (() => {
 
   function initApp(nav) {
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => { /* the site works without it */ }));
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js")
+        .then(() => refreshPushStatus())
+        .catch(() => { /* the site works without it */ }));
     }
     if (isStandalone()) document.documentElement.classList.add("is-app");
 
@@ -1874,6 +1991,27 @@ const LevelUp = (() => {
       if (!event.target.closest("[data-install-app]")) return;
       event.preventDefault();
       installApp();
+    });
+    // Any [data-push-on] / [data-push-off] button turns notifications on or off for this phone
+    document.addEventListener("click", async (event) => {
+      const btn = event.target.closest("[data-push-on], [data-push-off]");
+      if (!btn) return;
+      event.preventDefault();
+      const on = btn.hasAttribute("data-push-on");
+      btn.disabled = true;
+      try {
+        if (on) {
+          await enablePush();
+          toast({ title: "Notifications on", text: "A test message is on its way", icon: "🔔", tone: "green" });
+        } else {
+          await disablePush();
+          toast({ title: "Notifications off", text: "This phone won't get LEVEL-UP messages anymore", icon: "🔕" });
+        }
+      } catch (err) {
+        toast({ title: on ? "Couldn't turn on notifications" : "Something went wrong", text: err.message, icon: "!" });
+      } finally {
+        btn.disabled = false;
+      }
     });
     refresh();
   }
@@ -2025,6 +2163,8 @@ const LevelUp = (() => {
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
     pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab, appInstallState, installApp,
+    getPushStatus: () => pushStatus, refreshPushStatus, enablePush, disablePush, pushCalloutHtml,
+    pushServerReady: () => call("push_public_key").then(Boolean, () => false),
     LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,

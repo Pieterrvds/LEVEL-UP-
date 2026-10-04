@@ -104,6 +104,42 @@ The site is a progressive web app: people can install it on their phone like an 
 - Install: Android / Chrome shows a "Get the app" button (menu and a banner on phones, at most once every 3 weeks
   after "Not now"); iPhone shows the Share → Add to Home Screen steps. My account → Me has a "LEVEL-UP app" panel.
 
+## Push notifications
+
+Players and trainers can turn on notifications (My account → Me, after booking, or in the coach panel). They get:
+
+- **Players:** session confirmed, request declined or expired, reminder the day before, +XP after a session,
+  no-show, free session earned, pack active, cancelled by LEVEL-UP.
+- **Trainers** (linked account): new session request, request withdrawn, cancellation and late cancellation.
+
+How it works: the website saves the phone's push subscription (`push_subscriptions`); database triggers on
+bookings, rewards and packs queue messages in `push_outbox`; the Edge Function `push` encrypts and sends them
+(Web Push with VAPID; Google, Apple and Mozilla all use this). The site calls `/push/flush` right after each
+change, so messages go out within seconds. Logging out unlinks the phone from the account.
+On iPhone, notifications only work in the home-screen app (iOS 16.4 or newer).
+
+### Switching it on (once)
+1. **Deploy the function:** Supabase → *Edge Functions* → *Deploy a new function* → *Via Editor*. Name it exactly
+   `push`, replace the example code with everything in `supabase/functions/push/index.ts`, deploy.
+2. **Turn off JWT verification** (Edge Functions → push → *Details* → "Enforce JWT verification" off → Save).
+   The function only ever sends what the database queued, so anyone may ask it to send.
+3. **Turn it on yourself:** My account → Me → *Turn on notifications*. The first time, the function makes its own
+   key pair (`push_keys`, readable only by the server): there is no key to copy or keep secret. You get a test message.
+4. **Reminders and expired requests** (recommended): these happen without anyone clicking, so let Supabase call the
+   function every 10 minutes. SQL Editor:
+
+   ```sql
+   create extension if not exists pg_cron;
+   create extension if not exists pg_net;
+   select cron.schedule('levelup-push', '*/10 * * * *', $$
+     select net.http_post(url := 'https://zdwlihbsmqiggpyensxc.supabase.co/functions/v1/push/flush',
+                          headers := '{"Content-Type": "application/json"}'::jsonb, body := '{}'::jsonb)
+   $$);
+   ```
+   (Stop it with `select cron.unschedule('levelup-push');`.)
+
+The admin dashboard shows a "To do: push notifications" card until step 3 is done.
+
 ## Health questionnaire
 
 Before a client's first booking, the booking pop-up asks 8 short health questions (heart, chest pain,
