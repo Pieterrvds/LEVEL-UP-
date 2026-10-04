@@ -278,3 +278,10 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .session-row .session-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .stamp-card li { font-size: 0.7rem; }
 }
+
+/* "ⓘ How it works": rules tucked away behind a small toggle */
+.info-more { margin-top: 14px; }
+.info-more summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; font-weight: 600; font-size: 0.9rem; color: var(--green-bright); }
+.info-more summary::-webkit-details-marker { display: none; }
+.info-more[open] summary { margin-bottom: 8px; }
+.info-more p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 70ch; }

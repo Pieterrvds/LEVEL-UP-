@@ -116,8 +116,6 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
-      <p class="muted small-text">A 1-hour 1:1 session costs <strong>${LevelUp.euro(LevelUp.getPricing().price)}</strong> (your first one ${LevelUp.euro(LevelUp.getPricing().introPrice)}), a duo ${LevelUp.euro(LevelUp.getPricing().duoPrice)}. Your trainer confirms each request, and after the session they reward it: <strong>+${LevelUp.SESSION_XP} XP</strong>.
-        Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
         : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
@@ -134,7 +132,7 @@ function renderApplication(player) {
   const app = player.application;
   const form = (title) => `
     <form class="apply-form" id="applyForm">
-      <p class="muted small-text">${title}</p>
+      ${title ? `<p class="muted small-text">${title}</p>` : ""}
       <div class="field-row">
         <label>Coaching title<input name="role" maxlength="60" placeholder="e.g. Cycling coach" value="${esc(app?.role || "")}"></label>
         <label>What do you coach?<input name="specialties" maxlength="200" placeholder="e.g. Road cycling, endurance" value="${esc(app?.specialties || "")}"></label>
@@ -161,7 +159,7 @@ function renderApplication(player) {
   return `
     <details class="panel panel-wide application-panel">
       <summary><h2>Are you a personal trainer?</h2><span class="muted">Apply to coach on LEVEL-UP ▾</span></summary>
-      ${form("After approval you get a trainer card in the team, a Coach panel and coaching XP.")}
+      ${form("")}
     </details>`;
 }
 
@@ -195,7 +193,6 @@ function renderRewards(player) {
       <div class="rewards-layout">
         <div>
           <h3 class="panel-sub first">Loyalty card</h3>
-          <p class="muted small-text">Every ${r.every} completed sessions = a free 1:1 session.</p>
           <ol class="stamp-card" aria-label="${stamped} of ${r.every} sessions">
             ${Array.from({ length: r.every }, (_, i) => `<li class="${i < stamped ? "on" : ""}">${i === r.every - 1 ? "🎁" : ""}</li>`).join("")}
           </ol>
@@ -214,8 +211,12 @@ function renderRewards(player) {
       </div>
       ${done.length ? `<h3 class="panel-sub">Earlier rewards</h3><ul class="detail-list">${done.map((v) => `
         <li><span>${source(v).icon} ${source(v).title}${v.hoodie ? " · hoodie" : ""}</span><span class="muted small">${v.bookingId ? "Used" : "Expired"} · earned ${LevelUp.shortDate(v.earnedAt)}</span></li>`).join("")}</ul>` : ""}
-      <p class="muted small-text">A free session is a 1:1 with any trainer, booked like a normal session: choose "Use a free session" in the booking window.
-      Book it within ${r.validMonths} months. A declined request or a cancellation in time gives it back; a late cancellation or no-show uses it up.</p>
+      <details class="info-more">
+        <summary>ⓘ How it works</summary>
+        <p>Every ${r.every} completed sessions earn a free 1:1 session, and so do the Champion and Legend ranks.
+        Book it like a normal session and choose "Use a free session" in the booking window, within ${r.validMonths} months.
+        A declined request or a cancellation in time gives it back; a late cancellation or no-show uses it up.</p>
+      </details>
     </section>`;
 }
 
@@ -233,11 +234,9 @@ function renderPacks(player) {
         <h2>Session packs</h2>
         <span class="xp-chip">${credits} credit${credits === 1 ? "" : "s"} left</span>
       </div>
-      <p class="muted small-text">Buy a pack, save per session. Every 1:1 booking uses one credit automatically; a declined request gives it back. Late cancellations and no-shows use the credit.</p>
       ${open ? `
         <div class="pack-open">
           <p><strong>${open.size}-session pack · ${euro(open.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
-          <p class="muted small-text">Pay ${online ? "online now, or " : ""}at the headquarters (${esc(LevelUp.HQ_ADDRESS)}). Your credits become active once the payment is in.</p>
           <div class="btn-row">
             ${online ? `<button type="button" class="btn btn-small btn-primary" data-pack-pay="${open.id}">Pay ${LevelUp.euro(open.price)} online</button>` : ""}
             <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${open.id}">Cancel request</button>
@@ -289,7 +288,7 @@ function renderEarnings() {
       </div>
       <p class="form-error" role="alert" id="statementError"></p>
     </div>
-    <p class="muted small-text">You earn ${eur(e.fee)} of the ${eur(e.price)} per session. It counts once you reward the session or mark a no-show (within ${LevelUp.REWARD_WINDOW_DAYS} days); late cancellations by the client count too. LEVEL-UP pays out what you've earned.</p>`;
+`;
 }
 
 // Trainers: answer requests, see upcoming sessions and reward today's sessions
@@ -330,11 +329,11 @@ function renderCoachPanel() {
           <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
         : `<p class="muted">No open requests.</p>`}
       <h3 class="panel-sub">To settle ${toSettle.length ? `<span class="count-chip">${toSettle.length}</span>` : ""}</h3>
-      ${toSettle.length ? `<p class="muted small-text">Reward the session after training, or mark a no-show (charged in full). You have ${LevelUp.REWARD_WINDOW_DAYS} days.</p>
+      ${toSettle.length ? `
         <ul class="session-list">${toSettle.map((b) => row(b, `
           <button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>
           ${LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-coach="noshow" data-id="${b.id}">No-show</button>` : ""}`)).join("")}</ul>`
-        : `<p class="muted">Nothing to settle. From the day of a confirmed session you can reward it here.</p>`}
+        : `<p class="muted">Nothing to settle.</p>`}
       ${settledToday.length ? `<h3 class="panel-sub">Settled today</h3><ul class="session-list">${settledToday.map((b) => row(b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul>` : ""}
       ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3><ul class="session-list">${upcoming.map((b) => row(b)).join("")}</ul>` : ""}
       <details class="my-hours" id="myHoursBox" ${state.hoursOpen ? "open" : ""}>
@@ -349,7 +348,7 @@ function renderCoachPanel() {
 function renderMyHours() {
   const el = document.getElementById("myHours");
   if (!el) return;
-  const intro = (extra = "") => `<div class="my-hours-intro"><p class="muted small-text">When players can book you on the schedule. Hours with a booking or request are locked.</p>${extra}</div>`;
+  const intro = (extra = "") => `<div class="my-hours-intro">${extra}</div>`;
   const trainerId = LevelUp.getPlayer().trainerId;
   if (window.innerWidth >= 900 && !state.hoursList) {
     LevelUpPlanner.render(el, {
@@ -478,7 +477,6 @@ function renderBodyStats(player) {
         </div>
         <div>
           <h3 class="panel-sub first">Weekly check-in</h3>
-          <p class="muted small-text">Update your stats whenever you like. Your first update each week earns XP, and 4 check-in weeks unlock <strong>On track</strong>.</p>
           ${statsForm(latest)}
           ${statsMessage ? `<p class="form-success">${esc(statsMessage)}</p>` : ""}
           <h3 class="panel-sub">Starter meal plan</h3>
@@ -488,7 +486,6 @@ function renderBodyStats(player) {
             <li><b>Snack</b><span>${meals[2]}</span></li>
             <li><b>Dinner</b><span>${meals[3]}</span></li>
           </ul>
-          <p class="muted small-text">Estimates only. Want a plan built for you? <a href="index.html#contact" class="text-link">Ask your coach</a>.</p>
         </div>
       </div>
     </section>`;
@@ -584,10 +581,10 @@ function renderHealth(player) {
         ${h ? `<span class="status-chip ${h.valid ? "confirmed" : "pending"}">${h.valid ? "Up to date" : "Please confirm again"}</span>` : `<span class="status-chip pending">Not filled in</span>`}
       </div>
       ${h ? `
-        <p class="muted small-text">Confirmed on ${formatDate(h.acceptedAt)}${h.valid ? `, valid until ${formatDate(until)}` : ""}. Only you, your trainers and LEVEL-UP see it.</p>
+        <p class="muted small-text">Confirmed ${formatDate(h.acceptedAt)}${h.valid ? ` · valid until ${formatDate(until)}` : ""}</p>
         ${h.hasRisk ? `<ul class="health-summary">${LevelUp.healthYes(h).map((q) => `<li>⚠ ${esc(q)}</li>`).join("")}</ul>${h.notes ? `<p class="small-text">“${esc(h.notes)}”</p>` : ""}`
           : `<p class="small-text">✓ No health issues reported.</p>`}`
-        : `<p class="muted small-text">A few quick health questions so your trainer can train you safely. You fill them in before your first booking.</p>`}
+        : `<p class="muted">Not filled in yet.</p>`}
       <div id="healthEdit" ${state.healthEdit ? "" : "hidden"}>${state.healthEdit ? LevelUp.healthFormHtml() : ""}</div>
       ${state.healthEdit ? "" : `<button type="button" class="btn btn-small ${h?.valid ? "btn-ghost" : "btn-primary"}" id="healthEditBtn">${h ? "Update my answers" : "Fill in now"}</button>`}
     </section>`;
@@ -630,8 +627,8 @@ function renderSettings() {
     <section class="panel panel-wide settings" id="account">
       <div>
         <h2>Account</h2>
-        <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}. Your profile is saved on the LEVEL-UP server, so it works on every device.</p>
-        ${LevelUp.getPlayer().trainerId ? `<p class="muted">You're linked to your trainer card: coaching XP (+100 per session, +50 per new player) goes to this account.</p>` : `
+        <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}</p>
+        ${LevelUp.getPlayer().trainerId ? "" : `
         <label class="toggle">
           <input type="checkbox" id="leaderboardToggle" ${LevelUp.getPlayer().showOnLeaderboard !== false ? "checked" : ""}>
           <span>Show my player name and level on the <a href="index.html#highScores" class="text-link">high scores</a></span>

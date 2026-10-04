@@ -693,12 +693,13 @@ a { color: inherit; }
 .quest-steps li {
   display: flex;
   gap: 18px;
-  align-items: flex-start;
+  align-items: center;
   padding: 20px;
   background: var(--panel);
   border: 2px solid var(--line);
   transition: border-color 0.2s, transform 0.2s;
 }
+.quest-steps li h3 { margin: 0; }
 .quest-steps li:hover { border-color: var(--green); transform: translateX(4px); }
 .step-no {
   flex-shrink: 0;
@@ -2067,4 +2068,12 @@ textarea { resize: vertical; min-height: 130px; }
 @media (prefers-reduced-motion: reduce) {
   .boot-inner img, .boot-dots::after { animation: none; }
   .boot-dots::after { width: 3ch; }
+}
+
+/* Phones: the swipe rows (classes, steps, team) only move left and right, never up and down */
+@media (max-width: 640px) {
+  .class-grid, .class-grid.collapsed, .quest-steps, .team-grid {
+    overflow-y: hidden; overscroll-behavior-x: contain; touch-action: pan-x pan-y;
+  }
+  .class-grid, .class-grid.collapsed { align-items: flex-start; } /* each class card as tall as its own content */
 }

@@ -379,7 +379,7 @@ function renderBookingDialog(message = "") {
         <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, rewarded by ${esc(trainer.short)}</span></div>
         <button type="submit" class="btn btn-primary btn-block" id="bookSubmit">Send booking request ▶</button>
       </form>
-      <p class="auth-note">${esc(trainer.short)} gets a notification and confirms or declines. Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before; later cancellations and no-shows are charged in full.</p>` : `
+      <p class="auth-note">Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>` : `
       <div class="booking-login">
         <p>Log in or create your player to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
         <div class="btn-row">
@@ -437,8 +437,7 @@ function bookingOptions(trainerId) {
         <span><strong>1:1</strong><span class="kind-price" data-solo-price>${soloText}</span>${vouchers.length ? `<span class="kind-price" data-solo-free hidden>Free 🎁 <small>your reward</small></span>` : ""}</span></label>
       <label class="kind-option"><input type="radio" name="kind" value="duo">
         <span><strong>Duo</strong><span class="kind-price">${euro(duo.price)} <small>for the two of you</small></span></span></label>
-    </fieldset>
-    ${solo.type === "standard" && LevelUp.getPricing().packs.length ? `<p class="kind-tip">Training often? <a href="profile.html#packs">Session packs</a> from ${euro(Math.min(...LevelUp.getPricing().packs.map((p) => p.price / p.size)))} per session.</p>` : ""}`;
+    </fieldset>`;
 }
 
 // A free session voucher or a pack credit covers a 1:1 session; everything else is paid online (preferred) or at the HQ
