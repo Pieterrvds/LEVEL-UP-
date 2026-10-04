@@ -33,7 +33,7 @@
   background: var(--panel);
   border: 2px solid var(--line);
 }
-.kpi-label { font-family: var(--pixel); font-size: 0.48rem; text-transform: uppercase; color: var(--muted); line-height: 1.5; }
+.kpi-label { font-family: var(--sans); font-size: 0.72rem; text-transform: uppercase; color: var(--muted); line-height: 1.5; font-weight: 700; letter-spacing: 0.05em; }
 .kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; color: var(--text); }
 .kpi-note { font-size: 0.8rem; color: var(--muted); }
 .kpi-note.good { color: var(--green-bright); }
@@ -53,18 +53,20 @@
   min-width: 0;
 }
 .chart-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.chart-card h3 { font-family: var(--pixel); font-size: 0.65rem; text-transform: uppercase; margin-bottom: 8px; }
+.chart-card h3 { font-family: var(--sans); font-size: 0.8rem; text-transform: uppercase; margin-bottom: 8px; font-weight: 700; letter-spacing: 0.05em; }
 .chart-card figcaption p { margin: 0; font-size: 0.85rem; }
 .chart-toggle {
   flex-shrink: 0;
-  font-family: var(--pixel);
-  font-size: 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.8rem;
   text-transform: uppercase;
   padding: 8px 10px;
   color: var(--muted);
   background: transparent;
   border: 2px solid var(--line);
   cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 .chart-toggle:hover, .chart-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
 .chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 16px; padding: 0; margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); }
@@ -117,7 +119,7 @@
 .trainer-admin { display: grid; gap: 16px; padding: 18px; background: #000; border: 2px solid var(--line); border-top: 6px solid var(--c); }
 .trainer-admin-head { display: flex; gap: 14px; align-items: center; }
 .trainer-admin-head img { width: 64px; height: 64px; object-fit: cover; object-position: center 20%; }
-.trainer-admin-head h3 { font-family: var(--pixel); font-size: 0.65rem; margin-bottom: 6px; }
+.trainer-admin-head h3 { font-family: var(--sans); font-size: 0.8rem; margin-bottom: 6px; font-weight: 700; letter-spacing: 0.05em; }
 .trainer-admin-head p { margin: 0 0 8px; font-size: 0.85rem; }
 .trainer-admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .trainer-admin-stats div { display: grid; gap: 6px; padding: 10px; background: var(--panel); }
@@ -131,13 +133,13 @@
 /* Data tables */
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.data-table th { font-family: var(--pixel); font-size: 0.48rem; font-weight: 400; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.data-table th { font-family: var(--sans); font-size: 0.72rem; text-transform: uppercase; color: var(--muted); white-space: nowrap; font-weight: 700; letter-spacing: 0.05em; }
 .data-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 .data-table .num { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .small { font-size: 0.8rem; }
 .member-cell { display: flex; align-items: center; gap: 12px; min-width: 220px; }
-.admin-tag { font-family: var(--pixel); font-size: 0.45rem; color: #000; background: var(--gold); padding: 3px 5px; vertical-align: 2px; }
+.admin-tag { font-family: var(--sans); font-size: 0.7rem; color: #000; background: var(--gold); padding: 3px 5px; vertical-align: 2px; font-weight: 700; letter-spacing: 0.05em; }
 
 /* Member dialog */
 .member-dialog { width: min(720px, calc(100% - 32px)); max-height: 88vh; overflow-y: auto; }
@@ -195,7 +197,7 @@
 .settle-note { margin: 14px 0 8px; padding: 10px 12px; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
 
 .price-editor { margin: 16px 0 8px; }
-.price-editor summary { cursor: pointer; font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; }
+.price-editor summary { cursor: pointer; font-family: var(--sans); font-size: 0.8rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; font-weight: 700; letter-spacing: 0.05em; }
 .price-input { width: 90px; padding: 6px 8px; color: var(--text); background: #000; border: 2px solid var(--line); font: inherit; }
 .price-input:focus { border-color: var(--green-bright); outline: none; }
 .todo-panel { border-color: var(--gold); }
@@ -206,7 +208,7 @@
 .period-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 16px; }
 .period-nav { display: flex; align-items: center; gap: 10px; flex: 1; }
 .period-label { font-size: 1rem; white-space: nowrap; }
-.kpi-caption { margin: 4px 0 8px; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.kpi-caption { margin: 4px 0 8px; font-family: var(--sans); font-size: 0.72rem; text-transform: uppercase; color: var(--muted); font-weight: 700; letter-spacing: 0.05em; }
 .fin-sub-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }
 .fin-sub-head .panel-sub { margin: 0; }
 .overview-table .num { text-align: right; white-space: nowrap; }

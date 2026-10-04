@@ -32,7 +32,7 @@
 }
 .player-header .section-kicker { margin-bottom: 10px; }
 .player-header-name { font-family: var(--pixel); font-size: clamp(1.1rem, 3vw, 1.8rem); margin-bottom: 14px; word-break: break-word; }
-.player-header-rank { display: flex; align-items: center; gap: 12px; font-family: var(--pixel); font-size: 0.65rem; color: var(--muted); margin-bottom: 18px; }
+.player-header-rank { display: flex; align-items: center; gap: 12px; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); margin-bottom: 18px; font-weight: 700; letter-spacing: 0.05em; }
 .xp-bar.big { height: 24px; }
 .xp-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
 .player-header-level {
@@ -44,7 +44,7 @@
   border: 3px solid var(--gold);
   box-shadow: 5px 5px 0 rgba(255, 210, 63, 0.25);
 }
-.player-header-level span { font-family: var(--pixel); font-size: 0.6rem; color: var(--muted); }
+.player-header-level span { font-family: var(--sans); font-size: 0.75rem; color: var(--muted); font-weight: 700; letter-spacing: 0.05em; }
 .player-header-level strong { font-family: var(--pixel); font-size: 2.2rem; font-weight: 400; color: var(--gold); line-height: 1; }
 
 /* Summary tiles */
@@ -62,7 +62,7 @@
 .panel-wide { grid-column: 1 / -1; }
 .panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .panel-head h2 { font-family: var(--pixel); font-size: 0.8rem; text-transform: uppercase; }
-.panel-sub { font-family: var(--pixel); font-size: 0.6rem; text-transform: uppercase; color: var(--muted); margin: 24px 0 12px; }
+.panel-sub { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; color: var(--muted); margin: 24px 0 12px; font-weight: 700; letter-spacing: 0.05em; }
 .panel .result-tiles { margin-bottom: 0; }
 
 .workout-form { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 14px; align-items: end; }
@@ -81,7 +81,7 @@
   font-size: 0.92rem;
 }
 .log-list.compact li { grid-template-columns: 1fr auto; }
-.log-xp { font-family: var(--pixel); font-size: 0.5rem; color: var(--green-bright); white-space: nowrap; }
+.log-xp { font-family: var(--sans); font-size: 0.7rem; color: var(--green-bright); white-space: nowrap; font-weight: 700; letter-spacing: 0.05em; }
 
 .table-wrap { overflow-x: auto; }
 
@@ -100,7 +100,7 @@
 .inventory img, .inv-placeholder { width: 100%; aspect-ratio: 1; object-fit: cover; background: #fff; }
 .inv-placeholder { display: grid; place-items: center; font-size: 2rem; color: #000; background: var(--rare); }
 .inv-name { font-size: 0.8rem; font-weight: 600; }
-.inv-qty { position: absolute; top: 12px; right: 12px; font-family: var(--pixel); font-size: 0.5rem; color: #000; background: var(--gold); padding: 4px 6px; }
+.inv-qty { position: absolute; top: 12px; right: 12px; font-family: var(--sans); font-size: 0.7rem; color: #000; background: var(--gold); padding: 4px 6px; font-weight: 700; letter-spacing: 0.05em; }
 
 .rank-ladder { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .rank-ladder li {
@@ -116,7 +116,7 @@
 .rank-ladder li.locked { opacity: 0.45; }
 .rank-ladder li.current { border-color: var(--gold); }
 .rank-ladder .rank-badge { justify-self: start; }
-.rank-state { font-family: var(--pixel); font-size: 0.5rem; color: var(--gold); }
+.rank-state { font-family: var(--sans); font-size: 0.72rem; color: var(--gold); font-weight: 700; letter-spacing: 0.05em; }
 
 .settings { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .settings h2 { font-family: var(--pixel); font-size: 0.7rem; text-transform: uppercase; margin-bottom: 10px; }
@@ -155,7 +155,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .coach-row { grid-template-columns: 34px 1fr auto; }
 .coach-row .form-error { margin: 4px 0 0; font-size: 0.85rem; }
 .coach-row .form-error:empty { display: none; }
-.count-chip { font-family: var(--pixel); font-size: 0.5rem; color: #000; background: var(--gold); padding: 3px 6px; vertical-align: 2px; }
+.count-chip { font-family: var(--sans); font-size: 0.7rem; color: #000; background: var(--gold); padding: 3px 6px; vertical-align: 2px; font-weight: 700; letter-spacing: 0.05em; }
 .session-trainer .status-chip { margin-left: 6px; }
 @media (max-width: 640px) { .coach-row { grid-template-columns: 34px 1fr; } .coach-row .coach-actions { grid-column: 1 / -1; justify-content: flex-start; } }
 
@@ -203,7 +203,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .pack-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
 .pack-option { display: grid; gap: 4px; justify-items: start; padding: 14px 16px; text-align: left; color: var(--text); background: #000; border: 2px solid var(--line); cursor: pointer; font: inherit; transition: border-color 0.15s, transform 0.15s; }
 .pack-option:hover { border-color: var(--green-bright); transform: translateY(-2px); }
-.pack-option .price-tag { font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.pack-option .price-tag { font-family: var(--sans); font-size: 0.72rem; text-transform: uppercase; color: var(--muted); font-weight: 700; letter-spacing: 0.05em; }
 .pack-option strong { font-size: 1.4rem; color: var(--gold); }
 .pack-option span:last-child { font-size: 0.85rem; color: var(--muted); }
 .pack-open { display: grid; gap: 6px; justify-items: start; margin: 12px 0; padding: 14px; background: #000; border-left: 4px solid var(--gold); }
@@ -244,14 +244,14 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .voucher small { color: var(--muted); }
 .rewards-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
 .rewards-layout > * { min-width: 0; }
-.stamp-card { list-style: none; padding: 0; margin: 10px 0 8px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; max-width: 420px; }
-.stamp-card li { aspect-ratio: 1; display: grid; place-items: center; font-size: 0.9rem; background: #000; border: 2px solid var(--line); }
+.stamp-card { list-style: none; padding: 0; margin: 10px 0 8px; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; max-width: 420px; }
+.stamp-card li { min-width: 0; aspect-ratio: 1; display: grid; place-items: center; font-size: 0.9rem; overflow: hidden; background: #000; border: 2px solid var(--line); }
 .stamp-card li.on { background: var(--green-bright); border-color: var(--green-bright); box-shadow: inset 0 0 0 3px #000; }
 .stamp-card li:last-child { border-color: var(--gold); }
 .stamp-note { margin: 0; font-size: 0.9rem; }
 .rank-rewards { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
 .rank-rewards li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; background: #000; border-left: 4px solid var(--line); font-size: 0.9rem; }
-.rank-rewards li b { font-family: var(--pixel); font-size: 0.55rem; font-weight: 400; text-transform: uppercase; }
+.rank-rewards li b { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
 .rank-rewards li small { color: var(--muted); white-space: nowrap; }
 .rank-rewards li.reached { border-left-color: var(--gold); }
 .rank-rewards li.reached small { color: var(--gold); }
@@ -270,3 +270,11 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .app-panel-body { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .app-panel-body img { width: 72px; height: 72px; border: 2px solid var(--line); flex: none; }
 .app-panel-body p { margin: 0; flex: 1 1 260px; }
+
+/* Phones: session rows put their buttons on their own line */
+@media (max-width: 640px) {
+  .session-row { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
+  .session-row img { width: 40px; height: 40px; }
+  .session-row .session-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .stamp-card li { font-size: 0.7rem; }
+}
