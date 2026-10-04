@@ -126,3 +126,90 @@ function renderAboutCta() {
 
 document.addEventListener("levelup:change", renderAboutCta);
 renderAboutCta();
+
+// ===== Phones: the swipe rows (steps, classes, team) glide to the left in an endless loop =====
+// Each row gets one copy of its cards at the end. When the first set has fully passed, the row jumps
+// back by exactly one set, which looks the same, so it never ends. Touching a row pauses it (you can
+// swipe freely, also backwards); it starts again 3 seconds after you let go.
+(function loopRows() {
+  const SPEED = 26; // pixels per second
+  const phone = window.matchMedia("(max-width: 640px)");
+  const rows = [".quest-steps", "#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
+
+  rows.forEach((row) => {
+    let originals = [];
+    let clones = [];
+    let period = 0;       // width of one set of cards (incl. the gap to the copies)
+    let pos = 0;          // exact position; scrollLeft is rounded by the browser
+    let pausedUntil = 0;
+    let visible = false;
+    let last = 0;
+
+    const isClone = (node) => node.nodeType === 1 && node.dataset.loopClone === "1";
+    const measure = () => { period = clones.length ? clones[0].offsetLeft - originals[0].offsetLeft : 0; };
+
+    function build() {
+      clones.forEach((c) => c.remove());
+      clones = [];
+      originals = [...row.children].filter((c) => !isClone(c));
+      row.classList.remove("looping");
+      if (!phone.matches || originals.length < 2) { period = 0; return; }
+      originals.forEach((card) => {
+        const copy = card.cloneNode(true);
+        copy.dataset.loopClone = "1";
+        copy.setAttribute("aria-hidden", "true");
+        copy.classList.remove("reveal");
+        copy.classList.add("in");
+        copy.removeAttribute("id");
+        copy.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+        copy.querySelectorAll("a, button, input, [tabindex]").forEach((el) => el.setAttribute("tabindex", "-1"));
+        row.appendChild(copy);
+        clones.push(copy);
+      });
+      row.classList.add("looping");
+      measure();
+      pos = row.scrollLeft;
+    }
+
+    // keep the position inside the first set, in both directions
+    function wrap() {
+      if (!period) return;
+      if (row.scrollLeft >= period) { row.scrollLeft -= period; pos -= period; }
+      else if (row.scrollLeft <= 0 && pausedUntil > performance.now()) { row.scrollLeft += period; pos += period; }
+    }
+
+    function tick(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (period && visible && !document.hidden && now > pausedUntil && !prefersReducedMotion) {
+        pos += SPEED * dt;
+        if (pos >= period) pos -= period;
+        row.scrollLeft = pos;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    const pause = () => { pausedUntil = Infinity; };
+    const resume = () => { pausedUntil = performance.now() + 3000; pos = row.scrollLeft; };
+    row.addEventListener("touchstart", pause, { passive: true });
+    row.addEventListener("touchend", resume, { passive: true });
+    row.addEventListener("touchcancel", resume, { passive: true });
+    row.addEventListener("pointerdown", pause);
+    row.addEventListener("pointerup", resume);
+    row.addEventListener("focusin", pause);
+    row.addEventListener("focusout", resume);
+    row.addEventListener("scroll", () => { if (pausedUntil > performance.now()) { wrap(); pos = row.scrollLeft; } }, { passive: true });
+
+    new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(row);
+    // new trainer cards (from the server) or a resize: copy the cards again
+    new MutationObserver((list) => {
+      const real = list.some((m) => [...m.addedNodes, ...m.removedNodes].some((n) => n.nodeType === 1 && !isClone(n)));
+      if (real) build();
+    }).observe(row, { childList: true });
+    phone.addEventListener("change", build);
+    window.addEventListener("resize", measure);
+
+    build();
+    requestAnimationFrame((t) => { last = t; tick(t); });
+  });
+})();

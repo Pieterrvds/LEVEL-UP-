@@ -98,6 +98,11 @@ The pages load `style.css?v=…`, `game.js?v=…` etc. Change that number (in al
 so browsers and the installed app fetch the new files instead of a saved copy (GitHub Pages lets them keep files
 for 10 minutes).
 
+## Phones: looping rows
+On phones the steps (Level 01), classes (Level 02) and team (Level 03) are swipe rows that glide to the left in an
+endless loop (`loopRows` in `script.js`): each row gets one copy of its cards, and when the first set has passed it
+jumps back by one set. Touching a row pauses it; it starts again 3 seconds after you let go. Off for "reduce motion".
+
 ## Loading screen
 Every page has a game-style loading screen (`#boot`: logo, progress bar, current step and a random tip). It only
 appears when loading takes longer than 0.35 s, shows the real progress of the startup requests (which now run in

@@ -16,6 +16,7 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const pad = (n) => String(n).padStart(2, "0");
 const timeText = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 let weekOffset = 0;
+let weekPicked = false; // false: open on the first week that still has a bookable hour
 // ?trainer=pieter (e.g. from a business card QR code) opens the schedule on that trainer
 let activeTrainer = new URLSearchParams(location.search).get("trainer") || "all";
 let pendingSlot = null;
@@ -58,6 +59,7 @@ trainerFilter.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-trainer]");
   if (!tab) return;
   activeTrainer = tab.dataset.trainer;
+  if (LevelUp.isReady() && !weekHasOpen(weekOffset)) weekOffset = firstOpenWeek();
   renderFilter();
   renderBoard();
 });
@@ -74,11 +76,27 @@ function slotState(trainer, key, hour, now) {
   return { state: blocker ? "past" : "free", booking: null };
 }
 
+// The first week (from this week on) with an hour that can still be booked, for the chosen trainer(s)
+function weekHasOpen(offset) {
+  const now = new Date();
+  const trainers = TRAINERS.filter((t) => activeTrainer === "all" || t.id === activeTrainer);
+  return weekDays(offset).some((day) => trainers.some((t) =>
+    LevelUp.trainerHours(t.id, day.key).some((hour) => slotState(t, day.key, hour, now).state === "free")));
+}
+function firstOpenWeek() {
+  for (let offset = 0; offset < LevelUp.BOOKING_WEEKS_AHEAD; offset++) if (weekHasOpen(offset)) return offset;
+  return 0;
+}
+
 function renderBoard() {
   if (!LevelUp.isReady()) {
     weekBoard.innerHTML = `<p class="board-message">Loading the schedule…</p>`;
     if (weekList) weekList.innerHTML = `<p class="list-empty">Loading the schedule…</p>`;
     return;
+  }
+  if (!weekPicked) {
+    weekOffset = firstOpenWeek();
+    weekPicked = true;
   }
   const days = weekDays(weekOffset);
   if (activeTrainer !== "all" && !TRAINERS.some((t) => t.id === activeTrainer)) activeTrainer = "all";
@@ -203,8 +221,8 @@ weekList?.addEventListener("click", (event) => {
   openSlot({ trainerId: chip.dataset.trainer, date: chip.dataset.date, hour: Number(chip.dataset.hour) });
 });
 
-weekPrev.addEventListener("click", () => { weekOffset = Math.max(0, weekOffset - 1); renderBoard(); });
-weekNext.addEventListener("click", () => { weekOffset = Math.min(LevelUp.BOOKING_WEEKS_AHEAD - 1, weekOffset + 1); renderBoard(); });
+weekPrev.addEventListener("click", () => { weekPicked = true; weekOffset = Math.max(0, weekOffset - 1); renderBoard(); });
+weekNext.addEventListener("click", () => { weekPicked = true; weekOffset = Math.min(LevelUp.BOOKING_WEEKS_AHEAD - 1, weekOffset + 1); renderBoard(); });
 
 // ---------- Quest board in the header: next open sessions ----------
 function nextOpenSlots(limit) {
@@ -596,6 +614,7 @@ document.addEventListener("click", (event) => {
   const link = event.target.closest("[data-book-trainer]");
   if (!link) return;
   activeTrainer = link.dataset.bookTrainer;
+  weekPicked = false; // "Book Filip": jump to Filip's first week with open hours
   renderFilter();
   renderBoard();
 });
@@ -615,7 +634,6 @@ function renderDynamicTeam() {
       <div class="team-body">
         <p class="team-role">${esc(t.role)}</p>
         <h3>${esc(t.name)}</h3>
-        <p>${esc(t.bio || (t.specialties ? `Coaches ${t.specialties}.` : "New on the LEVEL-UP team."))}</p>
         <div class="trainer-stats" data-trainer-stats="${t.id}"></div>
         <div class="btn-row team-actions">
           <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${t.id}">Book ${esc(t.short)}</a>

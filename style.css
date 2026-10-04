@@ -2077,3 +2077,6 @@ textarea { resize: vertical; min-height: 130px; }
   }
   .class-grid, .class-grid.collapsed { align-items: flex-start; } /* each class card as tall as its own content */
 }
+
+/* Looping swipe rows (script.js): no snapping, it would fight the gliding */
+.looping { scroll-snap-type: none !important; scroll-behavior: auto !important; }
