@@ -40,11 +40,11 @@ body.no-scroll { overflow: hidden; }
 .player-panel h2 { font-family: var(--display); font-size: 0.85rem; line-height: 2.4; margin-bottom: 12px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .player-panel p { color: var(--muted); font-size: 0.95rem; }
 .player-panel .btn-row { margin-top: 0; }
-.panel-kicker { font-family: var(--display); font-size: 0.55rem; color: var(--gold) !important; text-transform: uppercase; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.panel-kicker { font-family: var(--display); font-size: 0.55rem; color: var(--gold) !important; text-transform: uppercase; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .panel-player { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .panel-player .avatar { width: 52px; height: 52px; font-size: 1.1rem; }
-.panel-name { font-family: var(--display); font-size: 0.85rem; color: var(--text) !important; margin: 0 0 8px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
-.panel-rank { font-family: var(--display); font-size: 0.55rem; color: var(--gold) !important; margin: 0; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.panel-name { font-family: var(--display); font-size: 0.85rem; color: var(--text) !important; margin: 0 0 8px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.panel-rank { font-family: var(--display); font-size: 0.55rem; color: var(--gold) !important; margin: 0; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .panel-xp { font-size: 0.85rem !important; margin: 10px 0 12px; }
 .panel-owned { margin: 0; }
 .panel-owned strong { color: var(--text); }
@@ -114,7 +114,7 @@ body.no-scroll { overflow: hidden; }
   text-transform: uppercase;
   padding: 6px 8px;
   box-shadow: var(--shadow-sm);
-  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
+  line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .rarity-tag { left: 12px; color: #000; background: var(--rarity); }
 .owned-tag { right: 12px; color: #000; background: var(--gold); }
@@ -122,7 +122,7 @@ body.no-scroll { overflow: hidden; }
 @keyframes shimmer { 50% { filter: brightness(1.35); } }
 
 .item-body { display: flex; flex-direction: column; gap: 12px; padding: 20px; flex: 1; }
-.item-type { font-family: var(--display); font-size: 0.5rem; text-transform: uppercase; color: var(--rarity); margin: 0; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.item-type { font-family: var(--display); font-size: 0.5rem; text-transform: uppercase; color: var(--rarity); margin: 0; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .item-body h3 { font-family: var(--display); font-size: 0.75rem; line-height: 2.25; text-transform: uppercase; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .item-desc { margin: 0; font-size: 0.92rem; color: var(--muted); flex: 1; }
 .item-perks { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
@@ -149,15 +149,15 @@ body.no-scroll { overflow: hidden; }
   background: #000;
   border: 1px solid var(--line);
   cursor: pointer;
-  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
+  line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .size-picker input:checked + span { color: #000; background: var(--text); border-color: var(--text); }
 .size-picker input:focus-visible + span { outline: 3px solid var(--gold); outline-offset: 2px; }
 
 .item-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; }
-.price { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 0.9rem; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.price { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 0.9rem; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .price .coin { background: var(--gold); }
-.xp-reward { font-family: var(--display); font-size: 0.55rem; color: #000; background: var(--green-bright); padding: 6px 8px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.xp-reward { font-family: var(--display); font-size: 0.55rem; color: #000; background: var(--green-bright); padding: 6px 8px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
 /* ---------- Set bonuses ---------- */
 .bonus-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
@@ -180,12 +180,12 @@ body.no-scroll { overflow: hidden; }
   color: var(--muted);
   background: #000;
   border: 1px solid var(--line);
-  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
+  line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .bonus-card.unlocked .bonus-icon { color: #000; background: var(--gold); border-color: #000; }
-.bonus-card h3 { font-family: var(--display); font-size: 0.6rem; text-transform: uppercase; margin-bottom: 8px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.bonus-card h3 { font-family: var(--display); font-size: 0.6rem; text-transform: uppercase; margin-bottom: 8px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .bonus-card p { margin: 0 0 10px; font-size: 0.9rem; color: var(--muted); }
-.bonus-xp { font-family: var(--display); font-size: 0.5rem; color: var(--green-bright); font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.bonus-xp { font-family: var(--display); font-size: 0.5rem; color: var(--green-bright); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .bonus-card.unlocked .bonus-xp { color: var(--gold); }
 
 /* ---------- How it works ---------- */
@@ -200,7 +200,7 @@ body.no-scroll { overflow: hidden; }
 .loot-steps li { padding: 22px; background: var(--panel); border: 1px solid var(--line); }
 .loot-steps .step-no { margin-bottom: 16px; }
 .loot-steps li:last-child .step-no { background: var(--gold); }
-.loot-steps h3 { font-family: var(--display); font-size: 0.65rem; text-transform: uppercase; margin-bottom: 10px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.loot-steps h3 { font-family: var(--display); font-size: 0.65rem; text-transform: uppercase; margin-bottom: 10px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .loot-steps p { margin: 0; color: var(--muted); font-size: 0.92rem; }
 
 /* ---------- Bag button ---------- */
@@ -223,7 +223,7 @@ body.no-scroll { overflow: hidden; }
   box-shadow: var(--shadow);
   transform: skewX(var(--skew));
   cursor: pointer;
-  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
+  line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .bag-button:hover { transform: skewX(var(--skew)) translateY(-2px); box-shadow: var(--shadow); }
 .bag-button.has-items { background: var(--gold); }
@@ -257,7 +257,7 @@ body.no-scroll { overflow: hidden; }
   padding: 20px 24px;
   border-bottom: 1px solid var(--line);
 }
-.bag-head h2 { font-family: var(--display); font-size: 0.9rem; text-transform: uppercase; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.bag-head h2 { font-family: var(--display); font-size: 0.9rem; text-transform: uppercase; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .bag-head .dialog-close { top: 50%; transform: translateY(-50%); right: 20px; }
 .bag-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
 .bag-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
@@ -284,7 +284,7 @@ body.no-scroll { overflow: hidden; }
   cursor: pointer;
 }
 .qty button:disabled { opacity: 0.35; cursor: not-allowed; }
-.qty span { min-width: 32px; text-align: center; font-family: var(--display); font-size: 0.6rem; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.qty span { min-width: 32px; text-align: center; font-family: var(--display); font-size: 0.6rem; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .bag-remove {
   width: 30px;
   height: 30px;
@@ -295,10 +295,10 @@ body.no-scroll { overflow: hidden; }
 }
 .bag-remove:hover { color: var(--red); border-color: var(--red); }
 .bag-empty { text-align: center; padding: 48px 0; }
-.bag-empty p:first-child { font-family: var(--display); font-size: 0.7rem; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.bag-empty p:first-child { font-family: var(--display); font-size: 0.7rem; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
 .bag-foot { padding: 20px 24px 24px; border-top: 1px solid var(--line); display: grid; gap: 14px; }
-.bag-total { display: flex; justify-content: space-between; align-items: center; font-family: var(--display); font-size: 0.7rem; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.bag-total { display: flex; justify-content: space-between; align-items: center; font-family: var(--display); font-size: 0.7rem; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .bag-total strong { font-size: 1rem; color: var(--gold); font-weight: 400; }
 .bag-xp { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); }
 .bag-xp strong { color: var(--gold); }
@@ -326,7 +326,7 @@ body.no-scroll { overflow: hidden; }
 .loot-reward { display: grid; gap: 12px; justify-items: start; padding: 16px; border: 1px solid var(--line); }
 .loot-reward p { margin: 0; }
 .loot-reward .btn-row { margin: 0; }
-.loot-levelup { font-family: var(--display); font-size: 0.7rem; color: var(--gold); animation: blink 1s ease-in-out 3; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.loot-levelup { font-family: var(--display); font-size: 0.7rem; color: var(--gold); animation: blink 1s ease-in-out 3; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {

@@ -5,7 +5,7 @@
 // - Supabase, payments and other servers are never touched.
 // - Push: shows the notifications the Edge Function "push" sends; tapping one opens the right page.
 // Bump VERSION to clear old caches.
-const VERSION = "levelup-v3";
+const VERSION = "levelup-v4";
 const PRECACHE = ["offline.html", "img/app/icon-192.png", "img/app/badge-96.png"];
 
 self.addEventListener("install", (event) => {

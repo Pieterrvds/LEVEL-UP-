@@ -2190,23 +2190,23 @@ const LevelUp = (() => {
     }
     const share = `<svg class="ios-share" viewBox="0 0 24 24" aria-label="Share" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 11v10h14V11"/></svg>`;
     const steps = isIOS()
-      ? [`Tap the Share button ${share} in Safari (at the bottom, or at the top on iPad).`,
-         `Scroll down and tap <strong>Add to Home Screen</strong>.`,
-         `Tap <strong>Add</strong>. LEVEL-UP is now on your home screen.`]
-      : [`Open your browser menu (<strong>⋮</strong> or <strong>…</strong>).`,
-         `Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>. On a computer, click the install icon in the address bar.`,
-         `Confirm. LEVEL-UP opens like an app from now on.`];
+      ? [`Tap Share ${share} in Safari`,
+         `Tap <strong>Add to Home Screen</strong>`,
+         `Tap <strong>Add</strong>`]
+      : [`Open the browser menu (<strong>⋮</strong>)`,
+         `Tap <strong>Install app</strong>`,
+         `Tap <strong>Install</strong>`];
     dialog.innerHTML = `
       <button type="button" class="dialog-close" data-close-app aria-label="Close">✕</button>
       <div class="app-dialog-head">
         <img src="img/app/icon-192.png" alt="" width="64" height="64">
         <div>
-          <p class="section-kicker">Get the app</p>
-          <h2 class="auth-title" id="appDialogTitle">LEVEL-UP on your home screen</h2>
+          <p class="section-kicker">LEVEL-UP app</p>
+          <h2 class="auth-title" id="appDialogTitle">Get the app</h2>
         </div>
       </div>
       <ol class="app-steps">${steps.map((t) => `<li>${t}</li>`).join("")}</ol>
-      <p class="muted small-text">Free, no app store needed. It opens full screen, and you always get the newest version.</p>
+      <p class="muted small-text">Free, no app store needed.</p>
       <button type="button" class="btn btn-primary btn-block" data-close-app>Got it</button>`;
     if (!dialog.open) dialog.showModal();
   }

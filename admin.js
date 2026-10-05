@@ -1096,7 +1096,7 @@ function renderBookings() {
         b.note ? esc(b.note) : `<span class="muted">–</span>`,
         `<span class="admin-actions">${[
           b.status === "pending" && isUpcoming(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-respond="confirm" data-id="${b.id}">Confirm</button><button type="button" class="btn btn-small btn-ghost" data-admin-respond="decline" data-id="${b.id}">Decline</button>` : "",
-          toCollect(b) || b.status === "awaiting_payment" ? `<button type="button" class="btn btn-small btn-ghost" data-paid-hq="${b.id}">Paid at HQ</button>` : "",
+          toCollect(b) || b.status === "awaiting_payment" ? `<button type="button" class="btn btn-small btn-ghost" data-paid-hq="${b.id}">Paid ✓</button>` : "",
           b.refundStatus === "manual" ? `<button type="button" class="btn btn-small btn-ghost" data-refunded="${b.id}">Refunded</button>` : "",
           toSettle(b) ? `<button type="button" class="btn btn-small btn-primary" data-admin-reward="${b.id}">Reward</button>` : "",
           toSettle(b) && LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-admin-noshow="${b.id}">No-show</button>` : "",
