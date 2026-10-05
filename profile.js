@@ -645,6 +645,10 @@ function renderSettings() {
           <input type="checkbox" id="leaderboardToggle" ${LevelUp.getPlayer().showOnLeaderboard !== false ? "checked" : ""}>
           <span>Show my player name and level on the <a href="index.html#highScores" class="text-link">high scores</a></span>
         </label>`}
+        <label class="toggle">
+          <input type="checkbox" id="carbonToggle" ${LevelUp.carbonOnly() ? "checked" : ""}>
+          <span>Always use Carbon green (instead of my rank colour)</span>
+        </label>
       </div>
       <div class="btn-row">
         <button type="button" class="btn btn-ghost btn-small" data-logout>Log out</button>
@@ -920,6 +924,8 @@ function bindEvents(player) {
     }
     event.target.disabled = false;
   });
+
+  document.getElementById("carbonToggle")?.addEventListener("change", (event) => LevelUp.setCarbonOnly(event.target.checked));
 
   document.getElementById("deleteProfile").addEventListener("click", async () => {
     if (!confirm("Delete your account? Your level, XP, sessions and stats will be gone for good.")) return;

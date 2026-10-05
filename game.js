@@ -1704,9 +1704,15 @@ const LevelUp = (() => {
   // The site's main colour follows the player's rank (Rookie green … Legend gold); see style.css "Rank colours".
   // Remembered so the next page load starts in the right colour (inline script in each page's <head>).
   const RANK_BG = ["#070707", "#05070b", "#07060b", "#080606", "#080606", "#080706"];
+  // "Always Carbon green" (Account): this device keeps the green look whatever the rank.
+  const carbonOnly = () => { try { return localStorage.getItem("levelup.carbon") === "1"; } catch { return false; } };
+  function setCarbonOnly(on) {
+    try { on ? localStorage.setItem("levelup.carbon", "1") : localStorage.removeItem("levelup.carbon"); } catch {}
+    applyRankTheme();
+  }
   function applyRankTheme() {
     if (!player && (!isReady || session)) return; // still loading: keep the colour the <head> script set
-    const tier = player ? RANKS.indexOf(rankFor(levelFromXp(player.xp || 0))) : -1;
+    const tier = player && !carbonOnly() ? RANKS.indexOf(rankFor(levelFromXp(player.xp || 0))) : -1;
     const root = document.documentElement;
     if (tier > 0) root.dataset.rank = String(tier);
     else delete root.dataset.rank;
@@ -2296,7 +2302,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

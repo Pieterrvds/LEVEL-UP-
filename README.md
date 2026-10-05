@@ -269,7 +269,7 @@ The base look is "Carbon": real black with neutral grey cards and a neon green m
 `style.css`). When a player is logged in, the whole site takes the colours of their rank: Rookie green, Trainee
 blue, Athlete purple, Warrior orange, Champion red, Legend gold (see "Rank colours" at the bottom of `style.css`).
 `game.js` sets `<html data-rank="1…5">` and remembers it, so the next page opens straight in the right colour.
-Visitors, logged-out people and Rookies see green. Rank badges and avatars keep their own rank colour.
+Visitors, logged-out people and Rookies see green. Under Account, "Always use Carbon green" keeps the green look on that device. Rank badges and avatars keep their own rank colour.
 
 ## Profile photos
 Players upload a photo with the 📷 button on their avatar (Me → top of the page) or under Account → Profile photo.
