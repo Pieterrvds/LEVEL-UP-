@@ -59,7 +59,7 @@ body.no-scroll { overflow: hidden; }
   display: block;
   height: 100%;
   background: repeating-linear-gradient(90deg, var(--green-bright) 0 10px, var(--green) 10px 12px);
-  box-shadow: 0 0 10px rgba(126, 224, 106, 0.5);
+  box-shadow: 0 0 10px rgba(var(--green-bright-rgb), 0.5);
   transition: width 0.8s steps(10);
 }
 

@@ -264,6 +264,13 @@ with how much XP you need to pass the player above you. Player name and level on
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
 
+## Colours (rank themes)
+The base look is "Carbon": real black with neutral grey cards and a neon green main colour (tokens at the top of
+`style.css`). When a player is logged in, the whole site takes the colours of their rank: Rookie green, Trainee
+blue, Athlete purple, Warrior orange, Champion red, Legend gold (see "Rank colours" at the bottom of `style.css`).
+`game.js` sets `<html data-rank="1…5">` and remembers it, so the next page opens straight in the right colour.
+Visitors, logged-out people and Rookies see green. Rank badges and avatars keep their own rank colour.
+
 ## Profile photos
 Players upload a photo with the 📷 button on their avatar (Me → top of the page) or under Account → Profile photo.
 The photo is cropped square and shrunk to 320 px in the browser before upload (so it stays small and fast), then

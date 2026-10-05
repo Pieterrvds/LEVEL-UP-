@@ -123,9 +123,9 @@ window.LevelUpStatements = (() => {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 40px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #15201a; background: #fff; }
+  body { margin: 0; padding: 40px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; background: #fff; }
   .sheet { max-width: 800px; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 3px solid #15201a; }
+  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 3px solid #1a1a1a; }
   h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.02em; }
   .brand { font-weight: 800; font-size: 20px; letter-spacing: 0.08em; }
   .muted { color: #5b6b61; }
@@ -138,10 +138,10 @@ window.LevelUpStatements = (() => {
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .totals { margin: 20px 0 0 auto; width: 320px; }
   .totals td { border: 0; padding: 4px 10px; }
-  .totals .grand td { border-top: 2px solid #15201a; font-weight: 800; font-size: 16px; padding-top: 10px; }
+  .totals .grand td { border-top: 2px solid #1a1a1a; font-weight: 800; font-size: 16px; padding-top: 10px; }
   .note { margin-top: 28px; padding: 12px 14px; background: #f3f6f4; font-size: 12.5px; }
   .actions { margin: 0 auto 24px; max-width: 800px; display: flex; gap: 10px; }
-  button { font: inherit; padding: 8px 14px; border: 2px solid #15201a; background: #7ee06a; cursor: pointer; font-weight: 700; }
+  button { font: inherit; padding: 8px 14px; border: 2px solid #1a1a1a; background: #7cff6b; cursor: pointer; font-weight: 700; }
   @media print { body { padding: 0; } .actions { display: none; } }
 </style></head>
 <body>

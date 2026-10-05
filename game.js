@@ -557,8 +557,8 @@ const LevelUp = (() => {
           bio: r.bio || "",
           specialties: r.specialties || "",
           img: "img/pfdefault.png",
-          color: r.color || "#a6b3a9",
-          chartColor: r.chart_color || "#7f8f84",
+          color: r.color || "#b0b0b0",
+          chartColor: r.chart_color || "#8c8c8c",
           availability: {},
           stats: { sessions: 0, clients: 0 },
           dynamic: true
@@ -1701,7 +1701,25 @@ const LevelUp = (() => {
   })();
 
   // ---------- Events ----------
+  // The site's main colour follows the player's rank (Rookie green … Legend gold); see style.css "Rank colours".
+  // Remembered so the next page load starts in the right colour (inline script in each page's <head>).
+  const RANK_BG = ["#070707", "#05070b", "#07060b", "#080606", "#080606", "#080706"];
+  function applyRankTheme() {
+    if (!player && (!isReady || session)) return; // still loading: keep the colour the <head> script set
+    const tier = player ? RANKS.indexOf(rankFor(levelFromXp(player.xp || 0))) : -1;
+    const root = document.documentElement;
+    if (tier > 0) root.dataset.rank = String(tier);
+    else delete root.dataset.rank;
+    const bar = document.querySelector('meta[name="theme-color"]'); // phone status bar
+    if (bar) bar.content = RANK_BG[Math.max(tier, 0)];
+    try {
+      if (tier > 0) localStorage.setItem("levelup.rank", String(tier));
+      else localStorage.removeItem("levelup.rank");
+    } catch {}
+  }
+
   function emit() {
+    applyRankTheme();
     renderHud();
     document.dispatchEvent(new CustomEvent("levelup:change", { detail: player }));
   }

@@ -52,9 +52,9 @@ const euro = (n) => `€${n.toFixed(2)}`;
 // Pixel-style icon for items without a photo
 const bandsArt = `
   <svg viewBox="0 0 32 32" class="item-art" aria-hidden="true" shape-rendering="crispEdges">
-    <rect width="32" height="32" fill="#0b120e"/>
+    <rect width="32" height="32" fill="#0e0e0e"/>
     <g fill="none" stroke-width="2">
-      <path d="M6 10h20v4H6z" stroke="#7ee06a"/>
+      <path d="M6 10h20v4H6z" stroke="#7cff6b"/>
       <path d="M8 16h16v4H8z" stroke="#ffd23f"/>
       <path d="M10 22h12v4H10z" stroke="#ff5a5f"/>
     </g>

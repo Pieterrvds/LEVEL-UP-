@@ -73,8 +73,8 @@
 .chart-body { min-height: 120px; }
 .chart-body svg { display: block; max-width: 100%; overflow: visible; }
 .chart-body text { font-family: var(--sans); }
-.chart-body .tick { font-size: 11px; fill: #7f8f84; font-variant-numeric: tabular-nums; }
-.chart-body .xlab { font-size: 11px; fill: #a6b3a9; }
+.chart-body .tick { font-size: 11px; fill: #8c8c8c; font-variant-numeric: tabular-nums; }
+.chart-body .xlab { font-size: 11px; fill: #b0b0b0; }
 .chart-body .xlab.strong { fill: var(--text); font-weight: 700; }
 .chart-body .ylab { font-size: 13px; font-weight: 600; fill: var(--text); }
 .chart-body .val { font-size: 12px; font-weight: 700; fill: var(--text); }
@@ -210,7 +210,7 @@
 .fin-sub-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }
 .fin-sub-head .panel-sub { margin: 0; }
 .overview-table .num { text-align: right; white-space: nowrap; }
-.overview-table tr.current td { background: rgba(126, 224, 106, 0.07); }
+.overview-table tr.current td { background: rgba(var(--green-bright-rgb), 0.07); }
 .overview-table tr.current td:first-child { box-shadow: inset 3px 0 0 var(--green-bright); }
 .overview-table tr.total-row td { border-top: 2px solid var(--line); font-weight: 700; }
 .statement-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }

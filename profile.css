@@ -170,7 +170,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .xp-chip.muted-chip { color: var(--muted); background: #000; border: 1px solid var(--line); }
 .weight-chart { width: 100%; height: auto; display: block; overflow: visible; }
 .weight-chart text { font-family: var(--sans); }
-.weight-chart .tick { font-size: 11px; fill: #7f8f84; font-variant-numeric: tabular-nums; }
+.weight-chart .tick { font-size: 11px; fill: #8c8c8c; font-variant-numeric: tabular-nums; }
 .weight-chart .val { font-size: 12px; font-weight: 700; fill: var(--text); }
 .weight-chart .pt { outline: none; cursor: default; }
 .weight-chart .pt:hover circle:last-of-type, .weight-chart .pt:focus-visible circle:last-of-type { r: 6; }
@@ -290,7 +290,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .avatar-edit { position: relative; flex: none; align-self: start; }
 .avatar-edit-btn { position: absolute; right: -10px; bottom: -10px; width: 38px; height: 38px; display: grid; place-items: center;
   font-size: 1.05rem; background: var(--green-bright); border: 2px solid #000; box-shadow: 3px 3px 0 #000; cursor: pointer; }
-.avatar-edit-btn:hover { background: #9af087; }
+.avatar-edit-btn:hover { background: var(--green-bright); filter: brightness(1.12); }
 .avatar-edit-btn.busy, .photo-setting label.busy { opacity: 0.5; pointer-events: none; }
 .photo-setting { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0; }
 .photo-setting > span:not(.avatar) { font-weight: 600; }

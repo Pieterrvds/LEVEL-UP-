@@ -648,8 +648,8 @@ function renderDynamicTeam() {
 // ---------- High scores: arcade board with a podium, all time or this month ----------
 let hsPeriod = "all";
 const HS_MEDALS = ["#ffd23f", "#c9d1d9", "#cd7f32"];
-const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7ee06a", "#ffd23f", "#b46cff"];
-const HS_TIER_COLORS = ["#7ee06a", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
+const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7cff6b", "#ffd23f", "#b46cff"];
+const HS_TIER_COLORS = ["#7cff6b", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
 const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "TH" : ["TH", "ST", "ND", "RD"][n % 10] || "TH"}`;
 
 function renderHighScores() {
