@@ -19,8 +19,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610050800">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=202610051400">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -35,7 +35,7 @@
       <img src="img/app/icon-192.png" alt="" width="84" height="84">
       <p class="boot-title">Loading<span class="boot-dots" aria-hidden="true"></span></p>
       <div class="boot-bar"><i id="bootFill"></i></div>
-      <p class="boot-step" id="bootStep">Press start…</p>
+      <p class="boot-step" id="bootStep">Warming up…</p>
       <p class="boot-tip" id="bootTip"></p>
     </div>
   </div>
@@ -51,9 +51,9 @@
     </a>
 
     <nav class="nav" id="nav" aria-label="Main">
-      <a href="#about">Play</a>
-      <a href="#programs">Classes</a>
-      <a href="#team">Party</a>
+      <a href="#about">How it works</a>
+      <a href="#programs">Training</a>
+      <a href="#team">Coaches</a>
       <a href="#schedule">Book</a>
       <a href="#contact">Contact</a>
       <a href="shop.html" class="nav-shop">
@@ -74,10 +74,10 @@
       <div class="hero-bg" aria-hidden="true"></div>
       <div class="container hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">▸ Player 1 ready</p>
+          <p class="eyebrow">▸ Personal training · Aalst</p>
           <h1 class="title">LEVEL<span class="dash">-</span>UP</h1>
           <p class="class-line">
-            Class: <span class="class-name" id="classRotator">CROSSFIT</span><span class="cursor" aria-hidden="true">_</span>
+            Train: <span class="class-name" id="classRotator">CROSSFIT</span><span class="cursor" aria-hidden="true">_</span>
           </p>
           <p class="lead">
             The platform where players and personal trainers meet. Book a coach, put in the reps and level up together.
@@ -86,7 +86,7 @@
             <a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>
             <a href="#team" class="btn btn-ghost">Meet the team</a>
           </div>
-          <button type="button" class="replay-open" data-replays>▶ Watch replays <span>photos &amp; video</span></button>
+          <button type="button" class="replay-open" data-replays>▶ Watch highlights <span>photos &amp; video</span></button>
           <ul class="hero-stats">
             <li><strong id="trainerCount">3</strong><span>Trainers</span></li>
             <li><strong>€60</strong><span>Per 1:1 hour</span></li>
@@ -97,11 +97,11 @@
         <aside class="quest-board pixel-frame" aria-labelledby="questTitle">
           <div class="player-top">
             <span class="tag live">● Live</span>
-            <span class="player-title">Quest board</span>
+            <span class="player-title">Up next</span>
           </div>
           <h2 class="quest-title" id="questTitle">Next open sessions</h2>
           <ul class="quest-list" id="questList" aria-live="polite">
-            <li class="quest-loading">Loading quests…</li>
+            <li class="quest-loading">Loading sessions…</li>
           </ul>
           <a href="#schedule" class="btn btn-primary btn-block">Full schedule ▶</a>
           <div class="quest-party">
@@ -110,7 +110,7 @@
           </div>
         </aside>
       </div>
-      <a href="#about" class="press-start" aria-label="Scroll down">PRESS START ▼</a>
+      <a href="#about" class="press-start" aria-label="Scroll down">Kick off ▼</a>
     </section>
 
     <div class="vine-divider" aria-hidden="true"></div>
@@ -120,20 +120,20 @@
       <div class="container">
         <div class="about-grid">
           <div>
-            <p class="section-kicker">Level 01 · The platform</p>
+            <p class="section-kicker">01 · How it works</p>
             <h2 class="section-title">Hey there!</h2>
             <p class="text-lg" data-more>
-              <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player, pick a coach from our team and book a one-hour session straight from their weekly schedule.
+              <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player profile, pick a coach from our team and book a one-hour session straight from their weekly schedule.
             </p>
             <div class="btn-row" id="aboutCta">
-              <button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your player</button>
+              <button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your profile</button>
             </div>
           </div>
 
           <ol class="quest-steps">
             <li>
               <span class="step-no">1</span>
-              <div><h3>Create your player</h3></div>
+              <div><h3>Create your profile</h3></div>
             </li>
             <li>
               <span class="step-no">2</span>
@@ -141,7 +141,7 @@
             </li>
             <li>
               <span class="step-no">3</span>
-              <div><h3>Book a slot</h3></div>
+              <div><h3>Book a session</h3></div>
             </li>
             <li>
               <span class="step-no">★</span>
@@ -156,11 +156,11 @@
             <h3>XP table</h3>
           </div>
           <ul class="xp-rules">
-            <li><span class="xp-chip">+50</span><span><strong>Create your player</strong></span></li>
+            <li><span class="xp-chip">+50</span><span><strong>Create your profile</strong></span></li>
             <li><span class="xp-chip">+75</span><span><strong>Complete a session</strong></span></li>
             <li><span class="xp-chip">+25</span><span><strong>Weekly check-in</strong></span></li>
             <li><span class="xp-chip gold">FREE</span><span><strong>Free PT session</strong></span></li>
-            <li><span class="xp-chip">10 / €</span><span><strong>Gear up in the shop</strong></span></li>
+            <li><span class="xp-chip">10 / €</span><span><strong>Every € spent in the shop</strong></span></li>
             <li><span class="xp-chip gold">+50–500</span><span><strong>Achievements</strong></span></li>
           </ul>
           <ol class="rank-strip" aria-label="Ranks">
@@ -178,9 +178,9 @@
     <!-- CLASSES -->
     <section id="programs" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">Level 02 · Character select</p>
-        <h2 class="section-title">Choose your class</h2>
-        <p class="section-intro" data-more>Every class builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
+        <p class="section-kicker">02 · Training</p>
+        <h2 class="section-title">Choose your training</h2>
+        <p class="section-intro" data-more>Every training builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
 
         <div class="class-grid collapsed" id="classGrid">
           <article class="class-card">
@@ -189,7 +189,7 @@
               <div class="class-head"><h3>CrossFit</h3><span class="badge">All-round</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>END</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card">
@@ -198,25 +198,25 @@
               <div class="class-head"><h3>Calisthenics</h3><span class="badge">Skill</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>END</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:5" aria-label="5 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card">
             <div class="class-media" style="--img:url('img/HIIT.JPG')"></div>
             <div class="class-body">
-              <div class="class-head"><h3>HIIT</h3><span class="badge">Speedrun</span></div>
+              <div class="class-head"><h3>HIIT</h3><span class="badge">Intervals</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li><li><span>END</span><i class="pips" style="--v:5" aria-label="5 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card">
             <div class="class-media" style="--img:url('img/muaythay.jpg')"></div>
             <div class="class-body">
-              <div class="class-head"><h3>Muay Thai</h3><span class="badge">Fighter</span></div>
+              <div class="class-head"><h3>Muay Thai</h3><span class="badge">Combat</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li><li><span>END</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:5" aria-label="5 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card">
@@ -225,7 +225,7 @@
               <div class="class-head"><h3>Running &amp; Triathlon</h3><span class="badge">Endurance</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li><li><span>END</span><i class="pips" style="--v:5" aria-label="5 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/filipironmancoach.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Filip</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="filip">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="filip">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card">
@@ -234,22 +234,22 @@
               <div class="class-head"><h3>Cycling</h3><span class="badge">Endurance</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li><li><span>END</span><i class="pips" style="--v:5" aria-label="5 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/teammembermaximtshirt.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Maxim</strong></span></div>
-              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="maxim">Book this class ▶</a>
+              <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="maxim">Book this training ▶</a>
             </div>
           </article>
           <article class="class-card class-card-group">
             <div class="class-media" style="--img:url('img/ktakrachttraining.jpg')"></div>
             <div class="class-body">
-              <div class="class-head"><h3>Group Training</h3><span class="badge">Co-op</span></div>
+              <div class="class-head"><h3>Group Training</h3><span class="badge">Team</span></div>
               <ul class="class-stats"><li><span>STR</span><i class="pips" style="--v:3" aria-label="3 of 5"></i></li><li><span>END</span><i class="pips" style="--v:4" aria-label="4 of 5"></i></li><li><span>TEC</span><i class="pips" style="--v:2" aria-label="2 of 5"></i></li></ul>
               <div class="class-coach"><span class="coach-faces" aria-hidden="true"><img src="img/pf.jpg" alt="" loading="lazy"><img src="img/filipironmancoach.jpg" alt=""><img src="img/teammembermaximtshirt.jpg" alt="" loading="lazy"></span><span>Coached by <strong>Pieter, Filip &amp; Maxim</strong></span></div>
               <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="all">See group sessions ▶</a>
             </div>
           </article>
         </div>
-        <p class="swipe-hint class-swipe-hint" aria-hidden="true">Swipe through the classes ▸</p>
+        <p class="swipe-hint class-swipe-hint" aria-hidden="true">Swipe through the trainings ▸</p>
         <div class="see-more">
-          <button type="button" class="btn btn-ghost" id="classToggle" aria-controls="classGrid" aria-expanded="false">See all 7 classes ▼</button>
+          <button type="button" class="btn btn-ghost" id="classToggle" aria-controls="classGrid" aria-expanded="false">See all 7 trainings ▼</button>
         </div>
       </div>
     </section>
@@ -257,7 +257,7 @@
     <!-- TEAM -->
     <section id="team" class="section">
       <div class="container">
-        <p class="section-kicker">Level 03 · Your party</p>
+        <p class="section-kicker">03 · The coaches</p>
         <h2 class="section-title">Meet the team</h2>
         <div class="team-grid">
           <article class="team-card team-card-lead">
@@ -301,8 +301,8 @@
           <article class="team-card team-card-recruit">
             <img src="img/pfdefault.png" alt="" class="team-photo" loading="lazy">
             <div class="team-body">
-              <p class="team-role">Slot open</p>
-              <h3 id="recruitTitle">Player 4?</h3>
+              <p class="team-role">Spot open</p>
+              <h3 id="recruitTitle">Coach #4?</h3>
               <button type="button" class="btn btn-small" data-auth-open="signup-trainer">Apply as trainer</button>
             </div>
           </article>
@@ -331,7 +331,7 @@
     <!-- SCHEDULE / BOOKING -->
     <section id="schedule" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">Level 04 · Quest board</p>
+        <p class="section-kicker">04 · Schedule</p>
         <h2 class="section-title">Book your trainer</h2>
         <p class="section-intro" data-more>Live from the LEVEL-UP calendar. Every open square is a one-hour session: send a request, your trainer confirms it, and after the session you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
 
@@ -372,7 +372,7 @@
     <section id="contact" class="section contact">
       <div class="container contact-grid">
         <div class="contact-info">
-          <p class="section-kicker">Final level · Join the party</p>
+          <p class="section-kicker">05 · Contact</p>
           <h2 class="section-title">Let's connect!</h2>
           <p class="contact-intro" data-more>Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
 
@@ -380,7 +380,7 @@
             <header class="hq-head">
               <span class="hq-pin" aria-hidden="true">📍</span>
               <div>
-                <p class="hq-kicker">Home base</p>
+                <p class="hq-kicker">Training base</p>
                 <h3 id="hqTitle">LEVEL-UP Head Office</h3>
               </div>
             </header>
@@ -415,7 +415,7 @@
             </div>
           </article>
 
-          <p class="contact-sub">Follow the party</p>
+          <p class="contact-sub">Follow LEVEL-UP</p>
           <ul class="contact-links">
             <li>
               <a href="https://chat.whatsapp.com/EGDu4ZuQn1A8VyeGrmPFoG" target="_blank" rel="noopener">
@@ -446,7 +446,7 @@
 
           <div class="form-head">
             <p class="hq-kicker">Send a message</p>
-            <h3>Start your quest</h3>
+            <h3>Start your journey</h3>
           </div>
           <label>Name<input type="text" name="name" autocomplete="name" required></label>
           <label>Email<input type="email" name="email" autocomplete="email" required></label>
@@ -469,7 +469,7 @@
             </select>
           </label>
           <label>Message<textarea name="message" rows="5" required placeholder="Tell us about your goals…"></textarea></label>
-          <button type="submit" class="btn btn-primary btn-block">Level up now ▶</button>
+          <button type="submit" class="btn btn-primary btn-block">Send message ▶</button>
           <p class="form-foot">Prefer talking? Call <a href="tel:+32471955489">+32 471 95 54 89</a>.</p>
         </form>
 
@@ -484,10 +484,10 @@
   </main>
 
 
-  <!-- Replays: photos and videos, opened from the "Watch replays" buttons -->
+  <!-- Highlights: photos and videos, opened from the "Watch highlights" buttons -->
   <dialog class="auth-dialog replay-dialog" id="replayDialog" aria-labelledby="replayTitle">
     <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
-    <p class="section-kicker">Replays</p>
+    <p class="section-kicker">Highlights</p>
     <h2 class="auth-title" id="replayTitle">LEVEL-UP in action</h2>
     <p class="muted">This is what a LEVEL-UP session looks like.</p>
     <div class="gallery">
@@ -509,7 +509,7 @@
       </a>
       <p class="footer-contact">Hoogstraat 40, 9308 Aalst · <a href="tel:+32471955489">+32 471 95 54 89</a></p>
       <p>© <span id="year">2025</span> LEVEL-UP Personal Training. All rights reserved.</p>
-      <p class="footer-hint"><button type="button" class="footer-replay" data-replays>▶ Replays</button> · Game over? Never. Continue ▶</p>
+      <p class="footer-hint"><button type="button" class="footer-replay" data-replays>▶ Highlights</button> · Train hard. Level up.</p>
     </div>
   </footer>
 
@@ -520,8 +520,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202610050800"></script>
-  <script src="script.js?v=202610050800"></script>
-  <script src="schedule.js?v=202610050800"></script>
+  <script src="game.js?v=202610051400"></script>
+  <script src="script.js?v=202610051400"></script>
+  <script src="schedule.js?v=202610051400"></script>
 </body>
 </html>

@@ -72,11 +72,11 @@ document.addEventListener("click", (event) => {
 const classGrid = document.getElementById("classGrid");
 const classToggle = document.getElementById("classToggle");
 const classCount = classGrid.querySelectorAll(".class-card").length;
-classToggle.textContent = `See all ${classCount} classes ▼`;
+classToggle.textContent = `See all ${classCount} trainings ▼`;
 classToggle.addEventListener("click", () => {
   const open = classGrid.classList.toggle("collapsed") === false;
   classToggle.setAttribute("aria-expanded", String(open));
-  classToggle.textContent = open ? "Show fewer classes ▲" : `See all ${classCount} classes ▼`;
+  classToggle.textContent = open ? "Show fewer trainings ▲" : `See all ${classCount} trainings ▼`;
   if (!open) document.getElementById("programs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
@@ -121,7 +121,7 @@ function renderAboutCta() {
   const player = LevelUp.getPlayer();
   aboutCta.innerHTML = player
     ? `<a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>`
-    : `<button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your player</button>`;
+    : `<button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your profile</button>`;
 }
 
 document.addEventListener("levelup:change", renderAboutCta);

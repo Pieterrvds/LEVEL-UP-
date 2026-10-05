@@ -31,9 +31,9 @@
   align-content: start;
   padding: 16px;
   background: var(--panel);
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
 }
-.kpi-label { font-family: var(--pixel); font-size: 0.48rem; text-transform: uppercase; color: var(--muted); line-height: 1.5; }
+.kpi-label { font-family: var(--display); font-size: 0.48rem; text-transform: uppercase; color: var(--muted); line-height: 2.25; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; color: var(--text); }
 .kpi-note { font-size: 0.8rem; color: var(--muted); }
 .kpi-note.good { color: var(--green-bright); }
@@ -53,18 +53,19 @@
   min-width: 0;
 }
 .chart-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.chart-card h3 { font-family: var(--pixel); font-size: 0.65rem; text-transform: uppercase; margin-bottom: 8px; }
+.chart-card h3 { font-family: var(--display); font-size: 0.65rem; text-transform: uppercase; margin-bottom: 8px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .chart-card figcaption p { margin: 0; font-size: 0.85rem; }
 .chart-toggle {
   flex-shrink: 0;
-  font-family: var(--pixel);
+  font-family: var(--display);
   font-size: 0.5rem;
   text-transform: uppercase;
   padding: 8px 10px;
   color: var(--muted);
   background: transparent;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   cursor: pointer;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .chart-toggle:hover, .chart-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
 .chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 16px; padding: 0; margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); }
@@ -72,7 +73,7 @@
 .swatch { width: 12px; height: 12px; border-radius: 2px; background: var(--c); }
 .chart-body { min-height: 120px; }
 .chart-body svg { display: block; max-width: 100%; overflow: visible; }
-.chart-body text { font-family: var(--sans); }
+.chart-body text { font-family: var(--sans); font-size-adjust: none; font-style: normal; }
 .chart-body .tick { font-size: 11px; fill: #8c8c8c; font-variant-numeric: tabular-nums; }
 .chart-body .xlab { font-size: 11px; fill: #b0b0b0; }
 .chart-body .xlab.strong { fill: var(--text); font-weight: 700; }
@@ -91,8 +92,8 @@
   padding: 10px 12px;
   pointer-events: none;
   background: #000;
-  border: 2px solid var(--text);
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--frame);
+  box-shadow: var(--shadow);
   font-size: 0.85rem;
 }
 .chart-tip p { margin: 0; }
@@ -114,10 +115,10 @@
 
 /* Trainer cards */
 .trainer-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
-.trainer-admin { display: grid; gap: 16px; padding: 18px; background: #000; border: 2px solid var(--line); border-top: 6px solid var(--c); }
+.trainer-admin { display: grid; gap: 16px; padding: 18px; background: #000; border: 1px solid var(--line); border-top: 6px solid var(--c); }
 .trainer-admin-head { display: flex; gap: 14px; align-items: center; }
 .trainer-admin-head img { width: 64px; height: 64px; object-fit: cover; object-position: center 20%; }
-.trainer-admin-head h3 { font-family: var(--pixel); font-size: 0.65rem; margin-bottom: 6px; }
+.trainer-admin-head h3 { font-family: var(--display); font-size: 0.65rem; margin-bottom: 6px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .trainer-admin-head p { margin: 0 0 8px; font-size: 0.85rem; }
 .trainer-admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .trainer-admin-stats div { display: grid; gap: 6px; padding: 10px; background: var(--panel); }
@@ -131,13 +132,13 @@
 /* Data tables */
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.data-table th { font-family: var(--pixel); font-size: 0.48rem; font-weight: 400; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.data-table th { font-family: var(--display); font-size: 0.48rem; font-weight: 400; text-transform: uppercase; color: var(--muted); white-space: nowrap; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .data-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 .data-table .num { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .small { font-size: 0.8rem; }
 .member-cell { display: flex; align-items: center; gap: 12px; min-width: 220px; }
-.admin-tag { font-family: var(--pixel); font-size: 0.45rem; color: #000; background: var(--gold); padding: 3px 5px; vertical-align: 2px; }
+.admin-tag { font-family: var(--display); font-size: 0.45rem; color: #000; background: var(--gold); padding: 3px 5px; vertical-align: 2px; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
 /* Member dialog */
 .member-dialog { width: min(720px, calc(100% - 32px)); max-height: 88vh; overflow-y: auto; }
@@ -195,8 +196,8 @@
 .settle-note { margin: 14px 0 8px; padding: 10px 12px; color: var(--gold); border-left: 4px solid var(--gold); background: rgba(255, 210, 63, 0.08); }
 
 .price-editor { margin: 16px 0 8px; }
-.price-editor summary { cursor: pointer; font-family: var(--pixel); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; }
-.price-input { width: 90px; padding: 6px 8px; color: var(--text); background: #000; border: 2px solid var(--line); font: inherit; }
+.price-editor summary { cursor: pointer; font-family: var(--display); font-size: 0.55rem; text-transform: uppercase; color: var(--green-bright); padding: 8px 0; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.price-input { width: 90px; padding: 6px 8px; color: var(--text); background: #000; border: 1px solid var(--line); font: inherit; }
 .price-input:focus { border-color: var(--green-bright); outline: none; }
 .todo-panel { border-color: var(--gold); }
 .todo-panel ol { margin: 0 0 12px; padding-left: 1.3rem; display: grid; gap: 6px; }
@@ -206,13 +207,13 @@
 .period-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 16px; }
 .period-nav { display: flex; align-items: center; gap: 10px; flex: 1; }
 .period-label { font-size: 1rem; white-space: nowrap; }
-.kpi-caption { margin: 4px 0 8px; font-family: var(--pixel); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); }
+.kpi-caption { margin: 4px 0 8px; font-family: var(--display); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .fin-sub-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }
 .fin-sub-head .panel-sub { margin: 0; }
 .overview-table .num { text-align: right; white-space: nowrap; }
 .overview-table tr.current td { background: rgba(var(--green-bright-rgb), 0.07); }
 .overview-table tr.current td:first-child { box-shadow: inset 3px 0 0 var(--green-bright); }
-.overview-table tr.total-row td { border-top: 2px solid var(--line); font-weight: 700; }
+.overview-table tr.total-row td { border-top: 1px solid var(--line); font-weight: 700; }
 .statement-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
 .statement-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; background: #000; border-left: 4px solid var(--line); }
 .statement-list li > span:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }

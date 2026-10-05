@@ -16,9 +16,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610050800">
-  <link rel="stylesheet" href="shop.css?v=202610050800">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=202610051400">
+  <link rel="stylesheet" href="shop.css?v=202610051400">
   <script src="https://www.paypal.com/sdk/js?client-id=AcJLXipsreQDWPNqUNKBknNhohnvhY3QtkXKNNSk0zMkYhvPgxcF-kFYKxaTadXAAbiyW4ZOO1Fummpb&currency=EUR" defer></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
       <img src="img/app/icon-192.png" alt="" width="84" height="84">
       <p class="boot-title">Loading<span class="boot-dots" aria-hidden="true"></span></p>
       <div class="boot-bar"><i id="bootFill"></i></div>
-      <p class="boot-step" id="bootStep">Press start…</p>
+      <p class="boot-step" id="bootStep">Warming up…</p>
       <p class="boot-tip" id="bootTip"></p>
     </div>
   </div>
@@ -43,9 +43,9 @@
     </a>
 
     <nav class="nav" id="nav" aria-label="Main">
-      <a href="index.html#about">Play</a>
-      <a href="index.html#programs">Classes</a>
-      <a href="index.html#team">Party</a>
+      <a href="index.html#about">How it works</a>
+      <a href="index.html#programs">Training</a>
+      <a href="index.html#team">Coaches</a>
       <a href="index.html#schedule">Book</a>
       <a href="index.html#contact">Contact</a>
       <a href="shop.html" class="nav-shop" aria-current="page">
@@ -66,7 +66,7 @@
       <div class="hero-bg" aria-hidden="true"></div>
       <div class="container shop-hero-grid">
         <div>
-          <p class="eyebrow">▸ Item shop open</p>
+          <p class="eyebrow">▸ Official store</p>
           <h1 class="shop-title">Gear up.<br><span>Level up.</span></h1>
           <p class="lead">Official LEVEL-UP merch and training tools. Every euro you spend earns <strong>10 XP</strong>, and complete sets unlock bonus achievements.</p>
         </div>
@@ -81,8 +81,8 @@
       <div class="container">
         <div class="shop-toolbar">
           <div>
-            <p class="section-kicker">Inventory for sale</p>
-            <h2 class="section-title">Choose your loot</h2>
+            <p class="section-kicker">The collection</p>
+            <h2 class="section-title">Shop the gear</h2>
           </div>
           <div class="filter-tabs" role="tablist" aria-label="Filter items">
             <button type="button" role="tab" aria-selected="true" data-filter="all">All</button>
@@ -108,7 +108,7 @@
     <section class="section">
       <div class="container">
         <p class="section-kicker">How it works</p>
-        <h2 class="section-title">From loot to level</h2>
+        <h2 class="section-title">From order to XP</h2>
         <ol class="loot-steps">
           <li><span class="step-no">1</span><h3>Log in</h3><p>Create your player profile so your XP gets saved.</p></li>
           <li><span class="step-no">2</span><h3>Fill your bag</h3><p>Pick your items and sizes. The bag shows how much XP you'll earn.</p></li>
@@ -142,7 +142,7 @@
   <div class="bag-backdrop" id="bagBackdrop" hidden></div>
   <aside class="bag" id="bag" aria-labelledby="bagTitle" aria-hidden="true">
     <div class="bag-head">
-      <h2 id="bagTitle">Loot bag</h2>
+      <h2 id="bagTitle">Your bag</h2>
       <button type="button" class="dialog-close" id="bagClose" aria-label="Close bag">✕</button>
     </div>
     <div class="bag-body">
@@ -162,14 +162,14 @@
     </div>
   </aside>
 
-  <!-- Loot acquired -->
+  <!-- Order complete -->
   <dialog class="auth-dialog loot-dialog" id="lootDialog" aria-labelledby="lootTitle">
     <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
     <div id="lootContent"></div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="game.js?v=202610050800"></script>
-  <script src="shop.js?v=202610050800"></script>
+  <script src="game.js?v=202610051400"></script>
+  <script src="shop.js?v=202610051400"></script>
 </body>
 </html>

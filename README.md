@@ -1,17 +1,17 @@
 # LEVEL-UP
-Personal training platform with a retro game theme: players and personal trainers meet, train and level up together.
+Personal training platform with a sports-game look ("FC Ultimate"): players and personal trainers meet, train and level up together.
 
 ## Pages
-- `index.html`: home page: quest board with the next open sessions, the platform + XP table, classes, team with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Replays" pop-up (hero button and footer)
+- `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Highlights" pop-up (hero button and footer)
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
-- `profile.html`: player profile with level, rank, XP, character stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their character stats as step 2 of sign-up. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
+- `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their body stats as step 2 of sign-up. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
 
 ## Phones
 - A bar at the bottom (Home · Book · Scores · Profile · Menu) replaces the ☰ button; Scores jumps to the high scores, Menu opens the same menu (with Contact).
-- Section descriptions (and the price cards in Level 04) sit behind a "Read more" button; elements marked
+- Section descriptions (and the price cards in 04 · Schedule) sit behind a "Read more" button; elements marked
   `data-more` in `index.html` are hidden on phones until it's tapped.
 - Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
   the map behind a button, the schedule as a compact week (only days with open hours, times as small buttons).
@@ -22,7 +22,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 ## Code
 - `game.js`: shared core on every page: Supabase login, player data, XP and levels, bookings, the Google Calendar schedule, the header player chip, login dialog and toasts. The shop catalog (`ITEMS`) and trainers (`TRAINERS`) live here too.
 - `supabase/schema.sql`: database tables, security rules and server functions
-- `schedule.js`: weekly booking board and quest board on the home page
+- `schedule.js`: weekly booking board and the "Up next" card on the home page
 - `admin.js`: admin dashboard
 - `script.js`, `shop.js`, `profile.js`: page-specific behaviour
 - `style.css` (shared + home), `shop.css`, `profile.css`, `admin.css`
@@ -263,6 +263,19 @@ month). Equal scores are ordered by who got there first. Your own row is highlig
 with how much XP you need to pass the player above you. Player name and level only, never email. Trainers are left
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
+
+## Style (FC Ultimate) and the backup of the old look
+The site looks like a sports game menu: bold slanted letters (Barlow Condensed), slanted buttons and chips, rounded
+cards with thin borders and soft shadows, and an Ultimate Team style player card on the account page (in the rank
+colour). The display font is `--display` in `style.css`; every rule that uses it also gets `font-size-adjust`, so the
+letter sizes from the old pixel font still fit. The FC details are in the "FC Ultimate" block at the end of `style.css`.
+
+**Backup of the old pixel-arcade look:** the complete website and app as they were before this restyle are kept on
+the GitHub branch `style/pixel-arcade` (commit 15210e6). You can browse it at
+https://github.com/Pieterrvds/LEVEL-UP-/tree/style/pixel-arcade or download it as a zip from
+https://github.com/Pieterrvds/LEVEL-UP-/archive/refs/heads/style/pixel-arcade.zip. To switch back, ask Claude to
+"restore the pixel-arcade style from the branch style/pixel-arcade" (features added later are kept and only the look
+is put back). Don't delete that branch.
 
 ## Colours (rank themes)
 The base look is "Carbon": real black with neutral grey cards and a neon green main colour (tokens at the top of

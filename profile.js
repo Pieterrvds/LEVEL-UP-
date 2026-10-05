@@ -12,11 +12,11 @@ function renderLoggedOut() {
   root.innerHTML = `
     <section class="no-save pixel-frame">
       <span class="pixel-heart" aria-hidden="true"></span>
-      <p class="section-kicker">No save file loaded</p>
+      <p class="section-kicker">Not logged in</p>
       <h1 class="section-title">Player profile</h1>
-      <p>Log in to see your level, XP, sessions, body stats, achievements and gear. New here? Create a player and start at LVL 1.</p>
+      <p>Log in to see your level, XP, sessions, body stats, achievements and gear. New here? Create your profile and start at LVL 1.</p>
       <div class="btn-row">
-        <button type="button" class="btn btn-primary" data-auth-open="signup">Create your player</button>
+        <button type="button" class="btn btn-primary" data-auth-open="signup">Create your profile</button>
         <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>
       </div>
     </section>`;
@@ -34,7 +34,7 @@ function renderHeader(player, p) {
         </label>
       </div>
       <div class="player-header-info">
-        <p class="section-kicker">Player 1 · since ${since}</p>
+        <p class="section-kicker">Player · since ${since}</p>
         <h1 class="player-header-name">${esc(player.name)}</h1>
         <p class="player-header-rank"><span class="rank-badge" data-tier="${RANKS.indexOf(p.rank)}">${p.rank.title}</span> LVL ${p.level}</p>
         <div class="xp-bar big" role="progressbar" aria-valuemin="0" aria-valuemax="${p.needed}" aria-valuenow="${p.into}" aria-label="XP to next level">
@@ -448,7 +448,7 @@ function renderBodyStats(player) {
   if (!latest) {
     return `
       <section class="panel panel-wide" id="stats">
-        <div class="panel-head"><h2>Character stats</h2><span class="xp-chip">+${25 + LevelUp.CHECKIN_XP} XP</span></div>
+        <div class="panel-head"><h2>Body stats</h2><span class="xp-chip">+${25 + LevelUp.CHECKIN_XP} XP</span></div>
         <p class="muted">Set your stats to see your BMI, daily calories and protein target, and to track your progress week by week.</p>
         ${statsForm(null)}
       </section>`;
@@ -464,7 +464,7 @@ function renderBodyStats(player) {
   return `
     <section class="panel panel-wide" id="stats">
       <div class="panel-head">
-        <h2>Character stats</h2>
+        <h2>Body stats</h2>
         <span class="muted">Goal: <strong>${LevelUp.GOALS[latest.goal] || "Maintain"}</strong>${activity ? ` · ${activity.label}` : ""}</span>
       </div>
       <div class="stats-layout">
@@ -660,7 +660,7 @@ function renderSettings() {
 function render() {
   const player = LevelUp.getPlayer();
   if (!LevelUp.isReady()) {
-    root.innerHTML = `<p class="board-message">Loading your save file…</p>`;
+    root.innerHTML = `<p class="board-message">Loading your profile…</p>`;
     return;
   }
   if (!player) {

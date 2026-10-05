@@ -522,14 +522,14 @@ begin
     perform public._unlock(p_user, 'checkins_4', 150, 'On track');
   end if;
 
-  if p.sessions_booked >= 1 then perform public._unlock(p_user, 'first_session', 100, 'Party up'); end if;
+  if p.sessions_booked >= 1 then perform public._unlock(p_user, 'first_session', 100, 'First session'); end if;
   if (select count(distinct trainer_id) from public.bookings where user_id = p_user and status = 'completed') >= 3 then
-    perform public._unlock(p_user, 'full_party', 200, 'Full party');
+    perform public._unlock(p_user, 'full_party', 200, 'Full squad');
   end if;
   if p.sessions_booked >= 5 then perform public._unlock(p_user, 'sessions_5', 250, 'Regular'); end if;
 
   if exists (select 1 from public.orders where user_id = p_user) then
-    perform public._unlock(p_user, 'first_loot', 100, 'First loot');
+    perform public._unlock(p_user, 'first_loot', 100, 'First buy');
   end if;
   if coalesce((p.inventory ->> 'tshirt')::int, 0) > 0 and coalesce((p.inventory ->> 'hoodie')::int, 0) > 0 then
     perform public._unlock(p_user, 'full_drip', 150, 'Full drip');

@@ -88,19 +88,19 @@ const LevelUp = (() => {
       name: "LEVEL-UP T-shirt",
       price: 25,
       category: "merch",
-      type: "Armor",
+      type: "Apparel",
       rarity: "common",
       img: "img/teamembermaximtshirtmerch.jpg",
       sizes: ["S", "M", "L"],
       perks: ["+5 Style", "+3 Confidence"],
-      desc: "The classic LEVEL-UP tee with the pixel pull-up logo. Light armor for every session."
+      desc: "The classic LEVEL-UP tee with the pull-up logo. Made for every session."
     },
     {
       id: "hoodie",
       name: "LEVEL-UP Hoodie",
       price: 45,
       category: "merch",
-      type: "Armor",
+      type: "Apparel",
       rarity: "rare",
       img: "img/teammembermaximtruimerch.jpg",
       sizes: ["S", "M", "L"],
@@ -112,7 +112,7 @@ const LevelUp = (() => {
       name: "LEVEL-UP Parallettes",
       price: 40,
       category: "tools",
-      type: "Tool",
+      type: "Equipment",
       rarity: "epic",
       img: "img/levelupparalettes.JPG",
       perks: ["+10 STR", "+10 Control"],
@@ -123,22 +123,22 @@ const LevelUp = (() => {
       name: "LEVEL-UP Resistance Bands",
       price: 25,
       category: "tools",
-      type: "Tool",
+      type: "Equipment",
       rarity: "rare",
       img: null,
       perks: ["+8 STR", "+8 Mobility"],
-      desc: "Resistance bands for warm-ups, assisted pull-ups and mobility. Small enough to take on every quest."
+      desc: "Resistance bands for warm-ups, assisted pull-ups and mobility. Small enough to take to every session."
     }
   ];
 
   const ACHIEVEMENTS = [
     { id: "new_player", icon: "★", title: "New player", desc: "Create your player profile.", xp: 50 },
-    { id: "stats_saved", icon: "♥", title: "Know your numbers", desc: "Set your character stats.", xp: 25 },
+    { id: "stats_saved", icon: "♥", title: "Know your numbers", desc: "Set your body stats.", xp: 25 },
     { id: "checkins_4", icon: "◷", title: "On track", desc: "Do a weekly check-in in 4 different weeks.", xp: 150 },
-    { id: "first_session", icon: "⚔", title: "Party up", desc: "Complete your first session with a trainer.", xp: 100 },
+    { id: "first_session", icon: "✓", title: "First session", desc: "Complete your first session with a trainer.", xp: 100 },
     { id: "sessions_5", icon: "⛨", title: "Regular", desc: "Complete 5 sessions with a trainer.", xp: 250 },
-    { id: "full_party", icon: "♞", title: "Full party", desc: "Complete sessions with 3 different trainers.", xp: 200 },
-    { id: "first_loot", icon: "◆", title: "First loot", desc: "Buy your first item.", xp: 100, shop: true },
+    { id: "full_party", icon: "♞", title: "Full squad", desc: "Complete sessions with 3 different trainers.", xp: 200 },
+    { id: "first_loot", icon: "◆", title: "First buy", desc: "Buy your first item.", xp: 100, shop: true },
     { id: "full_drip", icon: "▣", title: "Full drip", desc: "Own the T-shirt and the hoodie.", xp: 150, shop: true },
     { id: "home_gym", icon: "⚒", title: "Home gym", desc: "Own the parallettes and the resistance bands.", xp: 150, shop: true },
     { id: "collector", icon: "✦", title: "Collector", desc: "Own every item in the shop.", xp: 300, shop: true }
@@ -1529,7 +1529,7 @@ const LevelUp = (() => {
     box.className = "auth-dialog coach-dialog";
     box.innerHTML = `
       <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
-      <p class="section-kicker">Game master inbox</p>
+      <p class="section-kicker">Admin inbox</p>
       <h2 class="auth-title">${pending.length} new trainer application${pending.length === 1 ? "" : "s"}</h2>
       <ul class="coach-list">${pending.map((a) => `
         <li class="coach-item"><div><p class="coach-who">${esc(a.name)}</p><p class="muted">${esc(a.role || "Personal trainer")}</p></div></li>`).join("")}
@@ -1670,7 +1670,7 @@ const LevelUp = (() => {
         const trainersLoaded = bootTask(loadTrainerList(), "Loading trainers…");
         await Promise.all([
           trainersLoaded.then(() => bootTask(loadCalendar(), "Loading the schedule…")),
-          session ? trainersLoaded.then(() => bootTask(refreshPlayer(), "Loading your save file…")) : null,
+          session ? trainersLoaded.then(() => bootTask(refreshPlayer(), "Loading your profile…")) : null,
           bootTask(loadPricing(), "Loading prices…"),
           bootTask(loadOpeningHours(), "Loading opening hours…"),
           bootTask(loadSlots(), "Loading open sessions…"),
@@ -1881,8 +1881,8 @@ const LevelUp = (() => {
   // ---------- Login dialog ----------
   let dialog;
   const MODES = {
-    login: { title: "Continue your quest", submit: "Log in ▶" },
-    signup: { title: "Create your player", submit: "Start at LVL 1 ▶" },
+    login: { title: "Welcome back", submit: "Log in ▶" },
+    signup: { title: "Create your profile", submit: "Start at LVL 1 ▶" },
     reset: { title: "Reset your password", submit: "Send reset link ▶" },
     "new-password": { title: "Choose a new password", submit: "Save password ▶" }
   };
@@ -1893,8 +1893,8 @@ const LevelUp = (() => {
     dialog.setAttribute("aria-labelledby", "authTitle");
     dialog.innerHTML = `
       <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
-      <p class="section-kicker">Save file</p>
-      <h2 class="auth-title" id="authTitle">Continue your quest</h2>
+      <p class="section-kicker">Your account</p>
+      <h2 class="auth-title" id="authTitle">Welcome back</h2>
       <div class="auth-tabs" role="tablist">
         <button type="button" role="tab" data-mode="login">Log in</button>
         <button type="button" role="tab" data-mode="signup">New player</button>
@@ -1915,7 +1915,7 @@ const LevelUp = (() => {
           <label>About you (optional)<textarea name="bio" rows="3" maxlength="600" placeholder="Experience, certificates, where you train…"></textarea></label>
         </div>
         <div class="signup-stats">
-          <p class="stats-intro">Step 2 of 2 · <strong>Character stats.</strong> We use these for your BMI, daily calories and progress. Only you and your coach can see them.</p>
+          <p class="stats-intro">Step 2 of 2 · <strong>Body stats.</strong> We use these for your BMI, daily calories and progress. Only you and your coach can see them.</p>
           <div class="field-row">
             <label>Weight (kg)<input name="weight" type="number" min="30" max="300" step="0.1" inputmode="decimal"></label>
             <label>Height (cm)<input name="height" type="number" min="120" max="230" inputmode="numeric"></label>
@@ -2009,8 +2009,8 @@ const LevelUp = (() => {
     dialog.dataset.kind = trainer ? "trainer" : "player";
     dialog.querySelector(".auth-submit").textContent = step === 2
       ? (trainer ? "Send application ▶" : "Create player ▶")
-      : (trainer ? "Next: trainer application ▶" : "Next: character stats ▶");
-    dialog.querySelector(".auth-title").textContent = step === 2 ? (trainer ? "Trainer application" : "Character creation") : MODES.signup.title;
+      : (trainer ? "Next: trainer application ▶" : "Next: body stats ▶");
+    dialog.querySelector(".auth-title").textContent = step === 2 ? (trainer ? "Trainer application" : "Your body stats") : MODES.signup.title;
     dialog.querySelector(".form-error").textContent = "";
   }
 

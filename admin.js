@@ -76,7 +76,7 @@ async function loadData() {
 function renderGate(kind) {
   root.innerHTML = kind === "login" ? `
     <section class="no-save pixel-frame">
-      <p class="section-kicker">Game master console</p>
+      <p class="section-kicker">Admin console</p>
       <h1 class="section-title">Admin dashboard</h1>
       <p>Log in with the admin account to see members, bookings and trainers.</p>
       <div class="btn-row"><button type="button" class="btn btn-primary" data-auth-open="login">Log in</button></div>
@@ -84,7 +84,7 @@ function renderGate(kind) {
     <section class="no-save pixel-frame">
       <p class="section-kicker">Access denied</p>
       <h1 class="section-title">Admins only</h1>
-      <p>This page is for the LEVEL-UP game master. Head back to your own profile.</p>
+      <p>This page is for the LEVEL-UP admin. Head back to your own profile.</p>
       <div class="btn-row"><a href="profile.html" class="btn btn-primary">My profile</a></div>
     </section>`;
 }
@@ -115,7 +115,7 @@ async function render() {
   root.innerHTML = `
     <header class="admin-head">
       <div>
-        <p class="section-kicker">Game master console</p>
+        <p class="section-kicker">Admin console</p>
         <h1 class="section-title">Admin dashboard</h1>
         <p class="muted">Members, bookings and trainers at a glance.</p>
       </div>

@@ -118,7 +118,7 @@ function renderPlayerPanel() {
   const player = LevelUp.getPlayer();
   if (!player) {
     playerPanel.innerHTML = `
-      <p class="panel-kicker">No save file loaded</p>
+      <p class="panel-kicker">Not logged in</p>
       <h2>Earn XP with every item</h2>
       <p>Log in or create a player before you check out, so your purchase counts toward your level.</p>
       <div class="btn-row">
@@ -421,7 +421,7 @@ function showLoot(order, reward) {
 
   lootContent.innerHTML = `
     <p class="section-kicker">Order confirmed</p>
-    <h2 class="auth-title" id="lootTitle">Loot acquired!</h2>
+    <h2 class="auth-title" id="lootTitle">Order complete!</h2>
     <ul class="loot-items">${itemsHtml}</ul>
     <p class="loot-total">Total paid <strong>${euro(order.total)}</strong></p>
     ${rewardHtml}

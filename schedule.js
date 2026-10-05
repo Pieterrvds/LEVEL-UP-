@@ -380,7 +380,7 @@ function renderBookingDialog(message = "") {
   }
 
   bookingContent.innerHTML = `
-    <p class="section-kicker">New quest</p>
+    <p class="section-kicker">New booking</p>
     <h2 class="auth-title" id="bookingTitle">Book this session</h2>
     ${trainerCard}
     ${player ? `
@@ -399,7 +399,7 @@ function renderBookingDialog(message = "") {
       </form>
       <p class="auth-note">Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>` : `
       <div class="booking-login">
-        <p>Log in or create your player to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
+        <p>Log in or create your profile to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
         <div class="btn-row">
           <button type="button" class="btn btn-primary btn-small" data-auth-open="signup">New player</button>
           <button type="button" class="btn btn-ghost btn-small" data-auth-open="login">Log in</button>
@@ -541,7 +541,7 @@ function showPaymentFailed(booked, message) {
 function showBooked(booked) {
   const trainer = LevelUp.trainerById(pendingSlot.trainerId);
   bookingContent.innerHTML = `
-    <p class="section-kicker">Quest sent</p>
+    <p class="section-kicker">Booking sent</p>
     <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
     <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and will confirm or decline. You'll get an email and see the status in your profile.</p>
@@ -641,7 +641,7 @@ function renderDynamicTeam() {
       </div>`;
     grid.insertBefore(card, recruit);
   });
-  document.getElementById("recruitTitle").textContent = `Player ${TRAINERS.length + 1}?`;
+  document.getElementById("recruitTitle").textContent = `Coach #${TRAINERS.length + 1}?`;
   document.getElementById("trainerCount").textContent = TRAINERS.length;
 }
 
@@ -702,7 +702,7 @@ function renderHighScores() {
 
   let msg;
   if (!player) {
-    msg = `<button type="button" class="link-btn" data-auth-open="signup">Create your player</button> to get on the board.`;
+    msg = `<button type="button" class="link-btn" data-auth-open="signup">Create your profile</button> to get on the board.`;
   } else if (player.trainerId) {
     msg = "You're a trainer: your level shows on your team card.";
   } else if (player.showOnLeaderboard === false) {
@@ -713,7 +713,7 @@ function renderHighScores() {
     const ahead = rows.filter((r) => r.place < me.place).pop();
     msg = `You're <b>#${me.place}</b>${ahead ? ` · <b>${(ahead.xp - me.xp + 1).toLocaleString("en-US")} XP</b> to pass ${esc(ahead.name)}` : " · You're the champion! 👑"}`;
   }
-  foot.innerHTML = `<span class="hs-next">${msg}</span><a href="#schedule" class="hs-coin">Insert coin ▸ Book +${LevelUp.SESSION_XP} XP</a>`;
+  foot.innerHTML = `<span class="hs-next">${msg}</span><a href="#schedule" class="hs-coin">Book a session ▸ +${LevelUp.SESSION_XP} XP</a>`;
 }
 
 document.addEventListener("click", async (event) => {
