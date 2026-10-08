@@ -1738,6 +1738,48 @@ const LevelUp = (() => {
     bootDone();
   })();
 
+  // ---------- Animated logo ----------
+  // The header/footer logo becomes img/logo-anim.svg (the stickman doing real pull-ups): 3 reps when the
+  // page opens and 3 more on hover or tap. The boot screen shows the same file as an <img>, looping.
+  // If the file can't be loaded the plain logo.JPG simply stays.
+  function animateLogos() {
+    const imgs = document.querySelectorAll("img.brand-logo");
+    if (!imgs.length || !window.fetch) return;
+    fetch("img/logo-anim.svg?v=1").then((r) => (r.ok ? r.text() : Promise.reject())).then((text) => {
+      imgs.forEach((img, i) => {
+        const box = document.createElement("span");
+        box.innerHTML = text;
+        const svg = box.querySelector("svg");
+        if (!svg) return;
+        if (i > 0) svg.querySelector("style")?.remove(); // one copy of the animation CSS is enough
+        svg.classList.remove("lu-anim");
+        svg.classList.add("brand-logo");
+        svg.removeAttribute("role");
+        svg.setAttribute("aria-hidden", "true");
+        svg.style.setProperty("--lu-reps", "3");
+        img.replaceWith(svg);
+        let playing = false;
+        const play = () => {
+          if (playing) return;
+          playing = true;
+          svg.classList.remove("lu-anim");
+          void svg.getBoundingClientRect(); // restart the keyframes
+          svg.classList.add("lu-anim");
+        };
+        svg.querySelector(".lu-body")?.addEventListener("animationend", () => { playing = false; });
+        const host = svg.closest("a, .brand") || svg;
+        host.addEventListener("mouseenter", play);
+        host.addEventListener("touchstart", play, { passive: true });
+        if (i === 0 || !window.IntersectionObserver) { requestAnimationFrame(play); return; }
+        const seen = new IntersectionObserver((entries) => { // the footer one starts when it scrolls into view
+          if (entries.some((e) => e.isIntersecting)) { seen.disconnect(); play(); }
+        });
+        seen.observe(svg);
+      });
+    }).catch(() => {});
+  }
+  animateLogos();
+
   // ---------- Events ----------
   // The site's main colour follows the player's rank (Rookie green … Legend gold); see style.css "Rank colours".
   // Remembered so the next page load starts in the right colour (inline script in each page's <head>).
