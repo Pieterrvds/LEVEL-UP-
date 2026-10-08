@@ -4,12 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <meta name="description" content="LEVEL-UP Movement: personal training, group training, CrossFit, Muay Thai, calisthenics and HIIT. Pick your class, train hard and level up your body.">
+  <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LEVEL-UP">
+  <meta property="og:title" content="LEVEL-UP | Personal training in Aalst">
+  <meta property="og:description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
+  <meta property="og:url" content="https://pieterrvds.github.io/LEVEL-UP-/">
+  <meta property="og:image" content="https://pieterrvds.github.io/LEVEL-UP-/img/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="LEVEL-UP: Train hard. Level up. Personal training in Aalst.">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#070707">
   <script>try{var r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")document.documentElement.dataset.rank=r}catch(e){}</script>
-  <meta property="og:title" content="LEVEL-UP | Level up your body">
-  <meta property="og:description" content="Personal training, group sessions, CrossFit, Muay Thai, calisthenics and HIIT.">
-  <meta property="og:image" content="img/levelup.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/app/favicon-64.png" type="image/png">
   <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
@@ -20,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610081500">
+  <link rel="stylesheet" href="style.css?v=202610082100">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -55,6 +62,7 @@
       <a href="#programs">Training</a>
       <a href="#team">Coaches</a>
       <a href="#schedule">Book</a>
+      <a href="#faq">Q&amp;A</a>
       <a href="#contact">Contact</a>
       <a href="shop.html" class="nav-shop">
         <span class="coin" aria-hidden="true"></span> Shop
@@ -329,6 +337,16 @@
       </div>
     </section>
 
+    <!-- REVIEWS: real clients, approved in admin (hidden until there is one) -->
+    <section id="reviews" class="section reviews" hidden>
+      <div class="container">
+        <p class="section-kicker">Reviews</p>
+        <h2 class="section-title">What players say</h2>
+        <div class="review-summary" id="reviewSummary"></div>
+        <div class="review-grid" id="reviewGrid"></div>
+      </div>
+    </section>
+
     <!-- SCHEDULE / BOOKING -->
     <section id="schedule" class="section section-alt">
       <div class="container">
@@ -369,11 +387,23 @@
       <div id="bookingContent"></div>
     </dialog>
 
+    <!-- Q&A -->
+    <section id="faq" class="section section-alt faq">
+      <div class="container faq-wrap">
+        <div>
+          <p class="section-kicker">05 · Questions</p>
+          <h2 class="section-title">Q&amp;A</h2>
+          <p class="section-intro">The quick answers. Something else? <a href="#contact" class="text-link">Ask us</a> or send a WhatsApp.</p>
+        </div>
+        <div class="faq-list" id="faqList"></div>
+      </div>
+    </section>
+
     <!-- CONTACT -->
     <section id="contact" class="section contact">
       <div class="container contact-grid">
         <div class="contact-info">
-          <p class="section-kicker">05 · Contact</p>
+          <p class="section-kicker">06 · Contact</p>
           <h2 class="section-title">Let's connect!</h2>
           <p class="contact-intro" data-more>Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
 
@@ -521,8 +551,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202610081500"></script>
-  <script src="script.js?v=202610081500"></script>
-  <script src="schedule.js?v=202610081500"></script>
+  <script src="game.js?v=202610082100"></script>
+  <script src="script.js?v=202610082100"></script>
+  <script src="schedule.js?v=202610082100"></script>
 </body>
 </html>

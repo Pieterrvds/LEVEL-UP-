@@ -2339,3 +2339,57 @@ input, select, textarea { border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) {
   .promo, .promo-card, .promo-rays, .promo-actions { animation: none; }
 }
+
+/* ---------- Reviews (home) ---------- */
+.reviews[hidden] { display: none; }
+.stars { color: var(--gold); letter-spacing: 2px; white-space: nowrap; }
+.stars i { font-style: normal; color: rgba(255, 255, 255, 0.18); }
+.review-summary { display: flex; align-items: center; gap: 10px; margin: -6px 0 24px; color: var(--muted); }
+.review-summary:empty { display: none; }
+.review-summary b { font-family: var(--display); font-size: 1rem; color: var(--text); line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.review-card { margin: 0; display: flex; flex-direction: column; gap: 12px; padding: 22px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 70%), var(--panel); border: 1px solid var(--frame); }
+.review-card blockquote { margin: 0; flex: 1; font-size: 1.02rem; line-height: 1.6; }
+.review-card figcaption { display: flex; align-items: center; gap: 12px; }
+.review-card figcaption b { display: block; }
+.review-card figcaption small { color: var(--muted); font-size: 0.8rem; }
+.review-face { flex: none; width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden; border-radius: 10px;
+  background: var(--green-bright); color: #000; font-weight: 800; }
+.review-face img { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 640px) {
+  .review-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin: 0 -16px; padding: 0 16px 8px; scrollbar-width: none; }
+  .review-grid::-webkit-scrollbar { display: none; }
+  .review-card { flex: 0 0 82%; scroll-snap-align: center; }
+}
+
+/* ---------- Q&A ---------- */
+.faq-wrap { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: clamp(24px, 5vw, 64px); align-items: start; }
+.faq-list { display: grid; gap: 10px; }
+.faq-item { border-radius: 12px; background: var(--panel); border: 1px solid var(--frame); }
+.faq-item summary { position: relative; padding: 16px 48px 16px 18px; cursor: pointer; list-style: none; font-weight: 700; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+  font-size: 1.4rem; font-weight: 400; color: var(--green-bright); }
+.faq-item[open] summary::after { content: "–"; }
+.faq-item[open] { border-color: rgba(var(--green-bright-rgb), 0.35); }
+.faq-item p { margin: 0; padding: 0 18px 18px; color: var(--muted); }
+@media (max-width: 860px) { .faq-wrap { grid-template-columns: 1fr; } }
+
+/* ---------- Review form (My account) and admin list ---------- */
+.review-form { display: grid; gap: 10px; }
+.review-form textarea { width: 100%; padding: 12px; color: var(--text); background: #000; border: 1px solid var(--line); border-radius: 8px; font: inherit; resize: vertical; }
+.star-pick { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 4px; }
+.star-pick input { position: absolute; opacity: 0; pointer-events: none; }
+.star-pick label { cursor: pointer; font-size: 1.9rem; line-height: 1; color: rgba(255, 255, 255, 0.2); transition: color 0.15s; }
+.star-pick label:has(input:checked), .star-pick label:has(input:checked) ~ label,
+.star-pick label:hover, .star-pick label:hover ~ label { color: var(--gold); }
+.star-pick label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+.review-admin-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 10px; }
+.review-admin { padding: 14px; border-radius: 10px; background: #000; border: 1px solid var(--line); }
+.review-admin.pending { border-color: rgba(255, 210, 63, 0.5); }
+.review-admin.hidden { opacity: 0.6; }
+.review-admin p { margin: 8px 0; }
+.review-admin .btn-row { margin-top: 6px; }
+.review-add summary { cursor: pointer; font-weight: 700; color: var(--green-bright); margin-top: 8px; }

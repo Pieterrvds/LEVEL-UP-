@@ -579,6 +579,34 @@ const LevelUp = (() => {
     potm: Boolean(r.potm)
   }));
   let playerOfMonth = null;
+
+  // ---------- Reviews (real clients, approved by the admin) ----------
+  let reviews = [];
+  async function loadReviews() {
+    try { reviews = (await call("public_reviews")) || []; } catch (err) { console.error("Loading reviews failed:", err); }
+  }
+  async function submitReview(quote, rating) {
+    player = normalisePlayer(await call("submit_review", { p_quote: quote, p_rating: Number(rating) }));
+    fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: `New review to approve: ${player.name} (${"★".repeat(Number(rating))})`,
+        _template: "table",
+        name: player.name, email: player.email, rating: `${rating} / 5`, review: quote,
+        next_step: "Approve or hide it in the LEVEL-UP admin dashboard (Overview → Reviews)."
+      })
+    }).catch((error) => console.error("Review email failed:", error));
+    emit();
+  }
+  async function deleteMyReview() {
+    player = normalisePlayer(await call("delete_my_review"));
+    await loadReviews();
+    emit();
+  }
+  const adminReviews = async () => (await call("admin_reviews")) || [];
+  async function adminSetReview(id, status) { await call("admin_set_review", { p_id: id, p_status: status }); await loadReviews(); emit(); }
+  async function adminAddReview(name, quote, rating) { await call("admin_add_review", { p_name: name, p_quote: quote, p_rating: Number(rating) }); await loadReviews(); emit(); }
   async function loadLeaderboard(period = "all") {
     try {
       if (period === "all") call("player_of_month").then((r) => { playerOfMonth = r || null; emit(); }).catch(() => {});
@@ -1683,7 +1711,8 @@ const LevelUp = (() => {
           bootTask(loadOpeningHours(), "Loading opening hours…"),
           bootTask(loadSlots(), "Loading open sessions…"),
           bootTask(loadTrainerStats(), "Loading trainer levels…"),
-          bootTask(loadLeaderboard(), "Loading high scores…")
+          bootTask(loadLeaderboard(), "Loading high scores…"),
+          bootTask(loadReviews(), "Loading reviews…")
         ]);
         if (player) {
           welcomed = true;
@@ -2477,7 +2506,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

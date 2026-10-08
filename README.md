@@ -264,6 +264,17 @@ with how much XP you need to pass the player above you. Player name and level on
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
 
+## Reviews, Q&A and link preview
+- **Reviews** (home page, above the schedule): only real clients. Players with at least one completed session write
+  one under My account → Overview ("How is your training going?": 1–5 stars + max. 300 characters). Pieter gets an
+  email and approves, hides or deletes it under Admin → Overview → Reviews. A review a client sent another way
+  (WhatsApp, Google…) can be added there too, with their permission. The section stays hidden until there is an
+  approved review; it shows the first name and current profile photo. Editing a review sends it back for approval.
+- **Q&A** (`#faq`, home page): the answers are built in `script.js` (`renderFaq`) with the live prices and rules,
+  so they change along when prices change in admin.
+- **Link preview:** `img/og-image.jpg` (1200×630) with the Open Graph tags on every page, used by WhatsApp,
+  Facebook, LinkedIn… WhatsApp keeps old previews for a while; new shares show the new image.
+
 ## Player card, promotions, Player of the Month and streaks
 - **Share my card** (account page, under the player card): makes a 1080×1350 image in Ultimate Team style (photo,
   level, rank colour, total XP, sessions, streak, crown) with the site link. Phones open the share sheet

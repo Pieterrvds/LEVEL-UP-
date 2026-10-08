@@ -41,9 +41,10 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews] = await Promise.all([
     LevelUp.adminData(),
-    LevelUp.pushServerReady()
+    LevelUp.pushServerReady(),
+    LevelUp.adminReviews().catch(() => [])
   ]);
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
@@ -63,6 +64,7 @@ async function loadData() {
     packs,
     vouchers,
     pushReady: Boolean(pushKey),
+    reviews,
     hours,
     rawBookings: bookings,
     players: rows,
@@ -125,6 +127,7 @@ async function render() {
     ${LevelUp.pageTabsHtml(adminTabs(), state.tab)}
 
     <div data-pane="overview">
+    <section class="panel admin-panel" id="adminReviews">${reviewsPanelInner()}</section>
     ${LevelUp.getPricing().onlinePayments ? "" : `
     <section class="panel admin-panel todo-panel">
       <div class="panel-head"><h2>To do: online payments</h2><span class="status-chip pending">Not active</span></div>
@@ -253,7 +256,7 @@ const ADMIN_TABS = [
 function adminTabs() {
   const now = new Date();
   const badge = {
-    overview: data.applications.filter((a) => a.status === "pending").length,
+    overview: data.applications.filter((a) => a.status === "pending").length + data.reviews.filter((r) => r.status === "pending").length,
     bookings: data.rawBookings.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length,
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
@@ -1388,3 +1391,70 @@ window.addEventListener("resize", () => {
 
 document.addEventListener("levelup:change", render);
 render();
+
+// ---------- Reviews: approve what players wrote, or add one a client sent you ----------
+function reviewsPanelInner() {
+  const list = data.reviews || [];
+  const pending = list.filter((r) => r.status === "pending").length;
+  const stars = (n) => `<span class="stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
+  const label = { pending: "Waiting", approved: "On the site", hidden: "Hidden" };
+  return `
+    <div class="panel-head"><h2>Reviews</h2>${pending ? `<span class="status-chip pending">${pending} to approve</span>` : ""}</div>
+    <p class="muted">Players with a completed session can write one in My account. Only approved reviews show on the home page (first name + photo).</p>
+    ${list.length ? `<ul class="review-admin-list">${list.map((r) => `
+      <li class="review-admin ${r.status}">
+        <div>${stars(Number(r.rating))} <b>${esc(r.name)}</b> <span class="muted small-text">${r.byAdmin ? "added by you" : esc(r.email || "")} · ${fmtDate(r.createdAt)}</span>
+          <span class="status-chip ${r.status === "approved" ? "confirmed" : "pending"}">${label[r.status]}</span></div>
+        <p>“${esc(r.quote)}”</p>
+        <div class="btn-row">
+          ${r.status !== "approved" ? `<button type="button" class="btn btn-small btn-primary" data-review-set="approved" data-id="${r.id}">Approve</button>` : ""}
+          ${r.status !== "hidden" ? `<button type="button" class="btn btn-small btn-ghost" data-review-set="hidden" data-id="${r.id}">Hide</button>` : ""}
+          <button type="button" class="btn btn-small btn-ghost" data-review-set="delete" data-id="${r.id}">Delete</button>
+        </div>
+      </li>`).join("")}</ul>` : `<p class="muted">No reviews yet.</p>`}
+    <details class="review-add">
+      <summary>Add a review a client sent you</summary>
+      <form id="addReviewForm" class="auth-form">
+        <p class="muted small-text">Only with the client's permission. Shown with their first name.</p>
+        <div class="field-row">
+          <label>First name<input name="name" maxlength="24" required></label>
+          <label>Stars<select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option value="${n}">${"★".repeat(n)}</option>`).join("")}</select></label>
+        </div>
+        <label>Review<textarea name="quote" rows="3" minlength="10" maxlength="300" required></textarea></label>
+        <p class="form-error" role="alert"></p>
+        <button type="submit" class="btn btn-small btn-primary">Add to the site</button>
+      </form>
+    </details>`;
+}
+
+async function refreshReviewsPanel() {
+  data.reviews = await LevelUp.adminReviews();
+  const box = document.getElementById("adminReviews");
+  if (box) box.innerHTML = reviewsPanelInner();
+}
+
+root.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-review-set]");
+  if (!btn) return;
+  if (btn.dataset.reviewSet === "delete" && !confirm("Delete this review for good?")) return;
+  btn.disabled = true;
+  try {
+    await LevelUp.adminSetReview(btn.dataset.id, btn.dataset.reviewSet);
+    await refreshReviewsPanel();
+  } catch (err) {
+    alert(err.message);
+    btn.disabled = false;
+  }
+});
+
+root.addEventListener("submit", async (event) => {
+  if (event.target.id !== "addReviewForm") return;
+  event.preventDefault();
+  const f = event.target;
+  try {
+    await LevelUp.adminAddReview(f.elements.name.value.trim(), f.elements.quote.value.trim(), f.elements.rating.value);
+    await refreshReviewsPanel();
+  } catch (err) {
+    f.querySelector(".form-error").textContent = err.message;
+  }
+});

@@ -51,6 +51,32 @@ function renderHeader(player, p) {
     </section>`;
 }
 
+// Write a review (after the first completed session); shows on the home page once LEVEL-UP approves it
+function renderReviewPanel(player) {
+  if (player.trainerId) return "";
+  const done = LevelUp.playerBookings().some((b) => b.status === "completed");
+  if (!done) return "";
+  const r = player.review;
+  const state = r ? { pending: "Waiting for approval", approved: "On the home page ✓", hidden: "Not shown" }[r.status] : "";
+  const rating = r?.rating || 5;
+  return `
+    <section class="panel panel-wide review-panel" id="review">
+      <div class="panel-head"><h2>${r ? "Your review" : "How is your training going?"}</h2>${r ? `<span class="status-chip ${r.status === "approved" ? "confirmed" : "pending"}">${state}</span>` : ""}</div>
+      <p class="muted">${r ? "Thanks! You can change it any time (a change is checked again before it shows)." : "Tell other players in one or two sentences. With your first name and photo, after LEVEL-UP approves it."}</p>
+      <form class="review-form" id="reviewForm">
+        <div class="star-pick" role="radiogroup" aria-label="Stars">${[5, 4, 3, 2, 1].map((n) => `
+          <label><input type="radio" name="rating" value="${n}" ${n === rating ? "checked" : ""}><span aria-hidden="true">★</span><span class="sr-only">${n} stars</span></label>`).join("")}
+        </div>
+        <textarea name="quote" rows="3" minlength="10" maxlength="300" required placeholder="What do you like about training at LEVEL-UP?">${esc(r?.quote || "")}</textarea>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-small btn-primary">${r ? "Save changes" : "Send review"}</button>
+          ${r ? `<button type="button" class="btn btn-small btn-ghost" data-delete-review>Delete</button>` : ""}
+        </div>
+      </form>
+    </section>`;
+}
+
 // Player of the Month crown and the training streak, under the rank on the player card
 function headerBadges(player) {
   const s = player.streak;
@@ -691,6 +717,7 @@ function render() {
     ${inTab("overview", renderSummary(player))}
     <div class="panel-grid">
       ${inTab("overview", renderSessions())}
+      ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}
       ${inTab("rewards", renderRewards(player))}
       ${inTab("rewards", renderAchievements(player))}
@@ -754,6 +781,24 @@ function bindEvents(player) {
       form.querySelector(".form-error").textContent = err.message;
       form.querySelector('button[type="submit"]').disabled = false;
     }
+  });
+
+  document.getElementById("reviewForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await LevelUp.submitReview(form.elements.quote.value.trim(), form.elements.rating.value);
+      LevelUp.toast({ title: "Review sent", text: "Thanks! It shows on the home page once it's approved.", icon: "★", tone: "green" });
+    } catch (err) {
+      form.querySelector(".form-error").textContent = err.message;
+      button.disabled = false;
+    }
+  });
+  root.querySelector("[data-delete-review]")?.addEventListener("click", async () => {
+    if (!confirm("Delete your review?")) return;
+    try { await LevelUp.deleteMyReview(); } catch (err) { alert(err.message); }
   });
 
   root.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {

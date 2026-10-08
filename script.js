@@ -213,3 +213,64 @@ renderAboutCta();
     requestAnimationFrame((t) => { last = t; tick(t); });
   });
 })();
+
+// ---------- Reviews: approved reviews from real clients (hidden until there is one) ----------
+const stars = (n) => `<span class="stars" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
+function renderReviews() {
+  const section = document.getElementById("reviews");
+  if (!section || !LevelUp.isReady()) return;
+  const list = LevelUp.getReviews();
+  section.hidden = !list.length;
+  if (!list.length) return;
+  const esc = LevelUp.esc;
+  const avg = list.reduce((sum, r) => sum + Number(r.rating), 0) / list.length;
+  document.getElementById("reviewSummary").innerHTML = list.length >= 3
+    ? `${stars(Math.round(avg))}<b>${avg.toFixed(1)}</b><span>from ${list.length} players</span>` : "";
+  document.getElementById("reviewGrid").innerHTML = list.map((r) => `
+    <figure class="review-card">
+      ${stars(Number(r.rating))}
+      <blockquote>“${esc(r.quote)}”</blockquote>
+      <figcaption>
+        <span class="review-face">${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : esc(r.name.trim().charAt(0).toUpperCase())}</span>
+        <span><b>${esc(r.name)}</b><small>LEVEL-UP player</small></span>
+      </figcaption>
+    </figure>`).join("");
+}
+document.addEventListener("levelup:change", renderReviews);
+LevelUp.ready.then(renderReviews);
+
+// ---------- Q&A: answers use the live prices and rules ----------
+function renderFaq() {
+  const box = document.getElementById("faqList");
+  if (!box || !LevelUp.isReady()) return;
+  const pr = LevelUp.getPricing();
+  const euro = (n) => LevelUp.euro(n).replace(/[.,]00$/, "");
+  const packs = pr.packs.map((p) => `${p.size} sessions for ${euro(p.price)}`).join(" or ");
+  const qa = [
+    ["How do I book a session?",
+      `Create your free profile, pick a trainer and a time in the <a href="#schedule" class="text-link">schedule</a> and send the request. Your trainer confirms it and you get a message. You can book up to ${LevelUp.BOOKING_WEEKS_AHEAD} weeks ahead and at least ${LevelUp.BOOKING_NOTICE_HOURS} hours before the start.`],
+    ["What does it cost?",
+      `Your first session is ${euro(pr.introPrice)}. After that a 1:1 hour is ${euro(pr.price)}, and a duo session is ${euro(pr.duoPrice)} for the two of you.${packs ? ` With a session pack it's cheaper: ${packs}.` : ""}`],
+    ["I've never trained before. Is this for me?",
+      "Yes. Sessions are one-on-one (or with one friend), so your trainer works at your level. Before your first session you fill in a short health check, so your trainer knows what to take into account."],
+    ["Can I cancel?",
+      `Yes, for free up to ${LevelUp.FREE_CANCEL_HOURS} hours before the session, and a request that isn't confirmed yet can always be withdrawn. A confirmed session cancelled later is charged in full.`],
+    ["How do I pay?",
+      `${pr.onlinePayments ? "Online when you book (Bancontact, card…), or" : "For now"} at LEVEL-UP, ${LevelUp.HQ_ADDRESS || "Hoogstraat 40, 9308 Aalst"}. Session packs work the same way and are used automatically when you book.`],
+    ["Can I train with a friend?",
+      `Yes: choose "Duo" when you book. It's ${euro(pr.duoPrice)} for the two of you, for one hour.`],
+    ["How do XP and levels work?",
+      `Every completed session gives +${LevelUp.SESSION_XP} XP. XP brings you up in level and rank (Rookie to Legend) and onto the high scores. Every 20 sessions you get a free 1:1 session, and Champion and Legend come with a free session too.`],
+    ["Is there an app?",
+      `Yes. Open the site on your phone and choose <b>Menu → Get the app</b>: LEVEL-UP lands on your home screen, free and without an app store. Turn on notifications to hear when your trainer confirms.`],
+    ["Who sees my health answers and body stats?",
+      "Only you, your trainer and LEVEL-UP. They are used to train you safely and to show your progress."]
+  ];
+  box.innerHTML = qa.map(([q, a], i) => `
+    <details class="faq-item"${i === 0 ? " open" : ""}>
+      <summary>${q}</summary>
+      <p>${a}</p>
+    </details>`).join("");
+}
+document.addEventListener("levelup:change", renderFaq);
+LevelUp.ready.then(renderFaq);

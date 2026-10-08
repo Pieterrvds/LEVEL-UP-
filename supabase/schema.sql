@@ -130,6 +130,20 @@ create table if not exists public.monthly_awards (
 );
 alter table public.monthly_awards enable row level security;
 
+-- Reviews from real clients: players write one after a completed session, the admin approves it before it shows.
+-- The admin can also add a review a client sent another way (WhatsApp, Google…).
+create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique references public.profiles (id) on delete cascade,   -- null = added by the admin
+  name text not null,
+  quote text not null check (char_length(quote) between 10 and 300),
+  rating smallint not null default 5 check (rating between 1 and 5),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'hidden')),
+  created_at timestamptz not null default now(),
+  approved_at timestamptz
+);
+alter table public.reviews enable row level security;
+
 create table if not exists public.workouts (
   id bigint generated always as identity primary key,
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -700,6 +714,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     'potm', (select jsonb_build_object('month', a.month, 'xp', a.xp) from public.monthly_awards a
              where a.user_id = p.id and a.month = public._potm_month()),
     'potmWins', (select count(*) from public.monthly_awards a where a.user_id = p.id),
+    'review', (select jsonb_build_object('quote', r.quote, 'rating', r.rating, 'status', r.status, 'createdAt', r.created_at)
+               from public.reviews r where r.user_id = p.id),
     'rewards', public._rewards_json(p.id),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
                                  and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
@@ -1951,6 +1967,75 @@ returns text language sql stable security definer set search_path = public as $$
 $$;
 
 -- Edge Function only (service role): reminders for tomorrow's / today's confirmed sessions
+-- ---------- Reviews ----------
+-- Write or edit your review (edits go back to "waiting for approval")
+create or replace function public.submit_review(p_quote text, p_rating integer)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); q text := trim(coalesce(p_quote, ''));
+begin
+  if uid is null then raise exception 'Log in first.'; end if;
+  if not exists (select 1 from public.bookings where user_id = uid and status = 'completed') then
+    raise exception 'You can write a review after your first session.';
+  end if;
+  if char_length(q) < 10 then raise exception 'Write a few more words (at least 10 characters).'; end if;
+  if char_length(q) > 300 then raise exception 'Keep it short: 300 characters at most.'; end if;
+  if p_rating is null or p_rating not between 1 and 5 then raise exception 'Choose 1 to 5 stars.'; end if;
+  insert into public.reviews (user_id, name, quote, rating, status)
+  values (uid, (select split_part(trim(name), ' ', 1) from public.profiles where id = uid), q, p_rating, 'pending')
+  on conflict (user_id) do update set quote = excluded.quote, rating = excluded.rating, name = excluded.name,
+    status = 'pending', created_at = now(), approved_at = null;
+  return public._player_json(uid);
+end $$;
+
+create or replace function public.delete_my_review()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  delete from public.reviews where user_id = auth.uid();
+  return public._player_json(auth.uid());
+end $$;
+
+-- Approved reviews for the home page: first name, current profile photo, newest first
+create or replace function public.public_reviews()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('name', r.name, 'quote', r.quote, 'rating', r.rating,
+                  'avatarUrl', p.avatar_url, 'date', r.approved_at) order by r.approved_at desc), '[]'::jsonb)
+  from (select * from public.reviews where status = 'approved' order by approved_at desc limit 8) r
+  left join public.profiles p on p.id = r.user_id;
+$$;
+
+-- Admin: all reviews, approve / hide / delete, add one by hand
+create or replace function public.admin_reviews()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name, 'quote', r.quote, 'rating', r.rating,
+            'status', r.status, 'createdAt', r.created_at, 'byAdmin', r.user_id is null,
+            'email', (select email from public.profiles where id = r.user_id))
+          order by (r.status = 'pending') desc, r.created_at desc) from public.reviews r), '[]'::jsonb);
+end $$;
+
+create or replace function public.admin_set_review(p_id uuid, p_status text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if p_status = 'delete' then delete from public.reviews where id = p_id; return; end if;
+  if p_status not in ('approved', 'hidden', 'pending') then raise exception 'Unknown status.'; end if;
+  update public.reviews set status = p_status,
+    approved_at = case when p_status = 'approved' then coalesce(approved_at, now()) else approved_at end
+  where id = p_id;
+end $$;
+
+create or replace function public.admin_add_review(p_name text, p_quote text, p_rating integer)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if char_length(trim(coalesce(p_name, ''))) < 1 then raise exception 'Add the client''s first name.'; end if;
+  if char_length(trim(coalesce(p_quote, ''))) not between 10 and 300 then raise exception 'The quote needs 10 to 300 characters.'; end if;
+  insert into public.reviews (user_id, name, quote, rating, status, approved_at)
+  values (null, left(trim(p_name), 24), trim(p_quote), greatest(1, least(5, coalesce(p_rating, 5))), 'approved', now());
+end $$;
+
 -- On the 1st of the month (the first time anyone loads their profile, or the 10-minute push job runs):
 -- crown last month's winner of the "This month" high scores, give them +250 XP and tell everyone.
 create or replace function public._settle_player_of_month()
@@ -2161,6 +2246,17 @@ revoke execute on function public.set_leaderboard_visibility(boolean) from publi
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
 grant execute on function public.player_of_month() to anon, authenticated;
+grant execute on function public.public_reviews() to anon, authenticated;
+revoke execute on function public.submit_review(text, integer) from public, anon;
+revoke execute on function public.delete_my_review() from public, anon;
+revoke execute on function public.admin_reviews() from public, anon;
+revoke execute on function public.admin_set_review(uuid, text) from public, anon;
+revoke execute on function public.admin_add_review(text, text, integer) from public, anon;
+grant execute on function public.submit_review(text, integer) to authenticated;
+grant execute on function public.delete_my_review() to authenticated;
+grant execute on function public.admin_reviews() to authenticated;
+grant execute on function public.admin_set_review(uuid, text) to authenticated;
+grant execute on function public.admin_add_review(text, text, integer) to authenticated;
 revoke execute on function public._settle_player_of_month() from public, anon, authenticated;
 revoke execute on function public._push_streak_reminders(timestamptz) from public, anon, authenticated;
 revoke execute on function public.set_avatar(text) from public, anon;
