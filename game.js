@@ -1010,6 +1010,7 @@ const LevelUp = (() => {
         <label class="health-consent"><input type="checkbox" name="consent" required>
           <span>I answered honestly. I train at my own risk, follow my trainer's instructions and tell my trainer when my health changes. LEVEL-UP only uses these answers to train me safely.</span>
         </label>
+        <p class="health-privacy small-text muted">Read how we handle your data: <a href="privacy.html" target="_blank" rel="noopener" class="text-link">Privacy policy</a></p>
         <label>Your full name (as signature)<input type="text" name="name" maxlength="80" required autocomplete="name"></label>
         <p class="form-error" role="alert"></p>
         <button type="submit" class="btn btn-primary btn-block">Save and continue ▶</button>
@@ -1840,6 +1841,7 @@ const LevelUp = (() => {
   // ---------- Player card image (Share my card) and the promotion screen ----------
   const TIER_COLORS = ["#7cff6b", "#4fc3f7", "#c77dff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
   const SITE_LINK = "pieterrvds.github.io/LEVEL-UP-";
+  const tr = (s) => (window.t ? window.t(s) : s); // Dutch/English (i18n.js) for text drawn on the card image
   const completedSessions = (p) => (p?.bookings || []).filter((b) => b.status === "completed").length;
   const loadImage = (src, cors) => new Promise((resolve) => {
     const img = new Image();
@@ -1903,7 +1905,7 @@ const LevelUp = (() => {
     g.restore();
     rounded(PX, PY, PS, PS, 36); g.lineWidth = 4; g.strokeStyle = "rgba(255,255,255,0.18)"; g.stroke();
     if (p.potm) {
-      const label = "👑 PLAYER OF THE MONTH";
+      const label = tr("👑 PLAYER OF THE MONTH");
       g.font = display(40); const w = g.measureText(label).width + 44;
       rounded(PX + PS / 2 - w / 2, PY + PS - 34, w, 68, 12); g.fillStyle = "#ffd23f"; g.fill();
       g.fillStyle = "#000"; g.textAlign = "center"; g.fillText(label, PX + PS / 2, PY + PS + 14); g.textAlign = "left";
@@ -1916,9 +1918,9 @@ const LevelUp = (() => {
 
     // stats
     const stats = [
-      [p.xp.toLocaleString("en-US"), "TOTAL XP"],
-      [String(completedSessions(p)), "SESSIONS"],
-      [p.streak?.weeks >= 2 ? `🔥 ${p.streak.weeks}` : "–", "WEEK STREAK"]
+      [p.xp.toLocaleString("en-US"), tr("TOTAL XP")],
+      [String(completedSessions(p)), tr("SESSIONS")],
+      [p.streak?.weeks >= 2 ? `🔥 ${p.streak.weeks}` : "–", tr("WEEK STREAK")]
     ];
     stats.forEach(([v, l], i) => {
       const cx = X + CW / 2 + (i - 1) * 290;
@@ -1940,7 +1942,7 @@ const LevelUp = (() => {
     const file = new File([blob], "levelup-player-card.png", { type: "image/png" });
     const url = URL.createObjectURL(blob);
     const prog = progress(player.xp);
-    const text = `LVL ${prog.level} ${prog.rank.title} at LEVEL-UP 💪 ${SITE_LINK}`;
+    const text = tr(`LVL ${prog.level} ${prog.rank.title} at LEVEL-UP 💪 ${SITE_LINK}`);
     let dlg = document.getElementById("shareDialog");
     if (!dlg) {
       dlg = document.createElement("dialog");
@@ -1960,7 +1962,7 @@ const LevelUp = (() => {
         <a class="btn ${canShare ? "btn-ghost" : "btn-primary"}" href="${url}" download="levelup-player-card.png">Save image</a>
       </div>`;
     dlg.querySelector("[data-share-now]")?.addEventListener("click", () => {
-      navigator.share({ files: [file], title: "My LEVEL-UP player card", text }).catch(() => {});
+      navigator.share({ files: [file], title: tr("My LEVEL-UP player card"), text }).catch(() => {});
     });
     if (!dlg.open) dlg.showModal();
   }
@@ -2137,7 +2139,7 @@ const LevelUp = (() => {
         <button type="button" class="link-btn auth-forgot" data-mode="reset">Forgot your password?</button>
         <button type="button" class="link-btn auth-back">◀ Back to step 1</button>
       </form>
-      <p class="auth-note">Your account is stored securely on the LEVEL-UP server.</p>`;
+      <p class="auth-note">Your account is stored securely on the LEVEL-UP server. <a href="privacy.html" class="text-link">Privacy policy</a></p>`;
     document.body.appendChild(dialog);
 
     const form = dialog.querySelector("form");

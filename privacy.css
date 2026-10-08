@@ -1,0 +1,15 @@
+/* Privacy page: one article per language, the one matching the site language shows */
+html[data-lang="nl"] .privacy-doc[lang="en"], html[data-lang="en"] .privacy-doc[lang="nl"] { display: none; }
+.privacy-page { padding-top: var(--hud-h); }
+.privacy-doc { max-width: 760px; }
+.privacy-updated { margin: -8px 0 18px; color: var(--muted); font-size: 0.9rem; }
+.privacy-lead { font-size: 1.1rem; }
+.privacy-toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 10px; }
+.privacy-toc a { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--frame); color: var(--text); text-decoration: none; font-size: 0.85rem; background: var(--panel); }
+.privacy-toc a:hover { border-color: var(--green-bright); }
+.privacy-doc h2 { margin: 36px 0 10px; font-family: var(--display); font-size: 0.95rem; text-transform: uppercase; line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; scroll-margin-top: calc(var(--hud-h) + 16px); }
+.privacy-doc p, .privacy-doc li { color: var(--muted); line-height: 1.7; }
+.privacy-doc strong { color: var(--text); }
+.privacy-doc ul { padding-left: 1.2em; display: grid; gap: 6px; }
+.privacy-doc a { color: var(--green-bright); }

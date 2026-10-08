@@ -2412,3 +2412,14 @@ input, select, textarea { border-radius: 8px; }
   .ct-txt em { display: none; }
   .ct-txt small { font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ---------- Language switch (NL | EN) and footer links ---------- */
+.lang-switch { display: inline-flex; align-items: center; gap: 4px; }
+.lang-switch button { padding: 4px 6px; font: inherit; font-weight: 700; color: var(--muted); background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.lang-switch button[aria-pressed="true"] { color: #000; background: var(--green-bright); }
+.lang-switch span { color: var(--line); }
+.nav .lang-switch { margin-left: 4px; font-family: var(--display); font-size: 0.6rem; line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.footer-links { color: var(--muted); }
+.footer-links a { color: inherit; }
+@media (max-width: 760px) { .nav .lang-switch { margin: 12px 0 0; font-size: 0.8rem; } }

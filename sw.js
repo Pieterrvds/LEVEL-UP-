@@ -5,8 +5,15 @@
 // - Supabase, payments and other servers are never touched.
 // - Push: shows the notifications the Edge Function "push" sends; tapping one opens the right page.
 // Bump VERSION to clear old caches.
-const VERSION = "levelup-v8";
-const PRECACHE = ["offline.html", "img/app/icon-192.png", "img/app/badge-96.png"];
+const VERSION = "levelup-v9";
+const PRECACHE = ["offline.html", "i18n-nl.js", "i18n.js", "img/app/icon-192.png", "img/app/badge-96.png"];
+
+// Push texts come from the server in English; in Dutch (the language the site last used) they are translated here
+try { importScripts("i18n-nl.js"); } catch { /* translations unavailable: show English */ }
+async function pushLang() {
+  try { const r = await (await caches.open("levelup-prefs")).match("lang"); return r ? await r.text() : "nl"; } catch { return "nl"; }
+}
+const trPush = (s, lang) => (s && lang === "nl" && self.LEVELUP_NL ? self.LEVELUP_NL.translate(s) ?? s : s);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -47,14 +54,14 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let msg = {};
   try { msg = event.data ? event.data.json() : {}; } catch { msg = { body: event.data?.text() }; }
-  event.waitUntil(self.registration.showNotification(msg.title || "LEVEL-UP", {
-    body: msg.body || "",
+  event.waitUntil(pushLang().then((lang) => self.registration.showNotification(trPush(msg.title, lang) || "LEVEL-UP", {
+    body: trPush(msg.body, lang) || "",
     icon: "img/app/icon-192.png",
     badge: "img/app/badge-96.png",
     tag: msg.tag || undefined,
     renotify: Boolean(msg.tag),
     data: { url: msg.url || "profile.html" }
-  }));
+  })));
 });
 
 self.addEventListener("notificationclick", (event) => {

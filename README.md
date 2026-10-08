@@ -25,6 +25,8 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `schedule.js`: weekly booking board and the "Up next" card on the home page
 - `admin.js`: admin dashboard
 - `script.js`, `shop.js`, `profile.js`: page-specific behaviour
+- `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
+- `privacy.html`: privacy policy (NL + EN)
 - `style.css` (shared + home), `shop.css`, `profile.css`, `admin.css`
 
 ## Server (Supabase)
@@ -263,6 +265,25 @@ month). Equal scores are ordered by who got there first. Your own row is highlig
 with how much XP you need to pass the player above you. Player name and level only, never email. Trainers are left
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
+
+## Dutch and English (NL | EN)
+The site is **Dutch by default**, with an **NL | EN** switch in the menu and the footer (remembered per browser;
+`?lang=en` or `?lang=nl` in a link sets it too). The pages are written in English; `i18n.js` translates every English
+text the moment it appears (pages, pop-ups, messages, errors from the server, the Q&A, the share-card image) with the
+dictionary in **`i18n-nl.js`**, and switches dates and numbers to Belgian Dutch. Push notifications are translated on
+the phone by the service worker (`sw.js`), in the language the site last used there. The admin dashboard and the
+emails stay English.
+- **New or changed English text?** Add a line to `i18n-nl.js`: `"English text": "Nederlandse tekst",`. A changing part
+  (name, number, date) is written as `{0}`, `{1}`… in both, e.g. `"{0} weeks in a row": "{0} weken op rij"`. Lines
+  made of parts joined with " · " are translated part by part. Text that must never be translated (user content)
+  can be wrapped in an element with `data-no-i18n`.
+- Rank names (Rookie … Legend), XP and LVL stay the same in both languages.
+
+## Privacy
+`privacy.html` (+ `privacy.css`) holds the privacy policy in Dutch and English (the site language decides which one
+shows). It's linked in every footer, the sign-up window and the health check. It describes what the site really
+stores and which services it uses; update it when something changes (new service, new data), and have it checked if
+you're unsure about anything legal.
 
 ## Reviews, Q&A and link preview
 - **Reviews** (home page, above the schedule): only real clients. Players with at least one completed session write
