@@ -272,6 +272,8 @@ On phones the middle button of the bottom bar (Scores) jumps here.
   approved review; it shows the first name and current profile photo. Editing a review sends it back for approval.
 - **Q&A** (`#faq`, home page): the answers are built in `script.js` (`renderFaq`) with the live prices and rules,
   so they change along when prices change in admin.
+- **Contact section:** three quick-action tiles (Call · WhatsApp · Route), the address card, and the socials as
+  large brand-coloured cards (Instagram, WhatsApp community, Facebook) with Follow / Join / Like buttons.
 - **Link preview:** `img/og-image.jpg` (1200×630) with the Open Graph tags on every page, used by WhatsApp,
   Facebook, LinkedIn… WhatsApp keeps old previews for a while; new shares show the new image.
 
