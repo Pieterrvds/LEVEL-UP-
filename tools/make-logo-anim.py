@@ -48,7 +48,7 @@ for i in range(STEPS + 1):
     frames['ur'].append(f'{pct}{{transform:translateY({-dy:.2f}px) rotate({rot_up(SH_R, (er[0], er[1] + dy)):.2f}deg)}}')
 
 kf = ''.join(f'@keyframes lu-{k}{{{"".join(v)}}}' for k, v in frames.items())
-WHITE, GREY = '#f4f4f4', '#bdbdbd'
+WHITE, GREY = '#fff', '#fff'   # pure black and white, like the logo
 style = f'''
 .lu-part{{transform-box:view-box}}
 .lu-body{{transform-origin:0 0}}
@@ -78,7 +78,6 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" class="l
 <path d="M198 163 H341 Q350 163 346 171 L301 192 V290 H241 V192 L194 171 Q190 163 198 163Z"/>
 <rect x="241" y="282" width="22" height="144" rx="11"/><rect x="277" y="282" width="22" height="144" rx="11"/>
 </g>
-<g fill="#111" stroke="{GREY}" stroke-width="3"><circle cx="{HAND_L[0]}" cy="{BAR_Y}" r="9"/><circle cx="{HAND_R[0]}" cy="{BAR_Y}" r="9"/></g>
 </svg>
 '''
 open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'img', 'logo-anim.svg'), 'w').write(svg)

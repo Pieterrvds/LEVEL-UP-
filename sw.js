@@ -5,7 +5,7 @@
 // - Supabase, payments and other servers are never touched.
 // - Push: shows the notifications the Edge Function "push" sends; tapping one opens the right page.
 // Bump VERSION to clear old caches.
-const VERSION = "levelup-v10";
+const VERSION = "levelup-v11";
 const PRECACHE = ["offline.html", "i18n-nl.js", "i18n.js", "img/app/icon-192.png", "img/app/badge-96.png"];
 
 // Push texts come from the server in English; in Dutch (the language the site last used) they are translated here

@@ -1740,41 +1740,35 @@ const LevelUp = (() => {
 
   // ---------- Animated logo ----------
   // The header/footer logo becomes img/logo-anim.svg (the stickman doing real pull-ups): 3 reps when the
-  // page opens and 3 more on hover or tap. The boot screen shows the same file as an <img>, looping.
-  // If the file can't be loaded the plain logo.JPG simply stays.
+  // page opens (the footer one when it scrolls into view) and 3 more on hover or tap. It stays an <img>
+  // (not inline SVG) so phones draw it sharp: Safari blurs animated inline SVG parts into grey.
+  // The boot screen shows the same file, looping. If the file can't be loaded the plain logo.JPG stays.
   function animateLogos() {
     const imgs = document.querySelectorAll("img.brand-logo");
-    if (!imgs.length || !window.fetch) return;
-    fetch("img/logo-anim.svg?v=1").then((r) => (r.ok ? r.text() : Promise.reject())).then((text) => {
+    if (!imgs.length || !window.fetch || !window.Blob) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    fetch("img/logo-anim.svg?v=2").then((r) => (r.ok ? r.text() : Promise.reject())).then((text) => {
+      const reps = text.replace("var(--lu-reps,infinite)", "3");
+      if (reps === text) return;
       imgs.forEach((img, i) => {
-        const box = document.createElement("span");
-        box.innerHTML = text;
-        const svg = box.querySelector("svg");
-        if (!svg) return;
-        if (i > 0) svg.querySelector("style")?.remove(); // one copy of the animation CSS is enough
-        svg.classList.remove("lu-anim");
-        svg.classList.add("brand-logo");
-        svg.removeAttribute("role");
-        svg.setAttribute("aria-hidden", "true");
-        svg.style.setProperty("--lu-reps", "3");
-        img.replaceWith(svg);
-        let playing = false;
+        let playing = false, url = "";
         const play = () => {
           if (playing) return;
           playing = true;
-          svg.classList.remove("lu-anim");
-          void svg.getBoundingClientRect(); // restart the keyframes
-          svg.classList.add("lu-anim");
+          const next = URL.createObjectURL(new Blob([reps], { type: "image/svg+xml" })); // a fresh copy restarts the reps
+          const pre = new Image();
+          pre.onload = () => { img.src = next; if (url) URL.revokeObjectURL(url); url = next; };
+          pre.src = next;
+          setTimeout(() => { playing = false; }, 3 * 1600 + 300);
         };
-        svg.querySelector(".lu-body")?.addEventListener("animationend", () => { playing = false; });
-        const host = svg.closest("a, .brand") || svg;
+        const host = img.closest("a, .brand") || img;
         host.addEventListener("mouseenter", play);
         host.addEventListener("touchstart", play, { passive: true });
-        if (i === 0 || !window.IntersectionObserver) { requestAnimationFrame(play); return; }
-        const seen = new IntersectionObserver((entries) => { // the footer one starts when it scrolls into view
+        if (i === 0 || !window.IntersectionObserver) { play(); return; }
+        const seen = new IntersectionObserver((entries) => {
           if (entries.some((e) => e.isIntersecting)) { seen.disconnect(); play(); }
         });
-        seen.observe(svg);
+        seen.observe(img);
       });
     }).catch(() => {});
   }

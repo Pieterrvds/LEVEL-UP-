@@ -112,9 +112,10 @@ parallel) and closes as soon as the data is in; CSS hides it after 12 s as a saf
 
 ### Animated logo
 `img/logo-anim.svg` is the logo stickman doing real pull-ups (CSS keyframes inside the SVG, 1.6 s per rep). The
-loading screen shows it as an `<img>`, looping. In the header and footer `game.js` (`animateLogos`) swaps
-`img.brand-logo` for the inline SVG: 3 reps when the page opens (the footer one when it scrolls into view) and 3 more
-on hover or tap. Without the file the plain `logo.JPG` stays; "reduce motion" on the phone/PC stops the animation.
+loading screen shows it as an `<img>`, looping. In the header and footer `game.js` (`animateLogos`) points
+`img.brand-logo` at a copy that does 3 reps: when the page opens (the footer one when it scrolls into view) and again on
+hover or tap. It stays an `<img>` on purpose: Safari draws animated inline SVG blurry/grey on phones. Without the file
+the plain `logo.JPG` stays; "reduce motion" on the phone/PC keeps the logo still.
 To change the movement, edit and rerun `python3 tools/make-logo-anim.py` (pose, rise height and timing are at its top).
 
 ## App (installable)
