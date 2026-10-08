@@ -333,7 +333,11 @@ const LevelUp = (() => {
       })),
       packs: (data.packs || []).map(normalisePack),
       rewards: normaliseRewards(data.rewards),
-      introEligible: Boolean(data.introEligible)
+      introEligible: Boolean(data.introEligible),
+      streak: { weeks: Number(data.streak?.weeks) || 0, thisWeek: Boolean(data.streak?.thisWeek),
+                planned: Boolean(data.streak?.planned), atRisk: Boolean(data.streak?.atRisk) },
+      potm: data.potm || null,                 // { month, xp } when you won last month
+      potmWins: Number(data.potmWins) || 0
     };
   }
 
@@ -393,6 +397,7 @@ const LevelUp = (() => {
     }
     if (announce && before && player) announceDiff(before, player);
     if (player) {
+      checkPromotion();
       announceBookingChanges();
       await loadCoachBookings();
       claimBookingNotices();
@@ -570,10 +575,13 @@ const LevelUp = (() => {
   }
 
   const scoreRows = (rows) => (rows || []).map((r) => ({
-    place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me), avatarUrl: r.avatar_url || null
+    place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me), avatarUrl: r.avatar_url || null,
+    potm: Boolean(r.potm)
   }));
+  let playerOfMonth = null;
   async function loadLeaderboard(period = "all") {
     try {
+      if (period === "all") call("player_of_month").then((r) => { playerOfMonth = r || null; emit(); }).catch(() => {});
       const rows = scoreRows(await call("leaderboard", { p_period: period }));
       if (period === "month") leaderboardMonth = rows;
       else {
@@ -1786,7 +1794,7 @@ const LevelUp = (() => {
     if (endLevel > startLevel) {
       const rank = rankFor(endLevel);
       const rankUp = rankFor(startLevel).title !== rank.title;
-      toast({ title: "Level up!", text: rankUp ? `LVL ${endLevel} · New rank: ${rank.title}` : `You reached LVL ${endLevel}`, icon: "⬆" });
+      if (!rankUp) toast({ title: "Level up!", text: `You reached LVL ${endLevel}`, icon: "⬆" }); // a new rank gets the promotion screen
     }
   }
 
@@ -1798,6 +1806,173 @@ const LevelUp = (() => {
     const url = p.avatarUrl || p.avatar;
     if (url) return `<span class="avatar has-photo ${size}" data-tier="${tier}" aria-hidden="true"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"></span>`;
     return `<span class="avatar ${size}" data-tier="${tier}" aria-hidden="true">${letter}</span>`;
+  }
+
+  // ---------- Player card image (Share my card) and the promotion screen ----------
+  const TIER_COLORS = ["#7cff6b", "#4fc3f7", "#c77dff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
+  const SITE_LINK = "pieterrvds.github.io/LEVEL-UP-";
+  const completedSessions = (p) => (p?.bookings || []).filter((b) => b.status === "completed").length;
+  const loadImage = (src, cors) => new Promise((resolve) => {
+    const img = new Image();
+    if (cors) img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  // A 1080×1350 image (Instagram portrait) in the style of an Ultimate Team card
+  async function drawPlayerCard(p = player) {
+    if (!p) throw new Error("Log in first.");
+    const prog = progress(p.xp);
+    const tier = RANKS.indexOf(prog.rank);
+    const color = TIER_COLORS[Math.max(0, tier)];
+    await Promise.all([
+      document.fonts?.load("italic 800 100px 'Barlow Condensed'"),
+      document.fonts?.load("600 40px Inter")
+    ].map((x) => x?.catch?.(() => {})));
+    const [photo, logo] = await Promise.all([p.avatarUrl ? loadImage(p.avatarUrl, true) : null, loadImage("img/logo.JPG")]);
+    const W = 1080, H = 1350;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const display = (size, weight = 800) => `italic ${weight} ${size}px 'Barlow Condensed', 'Arial Narrow', sans-serif`;
+    const sans = (size, weight = 600) => `${weight} ${size}px Inter, system-ui, sans-serif`;
+    const fit = (text, font, size, max) => { let s = size; do { g.font = font(s); s -= 4; } while (g.measureText(text).width > max && s > 20); };
+    const rounded = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+
+    // background with a light streak
+    g.fillStyle = "#070707"; g.fillRect(0, 0, W, H);
+    g.fillStyle = "rgba(255,255,255,0.035)";
+    g.beginPath(); g.moveTo(W * 0.62, 0); g.lineTo(W * 0.74, 0); g.lineTo(W * 0.34, H); g.lineTo(W * 0.22, H); g.fill();
+    // card shape with cut top corners
+    const X = 90, Y = 80, CW = 900, CH = 1150, cut = 64;
+    const shape = () => { g.beginPath(); g.moveTo(X + cut, Y); g.lineTo(X + CW - cut, Y); g.lineTo(X + CW, Y + cut); g.lineTo(X + CW, Y + CH); g.lineTo(X, Y + CH); g.lineTo(X, Y + cut); g.closePath(); };
+    const grad = g.createLinearGradient(X, Y, X + CW * 0.7, Y + CH);
+    grad.addColorStop(0, color); grad.addColorStop(0.32, "#1c1c1c"); grad.addColorStop(1, "#000");
+    g.save(); shape(); g.fillStyle = grad; g.fill(); g.clip();
+    g.globalAlpha = 0.18; g.fillStyle = color; g.beginPath(); g.moveTo(X + CW * 0.55, Y); g.lineTo(X + CW * 0.7, Y); g.lineTo(X + CW * 0.25, Y + CH); g.lineTo(X + CW * 0.1, Y + CH); g.fill(); g.globalAlpha = 1;
+    g.restore();
+    shape(); g.lineWidth = 5; g.strokeStyle = color; g.stroke();
+
+    // level + rank (top left), logo (top right)
+    g.fillStyle = "#fff"; g.textBaseline = "alphabetic"; g.textAlign = "left";
+    g.font = display(190); g.fillText(String(prog.level), X + 60, Y + 230);
+    g.font = display(46); g.fillStyle = "rgba(255,255,255,0.85)"; g.fillText("LVL", X + 66, Y + 285);
+    g.fillStyle = color; g.font = display(54); g.fillText(prog.rank.title.toUpperCase(), X + 66, Y + 345);
+    if (logo) { g.save(); rounded(X + CW - 190, Y + 70, 120, 120, 20); g.clip(); g.drawImage(logo, X + CW - 190, Y + 70, 120, 120); g.restore(); }
+
+    // photo or letter
+    const PS = 480, PX = X + CW - PS - 70, PY = Y + 230;
+    g.save(); rounded(PX, PY, PS, PS, 36); g.clip();
+    if (photo) {
+      const s = Math.min(photo.width, photo.height);
+      g.drawImage(photo, (photo.width - s) / 2, (photo.height - s) / 2, s, s, PX, PY, PS, PS);
+    } else {
+      g.fillStyle = color; g.fillRect(PX, PY, PS, PS);
+      g.fillStyle = "#000"; g.font = display(300); g.textAlign = "center";
+      g.fillText((p.name || "?").trim().charAt(0).toUpperCase(), PX + PS / 2, PY + PS / 2 + 105); g.textAlign = "left";
+    }
+    g.restore();
+    rounded(PX, PY, PS, PS, 36); g.lineWidth = 4; g.strokeStyle = "rgba(255,255,255,0.18)"; g.stroke();
+    if (p.potm) {
+      const label = "👑 PLAYER OF THE MONTH";
+      g.font = display(40); const w = g.measureText(label).width + 44;
+      rounded(PX + PS / 2 - w / 2, PY + PS - 34, w, 68, 12); g.fillStyle = "#ffd23f"; g.fill();
+      g.fillStyle = "#000"; g.textAlign = "center"; g.fillText(label, PX + PS / 2, PY + PS + 14); g.textAlign = "left";
+    }
+
+    // name
+    g.fillStyle = "#fff"; g.textAlign = "center";
+    fit(p.name.toUpperCase(), display, 128, CW - 120); g.fillText(p.name.toUpperCase(), X + CW / 2, Y + 870);
+    g.fillStyle = color; g.fillRect(X + CW / 2 - 140, Y + 900, 280, 6);
+
+    // stats
+    const stats = [
+      [p.xp.toLocaleString("en-US"), "TOTAL XP"],
+      [String(completedSessions(p)), "SESSIONS"],
+      [p.streak?.weeks >= 2 ? `🔥 ${p.streak.weeks}` : "–", "WEEK STREAK"]
+    ];
+    stats.forEach(([v, l], i) => {
+      const cx = X + CW / 2 + (i - 1) * 290;
+      g.fillStyle = "#fff"; g.font = display(84); g.fillText(v, cx, Y + 1010);
+      g.fillStyle = "rgba(255,255,255,0.6)"; g.font = sans(28, 700); g.fillText(l, cx, Y + 1055);
+    });
+    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(X + CW / 2 - 145, Y + 945, 2, 120); g.fillRect(X + CW / 2 + 145, Y + 945, 2, 120);
+
+    // footer: brand line inside the card, the link under it
+    g.fillStyle = color; g.font = display(38); g.fillText("LEVEL-UP PERSONAL TRAINING · AALST", X + CW / 2, Y + CH - 45);
+    g.fillStyle = "rgba(255,255,255,0.6)"; g.font = sans(30, 600); g.fillText(SITE_LINK, W / 2, H - 42);
+    g.textAlign = "left";
+    return new Promise((resolve) => c.toBlob(resolve, "image/png"));
+  }
+
+  // Preview + Share (phones: Instagram, WhatsApp…) or Save image
+  async function shareCard() {
+    const blob = await drawPlayerCard();
+    const file = new File([blob], "levelup-player-card.png", { type: "image/png" });
+    const url = URL.createObjectURL(blob);
+    const prog = progress(player.xp);
+    const text = `LVL ${prog.level} ${prog.rank.title} at LEVEL-UP 💪 ${SITE_LINK}`;
+    let dlg = document.getElementById("shareDialog");
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.id = "shareDialog"; dlg.className = "auth-dialog share-dialog"; dlg.setAttribute("aria-labelledby", "shareTitle");
+      document.body.appendChild(dlg);
+      dlg.addEventListener("click", (e) => { if (e.target === dlg || e.target.closest("[data-close]")) dlg.close(); });
+      dlg.addEventListener("close", () => { const img = dlg.querySelector("img"); if (img) URL.revokeObjectURL(img.src); });
+    }
+    const canShare = Boolean(navigator.canShare?.({ files: [file] }));
+    dlg.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <p class="section-kicker">Your player card</p>
+      <h2 class="auth-title" id="shareTitle">Share my card</h2>
+      <img class="share-preview" src="${url}" alt="Your LEVEL-UP player card">
+      <div class="btn-row">
+        ${canShare ? `<button type="button" class="btn btn-primary" data-share-now>Share ▶</button>` : ""}
+        <a class="btn ${canShare ? "btn-ghost" : "btn-primary"}" href="${url}" download="levelup-player-card.png">Save image</a>
+      </div>`;
+    dlg.querySelector("[data-share-now]")?.addEventListener("click", () => {
+      navigator.share({ files: [file], title: "My LEVEL-UP player card", text }).catch(() => {});
+    });
+    if (!dlg.open) dlg.showModal();
+  }
+
+  // A new rank since this phone last saw this player: full-screen promotion card in the new colour
+  function checkPromotion() {
+    if (!player) return;
+    const tier = RANKS.indexOf(rankFor(levelFromXp(player.xp)));
+    const key = `levelup.rankSeen.${player.id}`;
+    const seen = read(key, null);
+    write(key, tier);
+    if (seen !== null && tier > Number(seen)) setTimeout(() => showPromotion(), 600);
+  }
+
+  function showPromotion(p = player) {
+    if (!p || document.querySelector(".promo")) return;
+    const prog = progress(p.xp);
+    const tier = RANKS.indexOf(prog.rank);
+    const el = document.createElement("div");
+    el.className = "promo";
+    el.style.setProperty("--c", TIER_COLORS[Math.max(0, tier)]);
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", `Promoted to ${prog.rank.title}`);
+    el.innerHTML = `
+      <div class="promo-rays" aria-hidden="true"></div>
+      <div class="promo-card">
+        <p class="promo-kicker">Promoted</p>
+        ${avatarHtml(p, "xl")}
+        <h2 class="promo-rank">${esc(prog.rank.title)}</h2>
+        <p class="promo-level">LVL ${prog.level} · ${esc(p.name)}</p>
+        <p class="promo-note">New rank, new colour. Keep it up!</p>
+      </div>
+      <div class="promo-actions">
+        <button type="button" class="btn btn-primary" data-promo-share>Share my card ▶</button>
+        <button type="button" class="btn btn-ghost" data-promo-close>Continue</button>
+      </div>`;
+    const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 250); };
+    el.querySelector("[data-promo-close]").addEventListener("click", close);
+    el.querySelector("[data-promo-share]").addEventListener("click", () => { close(); shareCard().catch((e) => toast({ title: "Card not made", text: e.message, icon: "✕" })); });
+    document.body.appendChild(el);
+    el.querySelector("[data-promo-close]").focus({ preventScroll: true });
   }
 
   // ---------- Profile photo: square-cropped and shrunk in the browser, then stored in Storage "avatars" ----------
@@ -2302,7 +2477,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

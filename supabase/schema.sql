@@ -110,6 +110,7 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists show_on_leaderboard boolean not null default true;
 -- Profile photo: a public URL in the Storage bucket "avatars" (folder = the player's id)
 alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists streak_reminded_week date;  -- training streak: last week a reminder went out
 
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
@@ -119,6 +120,15 @@ create table if not exists public.xp_log (
   created_at timestamptz not null default now()
 );
 create index if not exists xp_log_user_idx on public.xp_log (user_id, created_at desc);
+
+-- Player of the Month: one row per month (the winner of the "This month" high scores), settled on the 1st
+create table if not exists public.monthly_awards (
+  month date primary key,                 -- first day of the month that was won
+  user_id uuid references public.profiles (id) on delete set null,
+  xp integer not null default 0,          -- XP earned in that month
+  created_at timestamptz not null default now()
+);
+alter table public.monthly_awards enable row level security;
 
 create table if not exists public.workouts (
   id bigint generated always as identity primary key,
@@ -612,6 +622,46 @@ create trigger on_auth_user_created
 -- ---------------------------------------------------------
 -- Player data in one call (shape used by the website)
 -- ---------------------------------------------------------
+-- ---------------------------------------------------------
+-- Player of the Month and training streaks
+-- ---------------------------------------------------------
+-- Month score = XP earned in that month (Brussels time); the Player of the Month bonus itself doesn't count.
+create or replace function public._month_xp(p_user uuid, p_month date)
+returns integer language sql stable security definer set search_path = public as $$
+  select coalesce(sum(x.amount), 0)::int from public.xp_log x
+  where x.user_id = p_user and x.reason <> 'Player of the Month'
+    and x.created_at >= (p_month::timestamp at time zone 'Europe/Brussels')
+    and x.created_at < ((p_month + interval '1 month')::timestamp at time zone 'Europe/Brussels');
+$$;
+
+-- Last month's winner (null when nobody earned XP), for the crown on the player card and the high scores
+create or replace function public._potm_month()
+returns date language sql stable as $$
+  select (date_trunc('month', now() at time zone 'Europe/Brussels') - interval '1 month')::date;
+$$;
+
+-- Weeks in a row (Monday to Sunday, Brussels) with at least one completed session.
+-- This week counts as soon as it has a completed session; until then the streak runs up to last week.
+create or replace function public._streak(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with w as (select date_trunc('week', (now() at time zone 'Europe/Brussels')::date)::date as w0),
+  done as (select distinct date_trunc('week', k.day)::date as wk from public.bookings k
+           where k.user_id = p_user and k.status = 'completed'),
+  this_week as (select exists (select 1 from done, w where done.wk = w.w0) as done,
+                       exists (select 1 from public.bookings k, w where k.user_id = p_user
+                               and k.status in ('pending', 'confirmed', 'awaiting_payment')
+                               and k.day between w.w0 and w.w0 + 6 and public._slot_start(k.day, k.hour) > now()) as planned),
+  start as (select case when (select done from this_week) then w0 else w0 - 7 end as s from w),
+  run as (select coalesce(min(g), 105) as weeks from generate_series(0, 105) g, start
+          where not exists (select 1 from done where done.wk = start.s - 7 * g))
+  select jsonb_build_object(
+    'weeks', run.weeks,
+    'thisWeek', tw.done,
+    'planned', tw.planned,
+    'atRisk', run.weeks >= 1 and not tw.done and not tw.planned)
+  from run, this_week tw;
+$$;
+
 create or replace function public._player_json(p_user uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
@@ -646,6 +696,10 @@ returns jsonb language sql stable security definer set search_path = public as $
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
     'healthForm', public._health_brief(p.id),
+    'streak', public._streak(p.id),
+    'potm', (select jsonb_build_object('month', a.month, 'xp', a.xp) from public.monthly_awards a
+             where a.user_id = p.id and a.month = public._potm_month()),
+    'potmWins', (select count(*) from public.monthly_awards a where a.user_id = p.id),
     'rewards', public._rewards_json(p.id),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
                                  and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
@@ -659,6 +713,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null then return null; end if;
   perform public._expire_requests();
+  perform public._settle_player_of_month();
   -- profile can be missing if the account was made before this schema existed
   insert into public.profiles (id, email, name)
   select u.id, lower(u.email), left(coalesce(nullif(trim(u.raw_user_meta_data ->> 'name'), ''), split_part(u.email, '@', 1)), 24)
@@ -1086,15 +1141,12 @@ $$;
 drop function if exists public.leaderboard();
 drop function if exists public.leaderboard(text);
 create or replace function public.leaderboard(p_period text default 'all')
-returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean, avatar_url text)
+returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean, avatar_url text, potm boolean)
 language sql stable security definer set search_path = public as $$
   with players as (
     select p.id, p.name, p.xp as total_xp, p.created_at, p.avatar_url,
-      case when p_period = 'month' then coalesce((
-        select sum(x.amount) from public.xp_log x
-        where x.user_id = p.id
-          and x.created_at >= (date_trunc('month', now() at time zone 'Europe/Brussels') at time zone 'Europe/Brussels')
-      ), 0)::int else p.xp end as score
+      case when p_period = 'month' then public._month_xp(p.id, date_trunc('month', now() at time zone 'Europe/Brussels')::date)
+           else p.xp end as score
     from public.profiles p
     where p.show_on_leaderboard
       and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email))
@@ -1102,7 +1154,8 @@ language sql stable security definer set search_path = public as $$
     select *, row_number() over (order by score desc, created_at) as place from players  -- equal scores: who got there first
     where p_period <> 'month' or score > 0
   )
-  select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false), r.avatar_url
+  select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false), r.avatar_url,
+    exists (select 1 from public.monthly_awards a where a.user_id = r.id and a.month = public._potm_month())
   from ranked r
   where r.place <= 25 or r.id = auth.uid()
   order by r.place;
@@ -1898,6 +1951,77 @@ returns text language sql stable security definer set search_path = public as $$
 $$;
 
 -- Edge Function only (service role): reminders for tomorrow's / today's confirmed sessions
+-- On the 1st of the month (the first time anyone loads their profile, or the 10-minute push job runs):
+-- crown last month's winner of the "This month" high scores, give them +250 XP and tell everyone.
+create or replace function public._settle_player_of_month()
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  m date := public._potm_month();
+  winner record;
+  s record;
+begin
+  if exists (select 1 from public.monthly_awards where month = m) then return; end if;
+  select p.id, p.name, public._month_xp(p.id, m) as xp into winner
+  from public.profiles p
+  where p.show_on_leaderboard
+    and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email))
+  order by public._month_xp(p.id, m) desc, p.created_at
+  limit 1;
+  if winner.id is null or coalesce(winner.xp, 0) <= 0 then
+    insert into public.monthly_awards (month, user_id, xp) values (m, null, 0) on conflict do nothing;
+    return;
+  end if;
+  insert into public.monthly_awards (month, user_id, xp) values (m, winner.id, winner.xp) on conflict do nothing;
+  if not found then return; end if;  -- someone else settled it a moment earlier
+  perform public._grant_xp(winner.id, 250, 'Player of the Month');
+  for s in select distinct user_id from public.push_subscriptions where user_id is not null loop
+    if s.user_id = winner.id then
+      perform public._push(s.user_id, '👑 You''re Player of the Month!',
+        'Most XP in ' || trim(to_char(m, 'FMMonth')) || '. +250 XP and the crown on your card.', 'profile.html', 'potm-' || m);
+    else
+      perform public._push(s.user_id, '👑 ' || winner.name || ' is Player of the Month',
+        trim(to_char(m, 'FMMonth')) || ': ' || winner.xp || ' XP. A new month just started: go for the crown!', 'index.html#highScores', 'potm-' || m);
+    end if;
+  end loop;
+end $$;
+
+-- Last month's winner for the high scores banner (anyone can read it)
+create or replace function public.player_of_month()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('month', a.month, 'xp', a.xp, 'name', p.name, 'avatarUrl', p.avatar_url,
+                            'isMe', coalesce(p.id = auth.uid(), false))
+  from public.monthly_awards a join public.profiles p on p.id = a.user_id
+  where a.month = public._potm_month();
+$$;
+
+-- Thursday evening: a gentle nudge to players whose streak (2+ weeks) ends on Sunday without a session this week
+drop function if exists public._push_streak_reminders();
+create or replace function public._push_streak_reminders(p_now timestamptz default now())
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  local timestamp := p_now at time zone 'Europe/Brussels';
+  w0 date := date_trunc('week', local)::date;
+  u record;
+  st jsonb;
+  n integer := 0;
+begin
+  if extract(isodow from local) <> 4 or extract(hour from local) < 18 then return 0; end if;
+  for u in
+    select distinct k.user_id from public.bookings k join public.profiles p on p.id = k.user_id
+    where k.status = 'completed' and k.day between w0 - 7 and w0 - 1
+      and p.streak_reminded_week is distinct from w0
+  loop
+    st := public._streak(u.user_id);
+    if (st ->> 'weeks')::int >= 2 and (st ->> 'atRisk')::boolean then
+      perform public._push(u.user_id, '🔥 Keep your ' || (st ->> 'weeks') || '-week streak',
+        'No session yet this week. Book one before Sunday to keep it going.', 'index.html#schedule', 'streak-' || w0);
+      n := n + 1;
+    end if;
+    update public.profiles set streak_reminded_week = w0 where id = u.user_id;
+  end loop;
+  return n;
+end $$;
+
 create or replace function public.push_due_reminders()
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -1917,6 +2041,8 @@ begin
     update public.bookings set reminder_pushed_at = now() where id = b.id;
     n := n + 1;
   end loop;
+  perform public._settle_player_of_month();
+  n := n + public._push_streak_reminders();
   return n;
 end $$;
 
@@ -2034,6 +2160,9 @@ grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
+grant execute on function public.player_of_month() to anon, authenticated;
+revoke execute on function public._settle_player_of_month() from public, anon, authenticated;
+revoke execute on function public._push_streak_reminders(timestamptz) from public, anon, authenticated;
 revoke execute on function public.set_avatar(text) from public, anon;
 revoke execute on function public.admin_clear_avatar(uuid) from public, anon;
 grant execute on function public.set_avatar(text) to authenticated;

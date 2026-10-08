@@ -652,12 +652,28 @@ const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7cff6b", "#ffd23f", "#b46cff"];
 const HS_TIER_COLORS = ["#7cff6b", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
 const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "TH" : ["TH", "ST", "ND", "RD"][n % 10] || "TH"}`;
 
+// Player of the Month: last month's winner of the "This month" board (crowned on the 1st)
+const potmTag = (r) => r.potm ? ` <span class="hs-potm-tag" title="Player of the Month">👑 POTM</span>` : "";
+function renderPotm() {
+  const box = document.getElementById("hsPotm");
+  const w = LevelUp.getPlayerOfMonth?.();
+  if (!box) return;
+  box.hidden = !w;
+  if (!w) return;
+  const month = new Date(w.month + "T12:00:00").toLocaleDateString("en-GB", { month: "short" });
+  box.innerHTML = `
+    <span class="hs-potm-av">${w.avatarUrl ? `<img src="${esc(w.avatarUrl)}" alt="" loading="lazy" decoding="async">` : esc(w.name.trim().charAt(0).toUpperCase())}</span>
+    <span class="hs-potm-text"><small>👑 Player of the Month</small><b>${esc(w.name)}${w.isMe ? " (you!)" : ""}</b></span>
+    <span class="hs-potm-xp">${Number(w.xp).toLocaleString("en-US")} XP<small>in ${esc(month)}</small></span>`;
+}
+
 function renderHighScores() {
   const list = document.getElementById("hsList");
   const podium = document.getElementById("hsPodium");
   const foot = document.getElementById("hsFoot");
   if (!list || !LevelUp.isReady()) return;
   document.querySelectorAll("[data-hs-period]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.hsPeriod === hsPeriod)));
+  renderPotm();
   const rows = LevelUp.getLeaderboard(hsPeriod);
   if (!rows) {
     podium.innerHTML = "";
@@ -691,7 +707,7 @@ function renderHighScores() {
       return `
         <li class="hs-row ${r.isMe ? "me" : ""}" style="--c:${HS_ROW_COLORS[k % HS_ROW_COLORS.length]};--tier:${HS_TIER_COLORS[tier] || HS_TIER_COLORS[0]}">
           <span class="hs-rank">${r.isMe ? `<b aria-hidden="true">▶</b>` : ""}${ordinal(r.place)}</span>
-          <span class="hs-name">${r.avatarUrl ? `<img class="hs-face" src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : `<i aria-hidden="true">${esc(r.name.trim().charAt(0).toUpperCase())}</i>`}<span>${esc(r.name)}</span>${r.isMe ? `<span class="hs-you">You</span>` : ""}</span>
+          <span class="hs-name">${r.avatarUrl ? `<img class="hs-face" src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : `<i aria-hidden="true">${esc(r.name.trim().charAt(0).toUpperCase())}</i>`}<span>${esc(r.name)}</span>${potmTag(r)}${r.isMe ? `<span class="hs-you">You</span>` : ""}</span>
           <span class="hs-lvl">${level(r)}</span>
           <span class="hs-score">${score(r)}</span>
         </li>`;

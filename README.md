@@ -264,6 +264,22 @@ with how much XP you need to pass the player above you. Player name and level on
 out (their level is on their card). Players can hide themselves in their profile under Account.
 On phones the middle button of the bottom bar (Scores) jumps here.
 
+## Player card, promotions, Player of the Month and streaks
+- **Share my card** (account page, under the player card): makes a 1080×1350 image in Ultimate Team style (photo,
+  level, rank colour, total XP, sessions, streak, crown) with the site link. Phones open the share sheet
+  (Instagram, WhatsApp…); computers get "Save image". Made in the browser (`drawPlayerCard` in `game.js`).
+- **Promotion screen:** when a player reaches a new rank, a full-screen card reveal in the new colour appears once
+  (per phone), with "Share my card". The rank last seen is remembered in the browser.
+- **Player of the Month:** on the 1st, last month's #1 of the "This month" high scores (players only, not hidden)
+  gets the crown for a month, +250 XP (this bonus doesn't count for the new month), and everyone with notifications
+  gets "👑 Jonas is Player of the Month". It's settled by the first profile load of the month or by the 10-minute
+  push job (`monthly_awards`, `_settle_player_of_month`). The winner shows in a banner on the high scores, with a
+  crown chip on their card and share image.
+- **Training streak:** weeks in a row (Monday–Sunday) with at least one completed session, shown from 2 weeks
+  ("🔥 4 weeks in a row") on the player card and share image. Without a session (done or booked) this week, the
+  card shows a gentle note, and on Thursday evening the push job sends one reminder ("Keep your 4-week streak").
+  The reminder needs the 10-minute push job from "Push notifications" step 4.
+
 ## Style (FC Ultimate) and the backup of the old look
 The site looks like a sports game menu: bold slanted letters (Barlow Condensed), slanted buttons and chips, rounded
 cards with thin borders and soft shadows, and an Ultimate Team style player card on the account page (in the rank

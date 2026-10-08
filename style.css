@@ -2276,3 +2276,66 @@ input, select, textarea { border-radius: 8px; }
 .toast { border-radius: 12px; border-width: 1px; }
 .app-banner { border-radius: 12px; border-width: 1px; }
 .role-picker label { border-radius: 10px; }
+
+/* ---------- Player of the Month (high scores) ---------- */
+.hs-potm { display: flex; align-items: center; gap: 12px; margin: 14px auto 4px; padding: 10px 14px; max-width: 460px;
+  background: linear-gradient(100deg, rgba(255, 210, 63, 0.22), rgba(255, 210, 63, 0.04)); border: 1px solid rgba(255, 210, 63, 0.55); border-radius: 12px; }
+.hs-potm[hidden] { display: none; }
+.hs-potm-av { flex: none; width: 46px; height: 46px; display: grid; place-items: center; overflow: hidden; border-radius: 10px; border: 2px solid var(--gold);
+  background: var(--gold); color: #000; font-family: var(--display); font-size: 1rem; line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.hs-potm-av img { width: 100%; height: 100%; object-fit: cover; }
+.hs-potm-text { display: grid; min-width: 0; text-align: left; }
+.hs-potm-text small { color: var(--gold); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.hs-potm-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; }
+.hs-potm-xp { margin-left: auto; flex: none; display: grid; justify-items: end; font-family: var(--display); font-size: 0.7rem; color: var(--gold); line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.hs-potm-xp small { font-family: var(--sans); font-size: 0.68rem; font-style: normal; font-weight: 600; color: var(--muted); font-size-adjust: none; line-height: 1.3; }
+.hs-potm-text small { white-space: nowrap; }
+.hs-potm-tag { flex: none; padding: 1px 6px; font-size: 0.62rem; font-weight: 800; color: #000; background: var(--gold); border-radius: 4px; white-space: nowrap; }
+
+/* ---------- Player card extras: crown, streak, share ---------- */
+.card-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 14px; }
+.card-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 0.82rem; font-weight: 700;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid var(--frame); transform: skewX(var(--skew)); }
+.potm-chip { color: #000; background: var(--gold); border-color: var(--gold); }
+.streak-chip { color: #ffb36b; border-color: rgba(255, 138, 61, 0.55); background: rgba(255, 138, 61, 0.12); }
+.streak-nudge { margin: -4px 0 14px; font-size: 0.86rem; color: var(--muted); }
+.share-card-btn { grid-column: 1 / -1; justify-self: start; }
+.share-dialog { max-width: 440px; }
+.share-preview { width: 100%; height: auto; margin: 4px 0 16px; border-radius: 12px; border: 1px solid var(--frame); }
+
+/* ---------- Promotion screen (new rank) ---------- */
+.promo { position: fixed; inset: 0; z-index: 4000; display: grid; place-items: center; align-content: center; gap: 22px; padding: 24px 16px;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c) 35%, transparent), rgba(0, 0, 0, 0.94) 62%);
+  animation: promo-in 0.3s ease-out both; overflow: hidden; }
+.promo.out { animation: promo-out 0.25s ease-in both; }
+.promo-rays { position: absolute; inset: -50%; z-index: -1; opacity: 0.35; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--c) 55%, transparent) 0 8deg, transparent 8deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0, transparent 60%); mask-image: radial-gradient(circle, #000 0, transparent 60%);
+  animation: promo-spin 18s linear infinite; }
+.promo-card { position: relative; width: min(300px, 82vw); padding: 30px 22px 26px; text-align: center;
+  background: linear-gradient(160deg, var(--c) 0%, color-mix(in srgb, var(--c) 25%, #151515) 42%, #000 100%);
+  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%, 0 22px);
+  box-shadow: 0 0 80px color-mix(in srgb, var(--c) 60%, transparent);
+  animation: promo-card 0.9s cubic-bezier(0.2, 1.3, 0.4, 1) 0.15s both; }
+.promo-card .avatar.xl { margin: 14px auto 16px; width: 120px; height: 120px; font-size: 2.6rem; --tier-color: var(--c); box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5); }
+.promo-kicker, .promo-rank, .promo-level { margin: 0; font-family: var(--display); text-transform: uppercase; line-height: 1.9;
+  font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
+.promo-kicker { font-size: 0.8rem; letter-spacing: 0.3em; color: #000; background: #fff; display: inline-block; padding: 0 14px; border-radius: 4px; }
+.promo-rank { font-size: 2.2rem; color: #fff; text-shadow: 0 0 30px var(--c); }
+.promo-level { font-size: 0.8rem; color: rgba(255, 255, 255, 0.85); }
+.promo-note { margin: 8px 0 0; font-size: 0.85rem; color: rgba(255, 255, 255, 0.75); }
+.promo-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; animation: promo-in 0.4s ease-out 0.9s both; }
+.promo .btn-primary { --btn-bg: var(--c); }
+@keyframes promo-in { from { opacity: 0; } }
+@keyframes promo-out { to { opacity: 0; } }
+@keyframes promo-spin { to { transform: rotate(360deg); } }
+@keyframes promo-card {
+  0% { transform: perspective(900px) rotateY(90deg) scale(0.6); opacity: 0; filter: brightness(3); }
+  60% { transform: perspective(900px) rotateY(-8deg) scale(1.04); opacity: 1; filter: brightness(1.4); }
+  100% { transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .promo, .promo-card, .promo-rays, .promo-actions { animation: none; }
+}

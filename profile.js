@@ -37,6 +37,7 @@ function renderHeader(player, p) {
         <p class="section-kicker">Player · since ${since}</p>
         <h1 class="player-header-name">${esc(player.name)}</h1>
         <p class="player-header-rank"><span class="rank-badge" data-tier="${RANKS.indexOf(p.rank)}">${p.rank.title}</span> LVL ${p.level}</p>
+        ${headerBadges(player)}
         <div class="xp-bar big" role="progressbar" aria-valuemin="0" aria-valuemax="${p.needed}" aria-valuenow="${p.into}" aria-label="XP to next level">
           <i style="width:${p.pct.toFixed(1)}%"></i>
         </div>
@@ -46,7 +47,20 @@ function renderHeader(player, p) {
         <span>LVL</span>
         <strong>${p.level}</strong>
       </div>
+      <button type="button" class="btn btn-small btn-ghost share-card-btn" data-share-card>Share my card</button>
     </section>`;
+}
+
+// Player of the Month crown and the training streak, under the rank on the player card
+function headerBadges(player) {
+  const s = player.streak;
+  const month = player.potm ? new Date(player.potm.month + "T12:00:00").toLocaleDateString("en-GB", { month: "long" }) : "";
+  const chips = [
+    player.potm ? `<span class="card-chip potm-chip">👑 Player of the Month · ${month}</span>` : "",
+    s.weeks >= 2 ? `<span class="card-chip streak-chip">🔥 ${s.weeks} weeks in a row</span>` : ""
+  ].join("");
+  const nudge = s.weeks >= 2 && s.atRisk ? `<p class="streak-nudge">No session yet this week: <a href="index.html#schedule" class="text-link">book one before Sunday</a> to keep your streak.</p>` : "";
+  return chips || nudge ? `<div class="card-chips">${chips}</div>${nudge}` : "";
 }
 
 function renderSummary(player) {
@@ -740,6 +754,17 @@ function bindEvents(player) {
       form.querySelector(".form-error").textContent = err.message;
       form.querySelector('button[type="submit"]').disabled = false;
     }
+  });
+
+  root.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await LevelUp.shareCard();
+    } catch (err) {
+      alert(err.message);
+    }
+    button.disabled = false;
   });
 
   root.querySelectorAll("[data-avatar-input]").forEach((input) => input.addEventListener("change", async () => {
