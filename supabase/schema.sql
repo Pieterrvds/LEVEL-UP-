@@ -1888,7 +1888,7 @@ create or replace function public.push_test()
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
-  perform public._push(auth.uid(), 'Notifications are on 🎮', 'You''ll hear from LEVEL-UP when something happens with your sessions.',
+  perform public._push(auth.uid(), 'Notifications are on 💪', 'You''ll hear from LEVEL-UP when something happens with your sessions.',
                        'profile.html', 'test');
 end $$;
 

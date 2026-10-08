@@ -1364,7 +1364,7 @@ const LevelUp = (() => {
   async function signUp({ name, email, password, stats, trainerApplication }) {
     name = String(name || "").trim();
     email = String(email || "").trim().toLowerCase();
-    if (!name) throw new Error("Choose a player name.");
+    if (!name) throw new Error("Enter your name.");
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
     if (!password || password.length < 6) throw new Error("Your password needs at least 6 characters.");
     if (!sb) throw new Error(friendly("network"));
@@ -1394,7 +1394,7 @@ const LevelUp = (() => {
     const { error } = await sb.auth.signInWithPassword({ email: String(email || "").trim().toLowerCase(), password: password || "" });
     if (error) {
       if (/confirm/i.test(error.message)) throw new Error("Confirm your email first: click the link we sent you, then log in.");
-      if (/invalid/i.test(error.message)) throw new Error("Wrong email or password. New here? Create a new player.");
+      if (/invalid/i.test(error.message)) throw new Error("Wrong email or password. New here? Create your profile.");
       throw new Error(friendly(error));
     }
     // onAuthStateChange loads the player and shows the welcome toast
@@ -1961,7 +1961,7 @@ const LevelUp = (() => {
       try {
         if (mode === "signup" && dialog.dataset.step !== "2") {
           // Step 1: account details. Check them before asking for stats.
-          if (!String(data.name || "").trim()) throw new Error("Choose a player name.");
+          if (!String(data.name || "").trim()) throw new Error("Enter your name.");
           if (!/^\S+@\S+\.\S+$/.test(String(data.email || "").trim())) throw new Error("Enter a valid email address.");
           if (!data.password || data.password.length < 6) throw new Error("Your password needs at least 6 characters.");
           setStep(2);
@@ -2008,7 +2008,7 @@ const LevelUp = (() => {
     dialog.dataset.step = String(step);
     dialog.dataset.kind = trainer ? "trainer" : "player";
     dialog.querySelector(".auth-submit").textContent = step === 2
-      ? (trainer ? "Send application ▶" : "Create player ▶")
+      ? (trainer ? "Send application ▶" : "Create profile ▶")
       : (trainer ? "Next: trainer application ▶" : "Next: body stats ▶");
     dialog.querySelector(".auth-title").textContent = step === 2 ? (trainer ? "Trainer application" : "Your body stats") : MODES.signup.title;
     dialog.querySelector(".form-error").textContent = "";
