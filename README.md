@@ -111,11 +111,12 @@ appears when loading takes longer than 0.35 s, shows the real progress of the st
 parallel) and closes as soon as the data is in; CSS hides it after 12 s as a safety net. Tips: `BOOT_TIPS` in `game.js`.
 
 ### Animated logo
-`img/logo-anim.svg` is the logo stickman doing real pull-ups (CSS keyframes inside the SVG, 1.6 s per rep). The
+`img/logo-anim.svg` is the logo stickman doing real pull-ups (SVG animation, 1.15 s per rep; each arm is one
+smooth stroke hand → elbow → shoulder). The
 loading screen shows it as an `<img>`, looping. In the header and footer `game.js` (`animateLogos`) points
 `img.brand-logo` at a copy that does 3 reps: when the page opens (the footer one when it scrolls into view) and again on
 hover or tap. It stays an `<img>` on purpose: Safari draws animated inline SVG blurry/grey on phones. Without the file
-the plain `logo.JPG` stays; "reduce motion" on the phone/PC keeps the logo still.
+the plain `logo.JPG` stays; "reduce motion" on the phone/PC keeps the header/footer logo still.
 To change the movement, edit and rerun `python3 tools/make-logo-anim.py` (pose, rise height and timing are at its top).
 
 ## App (installable)

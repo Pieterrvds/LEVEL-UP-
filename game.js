@@ -1747,8 +1747,8 @@ const LevelUp = (() => {
     const imgs = document.querySelectorAll("img.brand-logo");
     if (!imgs.length || !window.fetch || !window.Blob) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    fetch("img/logo-anim.svg?v=2").then((r) => (r.ok ? r.text() : Promise.reject())).then((text) => {
-      const reps = text.replace("var(--lu-reps,infinite)", "3");
+    fetch("img/logo-anim.svg?v=3").then((r) => (r.ok ? r.text() : Promise.reject())).then((text) => {
+      const reps = text.replaceAll('repeatCount="indefinite"', 'repeatCount="3"');
       if (reps === text) return;
       imgs.forEach((img, i) => {
         let playing = false, url = "";
@@ -1759,7 +1759,7 @@ const LevelUp = (() => {
           const pre = new Image();
           pre.onload = () => { img.src = next; if (url) URL.revokeObjectURL(url); url = next; };
           pre.src = next;
-          setTimeout(() => { playing = false; }, 3 * 1600 + 300);
+          setTimeout(() => { playing = false; }, 3 * 1150 + 300); // 3 reps of 1.15 s
         };
         const host = img.closest("a, .brand") || img;
         host.addEventListener("mouseenter", play);
