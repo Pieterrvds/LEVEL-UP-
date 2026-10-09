@@ -2523,3 +2523,25 @@ input, select, textarea { border-radius: 8px; }
 .board-cell:not(.empty), .board-head { border-radius: 8px; }
 /* Phone menu: rounded where it opens from the side */
 @media (max-width: 1140px) { .nav { border-radius: 16px 0 0 16px; } }
+/* …and the boxes that only appear in some situations (dialogs, the bag, forms, coach tools) */
+.session-row, .coach-item, .booking-trainer, .loot-items > li, .hours-dates > li, .health-list > li, .bag-line { border-radius: 10px; }
+.pack-open, .statement-box, .booking-login, .reward-use, .hs-empty, .loot-reward, .save-stats, .gallery-item, .pl-popover,
+.chart-tip, .bag-login, .list-empty, .quest-empty, .quest-loading, .xp-sources > li, .inventory > li, .pack-option,
+.push-callout, .player-photo, .calendar iframe { border-radius: 12px; }
+.inventory > li, .pl-grid { overflow: hidden; }
+.pl-grid { border-radius: 12px; }
+.role-picker span, .goal-picker span, .kind-option > span, .pay-option > span { border-radius: 10px; }
+.booking-warning, .health-advice, .settle-note, .form-success, .pl-copy, .auth-tabs, .menu-toggle, #paypal-button-container,
+.statement-controls select { border-radius: 8px; }
+.auth-tabs { overflow: hidden; }
+.qty { border-radius: 8px; overflow: hidden; }
+.bag-remove, .bag-line img, .bag-thumb, .owned-tag, .inv-qty, .badge-chip, .pay-tag, .pl-bar, .pl-ghost, .pl-trainer,
+.class-tags li, .hs-face, .health-yn label, .app-banner img, .app-dialog-head img, .inventory img, .inv-placeholder { border-radius: 6px; }
+.app-dialog-head img, .app-banner img { border-radius: 12px; }
+.pl-booking, .pl-key { border-radius: 4px; }
+.bar { border-radius: 99px; }
+.bag { border-radius: 16px 0 0 16px; overflow: hidden; }
+/* Player card and the promotion card: rounded instead of cut corners */
+.player-header, .promo-card { clip-path: none; border-radius: 18px; overflow: hidden; }
+.session-row img, .booking-trainer img, .coach-item img { border-radius: 8px; }
+.nav a { border-radius: 6px; }

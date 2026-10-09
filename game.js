@@ -2012,9 +2012,9 @@ const LevelUp = (() => {
     g.fillStyle = "#070707"; g.fillRect(0, 0, W, H);
     g.fillStyle = "rgba(255,255,255,0.035)";
     g.beginPath(); g.moveTo(W * 0.62, 0); g.lineTo(W * 0.74, 0); g.lineTo(W * 0.34, H); g.lineTo(W * 0.22, H); g.fill();
-    // card shape with cut top corners
-    const X = 90, Y = 80, CW = 900, CH = 1150, cut = 64;
-    const shape = () => { g.beginPath(); g.moveTo(X + cut, Y); g.lineTo(X + CW - cut, Y); g.lineTo(X + CW, Y + cut); g.lineTo(X + CW, Y + CH); g.lineTo(X, Y + CH); g.lineTo(X, Y + cut); g.closePath(); };
+    // card shape with rounded corners
+    const X = 90, Y = 80, CW = 900, CH = 1150;
+    const shape = () => rounded(X, Y, CW, CH, 56);
     const grad = g.createLinearGradient(X, Y, X + CW * 0.7, Y + CH);
     grad.addColorStop(0, color); grad.addColorStop(0.32, "#1c1c1c"); grad.addColorStop(1, "#000");
     g.save(); shape(); g.fillStyle = grad; g.fill(); g.clip();

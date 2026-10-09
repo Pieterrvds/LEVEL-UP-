@@ -755,6 +755,7 @@
   "Add to bag": "In de tas",
   "Added to bag": "Toegevoegd aan je tas",
   "Size": "Maat",
+  "Size {0}": "Maat {0}",
   "Quantity": "Aantal",
   "Remove one": "Eén verwijderen",
   "Add one": "Eén toevoegen",
