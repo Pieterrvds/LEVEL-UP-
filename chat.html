@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Dashboard | LEVEL-UP</title>
-  <meta name="description" content="LEVEL-UP admin dashboard: members, bookings and trainers.">
+  <title>Chat | LEVEL-UP</title>
+  <script src="i18n-nl.js?v=202610120900"></script>
+  <script src="i18n.js?v=202610120900"></script>
+  <meta name="description" content="Chat privately with your LEVEL-UP coach.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
-  <meta property="og:title" content="Admin | LEVEL-UP">
-  <meta property="og:description" content="LEVEL-UP admin dashboard.">
-  <meta property="og:url" content="https://pieterrvds.github.io/LEVEL-UP-/admin.html">
+  <meta property="og:title" content="Chat | LEVEL-UP">
+  <meta property="og:description" content="Chat privately with your LEVEL-UP coach.">
+  <meta property="og:url" content="https://pieterrvds.github.io/LEVEL-UP-/chat.html">
   <meta property="og:image" content="https://pieterrvds.github.io/LEVEL-UP-/img/og-image.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -29,9 +31,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=202610120900">
-  <link rel="stylesheet" href="shop.css?v=202610120900">
-  <link rel="stylesheet" href="profile.css?v=202610120900">
-  <link rel="stylesheet" href="admin.css?v=202610120900">
+  <link rel="stylesheet" href="chat.css?v=202610120900">
 </head>
 <body>
 
@@ -64,6 +64,7 @@
       <a href="shop.html" class="nav-shop">
         <span class="coin" aria-hidden="true"></span> Shop
       </a>
+      <div class="lang-switch" data-lang-switch aria-label="Language"></div>
     </nav>
 
     <div class="hud-account" id="hudAccount"></div>
@@ -73,30 +74,13 @@
     </button>
   </header>
 
-  <main class="profile-page admin-page">
-    <div class="hero-bg" aria-hidden="true"></div>
-    <div class="container" id="adminRoot"></div>
+  <main class="chat-page">
+    <div class="container" id="chatRoot"></div>
   </main>
 
-  <footer class="footer">
-    <div class="vine-divider" aria-hidden="true"></div>
-    <div class="container footer-inner">
-      <a href="index.html" class="brand">
-        <img src="img/logo.JPG" alt="" class="brand-logo">
-        <span class="brand-name">LEVEL-UP</span>
-      </a>
-      <p>© <span id="year">2026</span> LEVEL-UP Personal Training. All rights reserved.</p>
-      <p class="footer-hint">Admin console</p>
-      <p class="footer-links"><a href="privacy.html">Privacy policy</a></p>
-    </div>
-  </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
   <script src="game.js?v=202610120900"></script>
-  <script src="statements.js?v=202610120900"></script>
-  <script src="hours-editor.js?v=202610120900"></script>
-  <script src="hours-planner.js?v=202610120900"></script>
-  <script src="admin.js?v=202610120900"></script>
+  <script src="chat.js?v=202610120900"></script>
 </body>
 </html>

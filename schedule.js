@@ -637,6 +637,7 @@ function renderDynamicTeam() {
         <div class="trainer-stats" data-trainer-stats="${t.id}"></div>
         <div class="btn-row team-actions">
           <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${t.id}">Book ${esc(t.short)}</a>
+          <button type="button" class="btn btn-small btn-ghost btn-chat" data-chat-trainer="${t.id}">Chat</button>
         </div>
       </div>`;
     grid.insertBefore(card, recruit);

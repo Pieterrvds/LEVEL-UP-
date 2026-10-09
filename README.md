@@ -5,12 +5,14 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Highlights" pop-up (hero button and footer)
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
 - `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their body stats as step 2 of sign-up. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
+- `chat.html`: private chat between a player and a coach (see "Chat")
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
 
 ## Phones
-- A bar at the bottom (Home · Book · Scores · Profile · Menu) replaces the ☰ button; Scores jumps to the high scores, Menu opens the same menu (with Contact).
+- A bar at the bottom (Home · Book · Scores · Chat · Menu) replaces the ☰ button; Scores jumps to the high scores, Chat opens
+  the conversations (red badge = unread), Menu opens the same menu with **My profile** at the top (and Contact).
 - Section descriptions (and the price cards in 04 · Schedule) sit behind a "Read more" button; elements marked
   `data-more` in `index.html` are hidden on phones until it's tapped.
 - Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
@@ -24,10 +26,10 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `supabase/schema.sql`: database tables, security rules and server functions
 - `schedule.js`: weekly booking board and the "Up next" card on the home page
 - `admin.js`: admin dashboard
-- `script.js`, `shop.js`, `profile.js`: page-specific behaviour
+- `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
 - `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
 - `privacy.html`: privacy policy (NL + EN)
-- `style.css` (shared + home), `shop.css`, `profile.css`, `admin.css`
+- `style.css` (shared + home), `shop.css`, `profile.css`, `admin.css`, `chat.css`
 
 ## Server (Supabase)
 Accounts and all data live in Supabase (project `zdwlihbsmqiggpyensxc`, region eu-west-1). The website only uses
@@ -130,6 +132,19 @@ The site is a progressive web app: people can install it on their phone like an 
 - Install: Android / Chrome shows a "Get the app" button (menu and a banner on phones, at most once every 3 weeks
   after "Not now"); iPhone shows the Share → Add to Home Screen steps. My account → Me has a "LEVEL-UP app" panel.
 
+## Chat
+Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js`, `chat.css`).
+- **Start:** the **Chat** button on a coach card (it replaced the Instagram button) or "Start a chat" on the chat page.
+  A coach can only chat once their card is linked to an account (trainer application approved with "link to an
+  existing card", or `trainers.email` set); until then the button says they aren't on the chat yet.
+- **Coaches** see the conversations their clients started; admins can't read other people's chats.
+- **Unread:** red badge on the Chat tab (phones) and the chat icon in the header (computer); a pop-up at the top of
+  any page when a new message comes in (tap = open it). A push notification arrives on phones with notifications on.
+- **Live:** an open conversation checks for new messages every 3 seconds (right away when a push comes in), other
+  pages every 20 seconds. Read receipts: "Seen" under your last message the other person has read.
+- **Server:** tables `chat_threads` + `chat_messages` (no direct access), functions `chat_list`, `chat_open`,
+  `chat_thread`, `chat_send` (max 2000 characters, 20 messages a minute) and `chat_unread` in `supabase/schema.sql`.
+
 ## Push notifications
 
 Players and trainers can turn on notifications (My account → Me, after booking, or in the coach panel). They get:
@@ -137,6 +152,8 @@ Players and trainers can turn on notifications (My account → Me, after booking
 - **Players:** session confirmed, request declined or expired, reminder the day before, +XP after a session,
   no-show, free session earned, pack active, cancelled by LEVEL-UP.
 - **Trainers** (linked account): new session request, request withdrawn, cancellation and late cancellation.
+- **Both:** a new chat message (title = who sent it, text = the start of the message; not shown when that chat is
+  already open on screen).
 
 How it works: the website saves the phone's push subscription (`push_subscriptions`); database triggers on
 bookings, rewards and packs queue messages in `push_outbox`; the Edge Function `push` encrypts and sends them

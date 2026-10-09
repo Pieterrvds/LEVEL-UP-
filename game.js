@@ -310,7 +310,7 @@ const LevelUp = (() => {
 
   // Changes that can queue a push notification: send it right away
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
-    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test"]);
+    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -553,7 +553,8 @@ const LevelUp = (() => {
     try {
       const rows = await call("trainer_list");
       (rows || []).forEach((r) => {
-        if (TRAINERS.some((t) => t.id === r.id)) return;
+        const known = TRAINERS.find((t) => t.id === r.id);
+        if (known) { known.linked = Boolean(r.linked); return; }
         TRAINERS.push({
           id: r.id,
           name: r.name,
@@ -566,6 +567,7 @@ const LevelUp = (() => {
           chartColor: r.chart_color || "#8c8c8c",
           availability: {},
           stats: { sessions: 0, clients: 0 },
+          linked: Boolean(r.linked),
           dynamic: true
         });
       });
@@ -1738,6 +1740,106 @@ const LevelUp = (() => {
     bootDone();
   })();
 
+  // ---------- Chat (player ↔ coach) ----------
+  // The conversations live on the server (chat_* in schema.sql); chat.html shows them. Every page keeps
+  // the unread badge up to date (tab bar, header) and pops up a notice when a new message comes in.
+  // A push notification (sw.js) wakes the page up right away; otherwise it checks every 20 seconds.
+  const CHAT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>';
+  let chatUnread = 0;
+  let chatTimer = null;
+  let chatActiveThread = null; // set by chat.js while a conversation is on screen
+  const chatSeenKey = () => `levelup.chatSeen.${player?.id || ""}`;
+
+  const chatList = () => call("chat_list");
+  const chatThread = (id, after = 0) => call("chat_thread", { p_thread: id, p_after: after });
+  const chatSend = (id, body) => call("chat_send", { p_thread: id, p_body: body });
+  const chatOpen = (trainerId) => call("chat_open", { p_trainer: trainerId });
+
+  function setChatBadge(n) {
+    chatUnread = n;
+    document.querySelectorAll("[data-chat-badge]").forEach((el) => {
+      el.textContent = n > 9 ? "9+" : String(n);
+      el.hidden = !n;
+    });
+    document.documentElement.classList.toggle("has-chat-unread", n > 0);
+  }
+
+  async function refreshChatUnread() {
+    if (!player || !sb) { setChatBadge(0); return; }
+    try {
+      const r = await call("chat_unread");
+      setChatBadge(Number(r?.unread) || 0);
+      const seen = Number(read(chatSeenKey(), 0));
+      if (r?.lastId && r.lastId > seen) {
+        write(chatSeenKey(), r.lastId);
+        if (r.thread !== chatActiveThread) chatNotice(r);
+      }
+      document.dispatchEvent(new CustomEvent("levelup:chat", { detail: r }));
+    } catch (err) {
+      console.warn("Chat check failed:", err.message);
+    }
+  }
+
+  function scheduleChatCheck() {
+    clearTimeout(chatTimer);
+    if (!player) return;
+    chatTimer = setTimeout(async () => {
+      if (document.visibilityState === "visible") await refreshChatUnread();
+      scheduleChatCheck();
+    }, 20000);
+  }
+
+  // The "new message" pop-up at the top of the page (tap = open the conversation)
+  let chatNoticeEl = null;
+  function chatNotice({ thread, name, body }) {
+    if (!chatNoticeEl) {
+      chatNoticeEl = document.createElement("a");
+      chatNoticeEl.className = "chat-notice";
+      chatNoticeEl.setAttribute("role", "status");
+      chatNoticeEl.setAttribute("aria-live", "polite");
+      document.body.appendChild(chatNoticeEl);
+    }
+    chatNoticeEl.href = `chat.html?t=${encodeURIComponent(thread)}`;
+    chatNoticeEl.innerHTML = `
+      <span class="chat-notice-ico">${CHAT_ICON}</span>
+      <span class="chat-notice-txt"><b data-no-i18n>${esc(name || "New message")}</b><span data-no-i18n>${esc(body || "")}</span></span>
+      <span class="chat-notice-go" aria-hidden="true">›</span>`;
+    chatNoticeEl.classList.remove("show");
+    void chatNoticeEl.offsetWidth;
+    chatNoticeEl.classList.add("show");
+    clearTimeout(chatNoticeEl._hide);
+    chatNoticeEl._hide = setTimeout(() => chatNoticeEl.classList.remove("show"), 6500);
+  }
+
+  // "Chat" on a coach card: log in first, then straight into the conversation
+  function openChatWith(trainerId) {
+    const t = trainerById(trainerId);
+    if (!player) { openAuth("login"); return; }
+    if (player.trainerId === trainerId) { location.href = "chat.html"; return; }
+    if (t && t.linked === false) {
+      toast({ title: `${t.short} isn't on the chat yet`, text: "Book a session or send a message to Pieter.", icon: "💬", tone: "green" });
+      return;
+    }
+    location.href = `chat.html?coach=${encodeURIComponent(trainerId)}`;
+  }
+
+  document.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-chat-trainer]");
+    if (!btn) return;
+    event.preventDefault();
+    openChatWith(btn.dataset.chatTrainer);
+  });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshChatUnread(); });
+  // A push arrived (sw.js tells the open pages): check right away
+  navigator.serviceWorker?.addEventListener("message", (event) => {
+    if (event.data?.type === "push") refreshChatUnread();
+  });
+  document.addEventListener("levelup:change", () => {
+    if (!isReady) return;
+    if (player && !chatTimer) { refreshChatUnread(); scheduleChatCheck(); }
+    if (!player) { clearTimeout(chatTimer); chatTimer = null; setChatBadge(0); }
+  });
+
   // ---------- Animated logo ----------
   // The header/footer logo becomes img/logo-anim.svg (the stickman doing real pull-ups): 3 reps when the
   // page opens (the footer one when it scrolls into view) and 3 more on hover or tap. It stays an <img>
@@ -2109,6 +2211,7 @@ const LevelUp = (() => {
     }
     const p = progress(player.xp);
     slot.innerHTML = `
+      <a href="chat.html" class="hud-chat" title="Chat" aria-label="Chat">${CHAT_ICON}<i class="chat-badge" data-chat-badge ${chatUnread ? "" : "hidden"}>${chatUnread > 9 ? "9+" : chatUnread}</i></a>
       <a href="profile.html" class="hud-player" title="Your profile · ${p.xp} XP">
         ${avatarHtml(player)}
         <span class="hud-player-meta">
@@ -2476,7 +2579,8 @@ const LevelUp = (() => {
     setTimeout(() => { if (canInstall()) document.body.appendChild(banner); }, 2500);
   }
 
-  // ---------- Phones: app-style bar at the bottom (Home · Book · Scores · Profile · Menu) ----------
+  // ---------- Phones: app-style bar at the bottom (Home · Book · Scores · Chat · Menu) ----------
+  // The profile moved into the menu (and stays on the player chip in the header).
   const TAB_ICONS = {
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     book: '<rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/>',
@@ -2497,13 +2601,26 @@ const LevelUp = (() => {
       <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
       <a href="${link("schedule")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
       <a href="${link("highScores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>
-      <a href="profile.html" data-tab="profile">${tabIcon("profile")}<span data-tab-label>Profile</span></a>
+      <a href="chat.html" data-tab="chat">${CHAT_ICON}<span>Chat</span><i class="chat-badge" data-chat-badge hidden></i></a>
       <button type="button" data-tab="menu" aria-controls="nav" aria-expanded="false">${tabIcon("menu")}<span>Menu</span></button>`;
     document.body.appendChild(bar);
     document.body.classList.add("has-tabbar");
 
+    // Profile in the menu (phones), first in the list
+    const nav = document.getElementById("nav");
+    const menuProfile = document.createElement("a");
+    menuProfile.href = "profile.html";
+    menuProfile.className = "nav-profile";
+    menuProfile.innerHTML = `${tabIcon("profile")}<span data-menu-profile>Profile</span>`;
+    nav?.prepend(menuProfile);
+    menuProfile.addEventListener("click", (event) => {
+      if (player) return;
+      event.preventDefault();
+      openAuth("login");
+    });
+
     const setActive = (tab) => bar.querySelectorAll("[data-tab]").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
-    if (page === "profile.html") setActive("profile");
+    if (page === "chat.html") setActive("chat");
     else if (home) {
       // Highlight the tab of the section on screen
       const sections = { home: "home", about: "home", programs: "home", team: "home", highScores: "scores", schedule: "book", contact: "home" };
@@ -2526,14 +2643,14 @@ const LevelUp = (() => {
         event.stopPropagation();
         menuToggle?.click(); // same menu as the ☰ button
         bar.querySelector('[data-tab="menu"]').setAttribute("aria-expanded", String(document.getElementById("nav")?.classList.contains("open")));
-      } else if (tab.dataset.tab === "profile" && !player) {
+      } else if (tab.dataset.tab === "chat" && !player) {
         event.preventDefault();
         openAuth("login");
       }
     });
     document.addEventListener("levelup:change", () => {
-      const label = bar.querySelector("[data-tab-label]");
-      if (label) label.textContent = player ? "Profile" : "Log in";
+      menuProfile.querySelector("[data-menu-profile]").textContent = player ? "My profile" : "Log in";
+      menuProfile.classList.toggle("active", page === "profile.html");
     });
   }
 
@@ -2559,6 +2676,8 @@ const LevelUp = (() => {
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
+    chatList, chatThread, chatSend, chatOpen, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
+    setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast
   };
 })();
