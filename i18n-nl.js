@@ -225,6 +225,7 @@
   "You have 1 free session": "Je hebt 1 gratis sessie",
   "You have {0} free sessions": "Je hebt {0} gratis sessies",
   "{0} · use by {1} · 1:1 only": "{0} · te gebruiken tot {1} · enkel 1:1",
+  "{0} · use by {1}": "{0} · te gebruiken tot {1}",
   "Free 🎁": "Gratis 🎁",
   "your reward": "je beloning",
   "Who do you train with?": "Met wie train je?",

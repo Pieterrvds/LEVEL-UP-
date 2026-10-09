@@ -70,7 +70,7 @@
 .chart-toggle:hover, .chart-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
 .chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 16px; padding: 0; margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); }
 .chart-legend li { display: flex; align-items: center; gap: 8px; }
-.swatch { width: 12px; height: 12px; border-radius: 2px; background: var(--c); }
+.swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--c); }
 .chart-body { min-height: 120px; }
 .chart-body svg { display: block; max-width: 100%; overflow: visible; }
 .chart-body text { font-family: var(--sans); font-size-adjust: none; font-style: normal; }

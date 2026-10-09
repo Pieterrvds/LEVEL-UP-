@@ -233,7 +233,7 @@ function renderRewards(player) {
       ${open.length ? `<ul class="voucher-list">${open.map((v) => `
         <li class="voucher">
           <span class="voucher-icon" aria-hidden="true">🎁</span>
-          <span><strong>Free 1:1 session</strong><small>${source(v).icon} ${source(v).title} · use by ${LevelUp.shortDate(v.expiresAt)}</small></span>
+          <span><strong>Free 1:1 session</strong><small><span aria-hidden="true">${source(v).icon}</span> ${source(v).title} · use by ${LevelUp.shortDate(v.expiresAt)}</small></span>
           <a class="btn btn-small btn-primary" href="index.html#schedule">Book it ▶</a>
         </li>`).join("")}</ul>` : ""}
       <div class="rewards-layout">

@@ -345,6 +345,8 @@ The site looks like a sports game menu: bold slanted letters (Barlow Condensed),
 cards with thin borders and soft shadows, and an Ultimate Team style player card on the account page (in the rank
 colour). The display font is `--display` in `style.css`; every rule that uses it also gets `font-size-adjust`, so the
 letter sizes from the old pixel font still fit. The FC details are in the "FC Ultimate" block at the end of `style.css`.
+No sharp corners: everything has rounded corners in one family (cards 12px, list rows 10px, chips and tabs 6px,
+faces round); see the "Rounded corners" block at the very end of `style.css`. Add new boxes to that block.
 
 **Backup of the old pixel-arcade look:** the complete website and app as they were before this restyle are kept on
 the GitHub branch `style/pixel-arcade` (commit 15210e6). You can browse it at

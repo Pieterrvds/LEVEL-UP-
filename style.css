@@ -2488,3 +2488,38 @@ input, select, textarea { border-radius: 8px; }
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-5 4z'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-5 4z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
+
+/* ==========================================================================
+   Rounded corners for everything that was still square (things that were
+   already rounded keep their shape). Same family as the rest: big cards 12px,
+   rows 10px, small chips and tabs 6px.
+   ========================================================================== */
+/* Big cards and panels */
+.item-card, .player-panel, .bonus-card, .trainer-admin, .chart-card, .kpi, .hs-board, .application-item,
+.price-card, .voucher, .pack-option, .hours-form, .my-hours, .week-board, .loot-steps > li, .quest-steps > li,
+.statement-list > li, .data-note, .trainer-stats, .week-hours-day { border-radius: 12px; }
+.item-card, .week-board, .hs-board { overflow: hidden; }
+.price-loyalty { border-radius: 12px; }
+/* Rows in lists */
+.quest-item, .hs-row, .log-list > li, .meal-list > li, .detail-list > li, .xp-rules > li, .rank-strip > li,
+.rank-ladder > li, .rank-rewards > li, .hq-list > div, .trainer-admin-stats > div { border-radius: 10px; }
+.hs-pod-block { border-radius: 10px 10px 0 0; }
+/* Header */
+.hud-player, .hud-admin { border-radius: 10px; }
+.brand-logo { border-radius: 8px; }
+/* Small: tabs, chips, buttons, swatches */
+.filter-tabs { border-radius: 8px; overflow: hidden; }
+.hs-seasons button, .read-more, .chart-toggle, .nav-shop, .hours-chip, .hours-chip-del, .hours-chip-lock,
+.item-perks > li, .rarity-tag, .xp-reward, .tab-badge, .count-chip, .admin-tag, .hs-you, .hs-name > i, .stamp-card > li,
+.size-picker span, .list-day-head em, code, mark { border-radius: 6px; }
+.page-tabs { border-radius: 10px; }
+.page-tab { border-radius: 6px 6px 0 0; }
+.legend-swatch, .swatch { border-radius: 4px; }
+.bonus-icon, .hq-pin { border-radius: 10px; }
+.avatar-edit-btn { border-radius: 50%; }
+.coach-faces img, .party-faces img, .app-panel-body img, .quest-item img, .item-media { border-radius: 8px; }
+.mini-xp, .mini-xp i { border-radius: 99px; }
+/* Desktop week schedule: rounded slots inside the rounded board */
+.board-cell:not(.empty), .board-head { border-radius: 8px; }
+/* Phone menu: rounded where it opens from the side */
+@media (max-width: 1140px) { .nav { border-radius: 16px 0 0 16px; } }
