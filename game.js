@@ -190,6 +190,8 @@ const LevelUp = (() => {
     const msg = error?.message || String(error || "");
     if (/failed to fetch|network/i.test(msg)) return "Can't reach the server. Check your connection and try again.";
     if (/could not find the function|schema cache/i.test(msg)) return "The LEVEL-UP server isn't set up yet. Please try again later.";
+    if (/rate limit|too many|over_email_send_rate/i.test(msg)) return "Too many emails were sent just now. Try again in an hour, or message us on WhatsApp.";
+    if (/not authori[sz]ed|error sending|sending (confirmation|recovery)/i.test(msg)) return "We couldn't send the email right now. Try again later, or message us on WhatsApp.";
     return msg || fallback;
   }
 
@@ -1439,6 +1441,15 @@ const LevelUp = (() => {
     // onAuthStateChange loads the player and shows the welcome toast
   }
 
+  // The confirmation email didn't arrive (spam folder, typo, sent too early): send it again
+  async function resendConfirmation(email) {
+    email = String(email || "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
+    if (!sb) throw new Error(friendly("network"));
+    const { error } = await sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: pageUrl("profile.html") } });
+    if (error) throw new Error(friendly(error));
+  }
+
   async function logOut() {
     await unlinkPushSubscription(); // this phone stops getting the old account's notifications
     if (sb) await sb.auth.signOut();
@@ -2274,6 +2285,7 @@ const LevelUp = (() => {
         </div>
         <p class="form-error" role="alert"></p>
         <p class="form-success" role="status"></p>
+        <button type="button" class="text-link auth-resend" hidden>Resend the confirmation email</button>
         <button type="submit" class="btn btn-primary btn-block auth-submit">Log in ▶</button>
         <button type="button" class="link-btn auth-forgot" data-mode="reset">Forgot your password?</button>
         <button type="button" class="link-btn auth-back">◀ Back to step 1</button>
@@ -2322,8 +2334,10 @@ const LevelUp = (() => {
           if (result.needsConfirmation) {
             form.reset();
             setMode("login");
+            form.elements.email.value = data.email;
             dialog.querySelector(".form-success").textContent =
-              `Almost there! We sent a confirmation link to ${data.email}. Click it, then log in here.`;
+              `Almost there! We sent a confirmation link to ${data.email}. Click it, then log in here. No email? Check your spam folder.`;
+            offerResend(data.email);
             return;
           }
           dialog.close("success");
@@ -2342,6 +2356,7 @@ const LevelUp = (() => {
         }
       } catch (err) {
         error.textContent = err.message;
+        if (/^Confirm your email first/.test(err.message)) offerResend(data.email);
       } finally {
         submit.disabled = false;
       }
@@ -2370,7 +2385,29 @@ const LevelUp = (() => {
     dialog.querySelector('[name="password"]').autocomplete = mode === "login" ? "current-password" : "new-password";
     dialog.querySelector(".form-error").textContent = "";
     dialog.querySelector(".form-success").textContent = "";
+    dialog.querySelector(".auth-resend").hidden = true;
     if (mode === "signup") setStep(1);
+  }
+
+  // "Resend the confirmation email" under the log-in form
+  function offerResend(email) {
+    const btn = dialog.querySelector(".auth-resend");
+    btn.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "Resend the confirmation email";
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const typed = dialog.querySelector('[name="email"]').value || email;
+      try {
+        await resendConfirmation(typed);
+        dialog.querySelector(".form-error").textContent = "";
+        dialog.querySelector(".form-success").textContent = `Sent again to ${typed}. It can take a few minutes; check your spam folder too.`;
+        btn.textContent = "Email sent ✓";
+      } catch (err) {
+        dialog.querySelector(".form-error").textContent = err.message;
+        btn.disabled = false;
+      }
+    };
   }
 
   function openAuth(mode = "login") {
@@ -2449,8 +2486,27 @@ const LevelUp = (() => {
   let installPrompt = null;
   const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const appInstallState = () => ({ standalone: isStandalone(), canPrompt: Boolean(installPrompt), ios: isIOS() });
-  const canInstall = () => !isStandalone() && (Boolean(installPrompt) || isIOS());
+  const isAndroid = () => /android/i.test(navigator.userAgent);
+  // Links opened from WhatsApp, Instagram, Facebook, Messenger… often open in that app's own browser,
+  // which can't install web apps: the page has to be opened in Chrome / Safari first.
+  const inAppBrowser = () => {
+    const ua = navigator.userAgent;
+    if (/FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|WhatsApp|Snapchat|musical_ly|Bytedance|TikTok|LinkedInApp|Pinterest|Line\/|GSA\//i.test(ua)) return true;
+    return isAndroid() && /; wv\)/.test(ua); // Android web views
+  };
+  const browserName = () => {
+    const ua = navigator.userAgent;
+    if (/CriOS/i.test(ua)) return "chrome-ios";
+    if (/FxiOS/i.test(ua)) return "firefox-ios";
+    if (/EdgiOS/i.test(ua)) return "edge-ios";
+    if (/SamsungBrowser/i.test(ua)) return "samsung";
+    if (/Firefox/i.test(ua)) return "firefox";
+    if (/EdgA/i.test(ua)) return "edge";
+    return isIOS() ? "safari" : "chrome";
+  };
+  const appInstallState = () => ({ standalone: isStandalone(), canPrompt: Boolean(installPrompt), ios: isIOS(), inApp: inAppBrowser() });
+  // Phones always get the button (with the steps for their browser); computers only when the browser offers it
+  const canInstall = () => !isStandalone() && (Boolean(installPrompt) || isIOS() || isAndroid());
 
   function initApp(nav) {
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
@@ -2509,7 +2565,7 @@ const LevelUp = (() => {
   }
 
   async function installApp() {
-    if (installPrompt) {
+    if (installPrompt && !inAppBrowser()) {
       const prompt = installPrompt;
       installPrompt = null;
       prompt.prompt();
@@ -2534,13 +2590,38 @@ const LevelUp = (() => {
       });
     }
     const share = `<svg class="ios-share" viewBox="0 0 24 24" aria-label="Share" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 11v10h14V11"/></svg>`;
-    const steps = isIOS()
-      ? [`Tap Share ${share} in Safari`,
-         `Tap <strong>Add to Home Screen</strong>`,
-         `Tap <strong>Add</strong>`]
-      : [`Open the browser menu (<strong>⋮</strong>)`,
-         `Tap <strong>Install app</strong>`,
-         `Tap <strong>Install</strong>`];
+    const inApp = inAppBrowser();
+    const browser = browserName();
+    let steps;
+    if (inApp) {
+      steps = isIOS()
+        ? [`Tap <strong>⋯</strong> or Share ${share} in this screen`,
+           `Choose <strong>Open in Safari</strong> (or Open in browser)`,
+           `In Safari: tap Share ${share}, then <strong>Add to Home Screen</strong>`]
+        : [`Tap <strong>⋮</strong> at the top right of this screen`,
+           `Choose <strong>Open in Chrome</strong> (or Open in browser)`,
+           `In Chrome: tap <strong>⋮</strong>, then <strong>Install app</strong>`];
+    } else if (isIOS()) {
+      steps = browser === "chrome-ios" || browser === "edge-ios"
+        ? [`Tap Share ${share} in the address bar at the top`, `Tap <strong>Add to Home Screen</strong>`, `Tap <strong>Add</strong>`]
+        : browser === "firefox-ios"
+          ? [`Tap the menu <strong>☰</strong>`, `Tap Share ${share}, then <strong>Add to Home Screen</strong>`, `Tap <strong>Add</strong>`]
+          : [`Tap Share ${share} at the bottom of Safari`, `Tap <strong>Add to Home Screen</strong>`, `Tap <strong>Add</strong>`];
+    } else if (browser === "samsung") {
+      steps = [`Tap the menu <strong>☰</strong> at the bottom right`, `Tap <strong>Add page to</strong>`, `Choose <strong>Home screen</strong>`];
+    } else if (browser === "firefox") {
+      steps = [`Open the browser menu (<strong>⋮</strong>)`, `Tap <strong>Install</strong> (or Add to Home screen)`, `Tap <strong>Add</strong>`];
+    } else {
+      steps = [`Open the browser menu (<strong>⋮</strong>)`, `Tap <strong>Install app</strong> (or Add to Home screen)`, `Tap <strong>Install</strong>`];
+    }
+    const pageLink = location.href.split("#")[0];
+    const chromeIntent = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=https;package=com.android.chrome;end`;
+    const extra = inApp
+      ? `<div class="btn-row app-open-row">
+          ${isAndroid() ? `<a class="btn btn-primary" href="${esc(chromeIntent)}">Open in Chrome</a>` : ""}
+          <button type="button" class="btn btn-ghost" data-copy-link>Copy link</button>
+        </div>`
+      : "";
     dialog.innerHTML = `
       <button type="button" class="dialog-close" data-close-app aria-label="Close">✕</button>
       <div class="app-dialog-head">
@@ -2550,9 +2631,16 @@ const LevelUp = (() => {
           <h2 class="auth-title" id="appDialogTitle">Get the app</h2>
         </div>
       </div>
+      ${inApp ? `<p class="app-inapp-note">You opened this link inside another app. Installing only works in ${isIOS() ? "Safari" : "Chrome"}:</p>` : ""}
       <ol class="app-steps">${steps.map((t) => `<li>${t}</li>`).join("")}</ol>
+      ${!inApp && isAndroid() ? `<p class="muted small-text">No install option in the menu? You probably opened the link from WhatsApp or another app: choose <strong>Open in Chrome</strong> first.</p>` : ""}
+      ${extra}
       <p class="muted small-text">Free, no app store needed.</p>
-      <button type="button" class="btn btn-primary btn-block" data-close-app>Got it</button>`;
+      <button type="button" class="btn ${inApp ? "btn-ghost" : "btn-primary"} btn-block" data-close-app>Got it</button>`;
+    dialog.querySelector("[data-copy-link]")?.addEventListener("click", async (event) => {
+      try { await navigator.clipboard.writeText(pageLink); event.target.textContent = "Link copied ✓"; }
+      catch { window.prompt("Copy this link and open it in your browser:", pageLink); }
+    });
     if (!dialog.open) dialog.showModal();
   }
 

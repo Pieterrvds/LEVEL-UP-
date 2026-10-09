@@ -131,8 +131,18 @@ The site is a progressive web app: people can install it on their phone like an 
 - `sw.js`: the service worker. Pages, scripts and styles always come from the network, so the app is always the
   newest version; images and fonts are cached. Without a connection pages show `offline.html`. Supabase and payments
   are never cached. Change `VERSION` in `sw.js` to clear old caches.
-- Install: Android / Chrome shows a "Get the app" button (menu and a banner on phones, at most once every 3 weeks
-  after "Not now"); iPhone shows the Share → Add to Home Screen steps. My account → Me has a "LEVEL-UP app" panel.
+- Install: Chrome on Android / computers can install with one tap ("Get the app"); every other phone browser gets the
+  steps for that browser (Safari, Chrome or Firefox on iPhone; Samsung Internet, Firefox, Chrome on Android). A link
+  opened inside WhatsApp, Instagram, Facebook, Messenger… can't install: the pop-up says so, with "Open in Chrome"
+  (Android) and "Copy link". Banner on phones at most once every 3 weeks after "Not now"; My account → Me has a
+  "LEVEL-UP app" panel.
+
+### Sign-up emails (confirmation, new password)
+Supabase sends them. Its built-in sender only delivers to the addresses of the Supabase project team and at most
+2 emails an hour, so for real clients set up your own sender once: Supabase → Authentication → Emails → SMTP Settings
+(e.g. Brevo, free: 300 emails a day). Also check Authentication → URL Configuration: Site URL
+`https://pieterrvds.github.io/LEVEL-UP-/` and redirect URL `https://pieterrvds.github.io/LEVEL-UP-/**`.
+The log-in form has "Resend the confirmation email"; send limits show a clear message.
 
 ## Chat
 Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js`, `chat.css`).

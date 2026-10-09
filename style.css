@@ -2562,3 +2562,9 @@ input, select, textarea { border-radius: 8px; }
   .team-grid > * { flex: 0 0 300px; scroll-snap-align: start; }
 }
 @media (max-width: 640px) { .row-nav { display: none; } }
+/* Get the app: opened inside WhatsApp / Instagram / Facebook… */
+.app-inapp-note { margin: 0 0 12px; padding: 10px 12px; font-size: 0.92rem; color: var(--gold); background: rgba(255, 210, 63, 0.08); border-left: 4px solid var(--gold); border-radius: 8px; }
+.app-open-row { margin: 0 0 14px; }
+.app-open-row .btn { flex: 1 1 140px; }
+.auth-resend { justify-self: start; padding: 0; font: inherit; font-size: 0.9rem; background: none; border: 0; cursor: pointer; }
+.auth-resend:disabled { opacity: 0.6; cursor: default; }
