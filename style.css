@@ -2545,3 +2545,20 @@ input, select, textarea { border-radius: 8px; }
 .player-header, .promo-card { clip-path: none; border-radius: 18px; overflow: hidden; }
 .session-row img, .booking-trainer img, .coach-item img { border-radius: 8px; }
 .nav a { border-radius: 6px; }
+
+/* Coaches: one row that scrolls sideways on every screen (phones: the looping swipe row above) */
+.row-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.row-nav { display: flex; gap: 8px; margin-bottom: 1.6rem; }
+.row-nav button { border-radius: 50%; }
+.row-nav button:disabled { opacity: 0.35; cursor: default; }
+@media (min-width: 641px) {
+  .team-grid {
+    display: flex; gap: 24px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: 4px 2px 18px;
+    scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+  }
+  .team-grid::-webkit-scrollbar { height: 8px; }
+  .team-grid::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+  .team-grid > * { flex: 0 0 300px; scroll-snap-align: start; }
+}
+@media (max-width: 640px) { .row-nav { display: none; } }

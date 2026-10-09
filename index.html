@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202610121200"></script>
-  <script src="i18n.js?v=202610121200"></script>
+  <script src="i18n-nl.js?v=202610121400"></script>
+  <script src="i18n.js?v=202610121400"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202610121200">
+  <link rel="stylesheet" href="style.css?v=202610121400">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -64,8 +64,8 @@
       <a href="#programs">Training</a>
       <a href="#team">Coaches</a>
       <a href="#schedule">Book</a>
-      <a href="#faq">Q&amp;A</a>
       <a href="#contact">Contact</a>
+      <a href="#faq">Q&amp;A</a>
       <a href="shop.html" class="nav-shop">
         <span class="coin" aria-hidden="true"></span> Shop
       </a>
@@ -131,7 +131,7 @@
       <div class="container">
         <div class="about-grid">
           <div>
-            <p class="section-kicker">01 · How it works</p>
+            <p class="section-kicker">Level 1 · How it works</p>
             <h2 class="section-title">Hey there!</h2>
             <p class="text-lg" data-more>
               <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player profile, pick a coach from our team and book a one-hour session straight from their weekly schedule.
@@ -189,7 +189,7 @@
     <!-- CLASSES -->
     <section id="programs" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">02 · Training</p>
+        <p class="section-kicker">Level 2 · Training</p>
         <h2 class="section-title">Choose your training</h2>
         <p class="section-intro" data-more>Every training builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
 
@@ -268,8 +268,16 @@
     <!-- TEAM -->
     <section id="team" class="section">
       <div class="container">
-        <p class="section-kicker">03 · The coaches</p>
-        <h2 class="section-title">Meet the team</h2>
+        <div class="row-head">
+          <div>
+            <p class="section-kicker">Level 3 · The coaches</p>
+            <h2 class="section-title">Meet the team</h2>
+          </div>
+          <div class="row-nav" data-row-nav="#team .team-grid">
+            <button type="button" class="week-btn" data-row-step="-1" aria-label="Previous coaches">◀</button>
+            <button type="button" class="week-btn" data-row-step="1" aria-label="More coaches">▶</button>
+          </div>
+        </div>
         <div class="team-grid">
           <article class="team-card team-card-lead">
             <img src="img/pf.jpg" alt="Pieter Van den Spiegel" class="team-photo" loading="lazy">
@@ -320,7 +328,13 @@
           </article>
         </div>
         <p class="swipe-hint" aria-hidden="true">Swipe to meet the team ▸</p>
+      </div>
+    </section>
 
+    <!-- HIGH SCORES -->
+    <section id="scores" class="section section-alt">
+      <div class="container">
+        <p class="section-kicker">Level 4 · High scores</p>
         <div class="high-scores" id="highScores" aria-labelledby="highScoresTitle">
           <div class="hs-marquee">
             <h3 id="highScoresTitle"><span class="hs-star" aria-hidden="true">★</span> High scores <span class="hs-star" aria-hidden="true">★</span></h3>
@@ -354,7 +368,7 @@
     <!-- SCHEDULE / BOOKING -->
     <section id="schedule" class="section section-alt">
       <div class="container">
-        <p class="section-kicker">04 · Schedule</p>
+        <p class="section-kicker">Level 5 · Schedule</p>
         <h2 class="section-title">Book your trainer</h2>
         <p class="section-intro" data-more>Live from the LEVEL-UP calendar. Every open square is a one-hour session: send a request, your trainer confirms it, and after the session you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
 
@@ -391,23 +405,11 @@
       <div id="bookingContent"></div>
     </dialog>
 
-    <!-- Q&A -->
-    <section id="faq" class="section section-alt faq">
-      <div class="container faq-wrap">
-        <div>
-          <p class="section-kicker">05 · Questions</p>
-          <h2 class="section-title">Q&amp;A</h2>
-          <p class="section-intro">The quick answers. Something else? <a href="#contact" class="text-link">Ask us</a> or send a WhatsApp.</p>
-        </div>
-        <div class="faq-list" id="faqList"></div>
-      </div>
-    </section>
-
     <!-- CONTACT -->
     <section id="contact" class="section contact">
       <div class="container contact-grid">
         <div class="contact-info">
-          <p class="section-kicker">06 · Contact</p>
+          <p class="section-kicker">Level 6 · Contact</p>
           <h2 class="section-title">Let's connect!</h2>
           <p class="contact-intro" data-more>Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
 
@@ -516,6 +518,18 @@
         </div>
       </div>
     </section>
+
+    <!-- Q&A -->
+    <section id="faq" class="section section-alt faq">
+      <div class="container faq-wrap">
+        <div>
+          <p class="section-kicker">Level 7 · Questions</p>
+          <h2 class="section-title">Q&amp;A</h2>
+          <p class="section-intro">The quick answers. Something else? <a href="#contact" class="text-link">Ask us</a> or send a WhatsApp.</p>
+        </div>
+        <div class="faq-list" id="faqList"></div>
+      </div>
+    </section>
   </main>
 
 
@@ -556,8 +570,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202610121200"></script>
-  <script src="script.js?v=202610121200"></script>
-  <script src="schedule.js?v=202610121200"></script>
+  <script src="game.js?v=202610121400"></script>
+  <script src="script.js?v=202610121400"></script>
+  <script src="schedule.js?v=202610121400"></script>
 </body>
 </html>

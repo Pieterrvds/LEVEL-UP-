@@ -274,3 +274,26 @@ function renderFaq() {
 }
 document.addEventListener("levelup:change", renderFaq);
 LevelUp.ready.then(renderFaq);
+
+// ===== Sideways rows with ◀ ▶ buttons (the coaches): one card per click =====
+document.querySelectorAll("[data-row-nav]").forEach((nav) => {
+  const row = document.querySelector(nav.dataset.rowNav);
+  if (!row) return;
+  const [prev, next] = nav.querySelectorAll("[data-row-step]");
+  const update = () => {
+    prev.disabled = row.scrollLeft <= 4;
+    next.disabled = row.scrollLeft + row.clientWidth >= row.scrollWidth - 4;
+    nav.hidden = row.scrollWidth <= row.clientWidth + 4; // everything fits: no buttons needed
+  };
+  nav.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-row-step]");
+    if (!btn) return;
+    const card = row.firstElementChild;
+    const step = card ? card.getBoundingClientRect().width + parseFloat(getComputedStyle(row).columnGap || 24) : row.clientWidth * 0.8;
+    row.scrollBy({ left: Number(btn.dataset.rowStep) * step, behavior: "smooth" });
+  });
+  row.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update);
+  new MutationObserver(update).observe(row, { childList: true }); // coach cards added later (schedule.js)
+  update();
+});

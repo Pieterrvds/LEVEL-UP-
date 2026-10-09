@@ -3,6 +3,8 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 
 ## Pages
 - `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule, contact. Photos and video open in a "Highlights" pop-up (hero button and footer)
+  Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
+  ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
 - `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. New players set their body stats as step 2 of sign-up. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
 - `chat.html`: private chat between a player and a coach (see "Chat")
@@ -13,7 +15,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 ## Phones
 - A bar at the bottom (Home · Book · Scores · Chat · Menu) replaces the ☰ button; Scores jumps to the high scores, Chat opens
   the conversations (red badge = unread), Menu opens the same menu with **My profile** at the top (and Contact).
-- Section descriptions (and the price cards in 04 · Schedule) sit behind a "Read more" button; elements marked
+- Section descriptions (and the price cards in Level 5 · Schedule) sit behind a "Read more" button; elements marked
   `data-more` in `index.html` are hidden on phones until it's tapped.
 - Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
   the map behind a button, the schedule as a compact week (only days with open hours, times as small buttons).
@@ -103,7 +105,7 @@ so browsers and the installed app fetch the new files instead of a saved copy (G
 for 10 minutes).
 
 ## Phones: looping rows
-On phones the steps (Level 01), classes (Level 02) and team (Level 03) are swipe rows that glide to the left in an
+On phones the steps (Level 1), classes (Level 2) and team (Level 3) are swipe rows that glide to the left in an
 endless loop (`loopRows` in `script.js`): each row gets one copy of its cards, and when the first set has passed it
 jumps back by one set. Touching a row pauses it; it starts again 3 seconds after you let go. Off for "reduce motion".
 

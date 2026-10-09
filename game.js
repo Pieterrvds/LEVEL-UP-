@@ -2600,7 +2600,7 @@ const LevelUp = (() => {
     bar.innerHTML = `
       <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
       <a href="${link("schedule")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
-      <a href="${link("highScores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>
+      <a href="${link("scores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>
       <a href="chat.html" data-tab="chat">${CHAT_ICON}<span>Chat</span><i class="chat-badge" data-chat-badge hidden></i></a>
       <button type="button" data-tab="menu" aria-controls="nav" aria-expanded="false">${tabIcon("menu")}<span>Menu</span></button>`;
     document.body.appendChild(bar);
@@ -2623,7 +2623,7 @@ const LevelUp = (() => {
     if (page === "chat.html") setActive("chat");
     else if (home) {
       // Highlight the tab of the section on screen
-      const sections = { home: "home", about: "home", programs: "home", team: "home", highScores: "scores", schedule: "book", contact: "home" };
+      const sections = { home: "home", about: "home", programs: "home", team: "home", scores: "scores", reviews: "home", schedule: "book", contact: "home", faq: "home" };
       const onScreen = () => {
         let current = "home";
         Object.keys(sections).forEach((id) => {
