@@ -47,7 +47,7 @@ function listTime(at) {
 function peerAvatar(peer, size = "") {
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   const photo = coach && !coach.dynamic ? coach.img : peer.avatarUrl;
-  if (photo) return `<span class="avatar has-photo ${size}" aria-hidden="true"><img src="${esc(photo)}" alt="" loading="lazy" decoding="async"></span>`;
+  if (photo) return `<span class="avatar has-photo ${size}" aria-hidden="true"><img src="${esc(photo)}" alt="" loading="lazy" decoding="async"${coach && size === "head" ? ` data-coach="${esc(coach.id)}"` : ""}></span>`;
   return LevelUp.avatarHtml({ name: peer.name, xp: 0 }, size);
 }
 function peerRole(peer) {
@@ -150,7 +150,7 @@ function renderThread() {
     box.innerHTML = `
       <header class="chat-head">
         <a href="chat.html" class="chat-back" data-back aria-label="All conversations">${BACK_ICON}</a>
-        ${peerAvatar(t)}
+        ${peerAvatar(t, "head")}
         <div class="chat-head-info">
           <b data-no-i18n>${esc(peerName(t))}</b>
           <span>${esc(peerRole(t))}</span>

@@ -1360,24 +1360,6 @@ textarea { resize: vertical; min-height: 130px; }
 .footer-inner p { margin: 0; }
 .footer-hint { font-family: var(--display); font-size: 0.55rem; color: var(--green-bright); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
-/* Floating WhatsApp */
-.whatsapp-float {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  width: 58px;
-  height: 58px;
-  z-index: 900;
-  border-radius: 50%;
-  background: #25d366;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  transition: transform 0.2s;
-  animation: nudge 6s ease-in-out infinite;
-}
-.whatsapp-float:hover { transform: scale(1.08); }
-.whatsapp-float img { width: 100%; height: 100%; border-radius: 50%; }
 
 @keyframes nudge {
   0%, 88%, 100% { transform: rotate(0); }
@@ -1401,11 +1383,13 @@ textarea { resize: vertical; min-height: 130px; }
   border: 3px solid var(--gold);
   box-shadow: var(--shadow);
   transform: translateY(160%);
-  transition: transform 0.35s ease-in-out;
-  max-width: calc(100% - 110px);
+  opacity: 0;
+  visibility: hidden; /* fully gone when hidden (on phones it sits above the tab bar) */
+  transition: transform 0.35s ease-in-out, opacity 0.25s ease-in, visibility 0s linear 0.35s;
+  max-width: calc(100% - 40px);
   pointer-events: none;
 }
-.toast.show { transform: translateY(0); }
+.toast.show { transform: translateY(0); opacity: 1; visibility: visible; transition: transform 0.35s ease-in-out, opacity 0.2s ease-out, visibility 0s; }
 .toast[data-tone="green"] { border-color: var(--green-bright); box-shadow: var(--shadow); }
 .toast[data-tone="green"] .toast-icon, .toast[data-tone="green"] .toast-title { color: var(--green-bright); }
 .toast-icon { font-size: 1.4rem; color: var(--gold); }
@@ -1550,7 +1534,6 @@ textarea { resize: vertical; min-height: 130px; }
   .chart-toggle { min-height: 40px; }
   .link-btn { padding: 8px 0; }
 
-  .whatsapp-float { width: 50px; height: 50px; right: 14px; bottom: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1704,7 +1687,7 @@ textarea { resize: vertical; min-height: 130px; }
 /* Smoother on phones: no blur behind the header, no looping animations */
 @media (max-width: 760px) {
   .hud::before { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(var(--bg-rgb), 0.97); }
-  .tag.live, .hs-head h3, .cursor, .quest-loading, .board-message, .whatsapp-float, .swipe-hint { animation: none; }
+  .tag.live, .hs-head h3, .cursor, .quest-loading, .board-message, .swipe-hint { animation: none; }
   .reveal { transition-duration: 0.35s; }
 }
 
@@ -1737,7 +1720,6 @@ textarea { resize: vertical; min-height: 130px; }
   body.has-tabbar { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .menu-toggle { display: none; }
   body.has-tabbar .nav { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
-  body.has-tabbar .whatsapp-float { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .toast { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .footer-inner { padding-bottom: 32px; }
 }
@@ -2568,3 +2550,56 @@ input, select, textarea { border-radius: 8px; }
 .app-open-row .btn { flex: 1 1 140px; }
 .auth-resend { justify-self: start; padding: 0; font: inherit; font-size: 0.9rem; background: none; border: 0; cursor: pointer; }
 .auth-resend:disabled { opacity: 0.6; cursor: default; }
+
+/* Phones: the page doesn't zoom or bounce, so the bars stay put (iPhone included) */
+@media (max-width: 760px) {
+  html, body { overscroll-behavior-y: none; }
+  html { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  input, select, textarea { font-size: max(16px, 1em); } /* iPhone zooms in on smaller fields */
+}
+@media (max-width: 760px) { .tabbar, .hud { transform: translateZ(0); -webkit-backface-visibility: hidden; } }
+
+/* Coach photos lead to the coach's card */
+img[data-coach] { cursor: pointer; transition: transform 0.15s, filter 0.15s; }
+img[data-coach]:hover { transform: scale(1.06); filter: brightness(1.08); }
+.coach-faces { pointer-events: auto; }
+.team-card.coach-focus { animation: coach-focus 2.4s ease-out; }
+@keyframes coach-focus {
+  0%, 30% { box-shadow: 0 0 0 3px var(--green-bright), 0 0 40px rgba(var(--green-bright-rgb), 0.45); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Monthly statement (coach account + admin): full screen inside the app; printing prints only this */
+.stmt-overlay {
+  position: fixed; inset: 0; z-index: 4000; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  color: #1a1a1a; background: #fff; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+html.stmt-open, html.stmt-open body { overflow: hidden; }
+.stmt-actions { position: sticky; top: 0; z-index: 1; display: flex; gap: 10px; max-width: 800px; margin: 0 auto 16px; padding: 8px 0; background: #fff; }
+.stmt-actions .btn-ghost { --btn-fg: #1a1a1a; border-color: #1a1a1a; background: #fff; }
+.stmt-sheet { max-width: 800px; margin: 0 auto; }
+.stmt-sheet header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px 24px; padding-bottom: 20px; border-bottom: 3px solid #1a1a1a; }
+.stmt-sheet h1 { margin: 0 0 4px; font: 800 22px/1.2 system-ui, -apple-system, sans-serif; letter-spacing: 0.02em; text-transform: none; color: #1a1a1a; }
+.stmt-brand { margin: 0; font-weight: 800; font-size: 20px; letter-spacing: 0.08em; }
+.stmt-muted { color: #5b6b61; margin: 0; }
+.stmt-venue { text-align: right; }
+.stmt-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+.stmt-meta h2 { margin: 0 0 6px; font: 600 11px/1.4 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; color: #5b6b61; }
+.stmt-meta p { margin: 0; }
+.stmt-table-wrap { overflow-x: auto; }
+.stmt-sheet table { width: 100%; border-collapse: collapse; }
+.stmt-sheet th, .stmt-sheet td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #dfe5e1; }
+.stmt-sheet th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #5b6b61; }
+.stmt-sheet .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stmt-sheet .stmt-totals { margin: 20px 0 0 auto; width: min(320px, 100%); }
+.stmt-totals td { border: 0; padding: 4px 10px; }
+.stmt-totals .grand td { border-top: 2px solid #1a1a1a; font-weight: 800; font-size: 16px; padding-top: 10px; }
+.stmt-note { margin-top: 28px; padding: 12px 14px; background: #f3f6f4; font-size: 12.5px; border-radius: 8px; }
+@media (max-width: 560px) { .stmt-venue { text-align: left; } .stmt-meta { grid-template-columns: 1fr; } }
+@media print {
+  html.stmt-open body > *:not(.stmt-overlay) { display: none !important; }
+  html.stmt-open, html.stmt-open body { overflow: visible; background: #fff; }
+  .stmt-overlay { position: static; overflow: visible; padding: 0; }
+  .stmt-actions { display: none; }
+}

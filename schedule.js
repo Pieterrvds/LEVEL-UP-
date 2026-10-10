@@ -195,7 +195,7 @@ function renderWeekList(days, trainers, now, todayKey) {
       }).join("");
       return chips ? `
         <div class="list-row" style="--c:${t.color}">
-          <span class="list-trainer"><img src="${t.img}" alt=""><b>${esc(t.short)}</b></span>
+          <span class="list-trainer"><img src="${t.img}" alt="" data-coach="${t.id}"><b>${esc(t.short)}</b></span>
           <div class="list-times">${chips}</div>
         </div>` : "";
     }).join("");
@@ -249,7 +249,7 @@ function nextOpenSlots(limit) {
 function renderQuestBoard() {
   if (!questList) return;
   document.getElementById("partyFaces").innerHTML = TRAINERS.map((t) =>
-    `<img src="${t.img}" alt="" style="--c:${t.color}">`).join("");
+    `<img src="${t.img}" alt="${esc(t.short)}" data-coach="${t.id}" style="--c:${t.color}">`).join("");
   document.getElementById("partyText").textContent = `${TRAINERS.length} trainers ready to coach you`;
 
   if (!LevelUp.isReady()) return;
@@ -262,7 +262,7 @@ function renderQuestBoard() {
     <li>
       <button type="button" class="quest-item" style="--c:${q.trainer.color}"
         data-quest-trainer="${q.trainer.id}" data-date="${q.key}" data-hour="${q.hour}">
-        <img src="${q.trainer.img}" alt="">
+        <img src="${q.trainer.img}" alt="" data-coach="${q.trainer.id}">
         <span class="quest-info">
           <span class="quest-when">${q.time.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${pad(q.hour)}:00</span>
           <span class="quest-who">1:1 with ${esc(q.trainer.short)}</span>
@@ -302,7 +302,7 @@ function renderBookingDialog(message = "") {
 
   const trainerCard = `
     <div class="booking-trainer" style="--c:${trainer.color}">
-      <img src="${trainer.img}" alt="">
+      <img src="${trainer.img}" alt="" data-coach="${trainer.id}">
       <div>
         <p class="booking-trainer-name">${esc(trainer.name)}</p>
         <p class="muted">${esc(trainer.role)} · LVL ${stats.level} ${stats.rank.title}</p>

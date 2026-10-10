@@ -147,7 +147,7 @@ function renderSessions() {
     const price = ["declined", "expired"].includes(b.status) ? "" : ` · ${esc(LevelUp.priceLabel(b))}`;
     return `
       <li class="session-row" style="--c:${trainer.color}">
-        <img src="${trainer.img}" alt="">
+        <img src="${trainer.img}" alt="" data-coach="${trainer.id}">
         <div>
           <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}</p>
           <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${price}${note ? ` · ${note}` : ""}</p>
@@ -930,14 +930,12 @@ function bindEvents(player) {
       const month = document.getElementById("statementMonth").value;
       const range = LevelUpStatements.monthRange(month);
       const pdf = button.dataset.myStatement === "pdf";
-      const win = pdf ? window.open("", "_blank") : null; // open now, or pop-up blockers stop it after loading
       button.disabled = true;
       try {
         const rows = await LevelUp.coachStatement(range.from, range.to);
         const st = LevelUpStatements.build(LevelUp.getPlayer().trainerId, month, rows);
-        if (pdf) LevelUpStatements.statementPdf(st, win); else LevelUpStatements.statementCsv(st);
+        if (pdf) LevelUpStatements.statementPdf(st); else LevelUpStatements.statementCsv(st);
       } catch (err) {
-        win?.close();
         document.getElementById("statementError").textContent = err.message;
       }
       button.disabled = false;

@@ -101,84 +101,77 @@ window.LevelUpStatements = (() => {
   }
 
   // ---------- Printable statement (the browser's "Save as PDF") ----------
-  // win: a window opened right on the click (pop-up blockers allow that), for when data loads first
-  function statementPdf(st, win) {
+  // Shown full screen inside the site/app (a new window would leave the installed app); printing
+  // prints only the statement (see .stmt-overlay in style.css).
+  function statementPdf(st) {
     const t = st.trainer;
-    const w = win || window.open("", "_blank");
-    if (!w) { alert("Allow pop-ups for this site to open the statement."); return; }
     const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
     const rows = st.rows.map((b) => `
       <tr>
         <td>${LevelUp.parseDate(b.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</td>
         <td>${pad(b.hour)}:00</td>
-        <td>${esc(b.name)}</td>
+        <td data-no-i18n>${esc(b.name)}</td>
         <td>${esc(sessionType(b))}</td>
         <td>${STATUS[b.status]}</td>
         <td class="num">${euro(b.price)}</td>
         <td class="num">${euro(b.trainerFee)}</td>
       </tr>`).join("");
-    w.document.write(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LEVEL-UP statement · ${esc(t?.name || "")} · ${esc(st.range.label)}</title>
-<style>
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 40px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; background: #fff; }
-  .sheet { max-width: 800px; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 3px solid #1a1a1a; }
-  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.02em; }
-  .brand { font-weight: 800; font-size: 20px; letter-spacing: 0.08em; }
-  .muted { color: #5b6b61; }
-  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
-  .meta h2 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5b6b61; }
-  .meta p { margin: 0; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #dfe5e1; }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #5b6b61; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .totals { margin: 20px 0 0 auto; width: 320px; }
-  .totals td { border: 0; padding: 4px 10px; }
-  .totals .grand td { border-top: 2px solid #1a1a1a; font-weight: 800; font-size: 16px; padding-top: 10px; }
-  .note { margin-top: 28px; padding: 12px 14px; background: #f3f6f4; font-size: 12.5px; }
-  .actions { margin: 0 auto 24px; max-width: 800px; display: flex; gap: 10px; }
-  button { font: inherit; padding: 8px 14px; border: 2px solid #1a1a1a; background: #7cff6b; cursor: pointer; font-weight: 700; }
-  @media print { body { padding: 0; } .actions { display: none; } }
-</style></head>
-<body>
-  <div class="actions"><button onclick="window.print()">Print / Save as PDF</button><button onclick="window.close()" style="background:#fff">Close</button></div>
-  <div class="sheet">
+    document.querySelector(".stmt-overlay")?.remove();
+    const overlay = document.createElement("div");
+    overlay.className = "stmt-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Monthly statement");
+    overlay.innerHTML = `
+  <div class="stmt-actions">
+    <button type="button" class="btn btn-small btn-primary" data-stmt-print>Print / Save as PDF</button>
+    <button type="button" class="btn btn-small btn-ghost" data-stmt-close>Close</button>
+  </div>
+  <div class="stmt-sheet">
     <header>
       <div>
-        <p class="brand">LEVEL-UP</p>
+        <p class="stmt-brand">LEVEL-UP</p>
         <h1>Monthly statement</h1>
-        <p class="muted">${esc(st.range.label)}</p>
+        <p class="stmt-muted">${esc(st.range.label)}</p>
       </div>
-      <div class="muted" style="text-align:right">
+      <div class="stmt-muted stmt-venue">
         ${esc(VENUE.name)}<br>${esc(VENUE.owner)}<br>${esc(VENUE.address)}<br>${esc(VENUE.email)} · ${esc(VENUE.phone)}
       </div>
     </header>
-    <div class="meta">
-      <div><h2>Trainer</h2><p><strong>${esc(t?.name || "")}</strong></p><p class="muted">${esc(t?.role || "Personal trainer")}</p></div>
-      <div><h2>Period</h2><p>${esc(st.range.from)} to ${esc(st.range.to)}</p><p class="muted">Made on ${today}</p></div>
+    <div class="stmt-meta">
+      <div><h2>Trainer</h2><p data-no-i18n><strong>${esc(t?.name || "")}</strong></p><p class="stmt-muted">${esc(t?.role || "Personal trainer")}</p></div>
+      <div><h2>Period</h2><p>${esc(st.range.from)} – ${esc(st.range.to)}</p><p class="stmt-muted">Made on ${today}</p></div>
     </div>
     ${st.rows.length ? `
-    <table>
+    <div class="stmt-table-wrap"><table>
       <thead><tr><th>Date</th><th>Time</th><th>Client</th><th>Session</th><th>Status</th><th class="num">Price</th><th class="num">Your fee</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>` : `<p class="muted">No charged sessions in this month.</p>`}
-    <table class="totals">
+    </table></div>` : `<p class="stmt-muted">No charged sessions in this month.</p>`}
+    <table class="stmt-totals">
       <tr><td>Sessions</td><td class="num">${st.rows.length}</td></tr>
       <tr class="grand"><td>Total fees</td><td class="num">${euro(st.total)}</td></tr>
       <tr><td>Already paid out</td><td class="num">${euro(st.paidOut)}</td></tr>
       <tr><td><strong>Still to receive</strong></td><td class="num"><strong>${euro(st.open)}</strong></td></tr>
     </table>
-    <p class="note">Overview of the sessions you coached at LEVEL-UP in ${esc(st.range.label)}, as the basis for your invoice to
+    <p class="stmt-note">Overview of the sessions you coached at LEVEL-UP in ${esc(st.range.label)}, as the basis for your invoice to
     ${esc(VENUE.owner)} (LEVEL-UP). Counted: completed sessions, no-shows and late cancellations (both charged to the client).
     Amounts are the agreed trainer fees; whether VAT applies depends on your own status as self-employed. Check with your accountant.</p>
-  </div>
-  <script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>
-</body></html>`);
-    w.document.close();
+  </div>`;
+    const title = document.title;
+    const close = () => {
+      overlay.remove();
+      document.title = title;
+      document.documentElement.classList.remove("stmt-open");
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (event) => { if (event.key === "Escape") close(); };
+    overlay.querySelector("[data-stmt-close]").addEventListener("click", close);
+    overlay.querySelector("[data-stmt-print]").addEventListener("click", () => window.print());
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
+    document.documentElement.classList.add("stmt-open");
+    document.title = `LEVEL-UP statement · ${t?.name || ""} · ${st.range.label}`; // the PDF's file name
+    overlay.querySelector("[data-stmt-print]").focus();
   }
 
   return { monthRange, recentMonths, build, statementCsv, statementPdf, sessionsCsv, overviewCsv, BILLABLE };

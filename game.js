@@ -1851,6 +1851,39 @@ const LevelUp = (() => {
     if (!player) { clearTimeout(chatTimer); chatTimer = null; setChatBadge(0); }
   });
 
+  // ---------- Coach photos: tap one to go to that coach's card (Level 3 on the home page) ----------
+  function goToCoach(id) {
+    const card = document.getElementById(`team-${id}`);
+    if (!card) { location.href = `index.html#team-${encodeURIComponent(id)}`; return; }
+    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+    const row = card.parentElement;
+    document.getElementById("team")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    row.dispatchEvent(new CustomEvent("levelup:hold")); // the gliding phone row stands still for a moment
+    row.scrollTo({ left: card.offsetLeft - row.offsetLeft - 4, behavior: "smooth" });
+    card.classList.remove("coach-focus");
+    void card.offsetWidth;
+    card.classList.add("coach-focus");
+    setTimeout(() => card.classList.remove("coach-focus"), 2400);
+  }
+  document.addEventListener("click", (event) => {
+    const face = event.target.closest("[data-coach]");
+    if (!face || face.closest(".team-card")) return;
+    event.preventDefault();
+    event.stopPropagation(); // e.g. the photo inside a "next free session" button
+    goToCoach(face.dataset.coach);
+  }, true);
+  const coachFromHash = () => {
+    const m = location.hash.match(/^#team-([\w-]+)$/);
+    if (m) ready.then(() => setTimeout(() => goToCoach(decodeURIComponent(m[1])), 400));
+  };
+  if (!/profile|shop|admin|chat|privacy/.test(location.pathname)) { coachFromHash(); window.addEventListener("hashchange", coachFromHash); }
+
+  // ---------- Phones: no pinch zoom (iPhone ignores user-scalable=no; double-tap zoom is off via touch-action in style.css) ----------
+  if (window.matchMedia("(pointer: coarse)").matches) {
+    ["gesturestart", "gesturechange", "gestureend"].forEach((type) =>
+      document.addEventListener(type, (event) => event.preventDefault(), { passive: false }));
+  }
+
   // ---------- Animated logo ----------
   // The header/footer logo becomes img/logo-anim.svg (the stickman doing real pull-ups): 3 reps when the
   // page opens (the footer one when it scrolls into view) and 3 more on hover or tap. It stays an <img>

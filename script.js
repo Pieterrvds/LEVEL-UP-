@@ -199,6 +199,7 @@ renderAboutCta();
     row.addEventListener("focusin", pause);
     row.addEventListener("focusout", resume);
     row.addEventListener("scroll", () => { if (pausedUntil > performance.now()) { wrap(); pos = row.scrollLeft; } }, { passive: true });
+    row.addEventListener("levelup:hold", () => { pausedUntil = performance.now() + 6000; });
 
     new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(row);
     // new trainer cards (from the server) or a resize: copy the cards again
