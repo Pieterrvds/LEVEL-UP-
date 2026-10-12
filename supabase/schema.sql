@@ -2204,7 +2204,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------
--- Chat: a private conversation between a player and a coach
+-- Chat: private conversations between a player and a coach, or between two members
 -- Only the two people in a conversation can read it (through the functions below);
 -- each new message queues a push notification for the other side.
 -- ---------------------------------------------------------
@@ -2230,6 +2230,17 @@ create table if not exists public.chat_messages (
 );
 create index if not exists chat_messages_thread_idx on public.chat_messages (thread_id, id);
 
+-- Members can also chat with each other (found by name in the chat): member_id is the second person and
+-- trainer_id stays empty. In those conversations "client" = whoever started it, "trainer" side = member_id.
+alter table public.chat_threads add column if not exists member_id uuid references public.profiles (id) on delete cascade;
+alter table public.chat_threads alter column trainer_id drop not null;
+do $$ begin
+  alter table public.chat_threads add constraint chat_threads_kind_check check ((trainer_id is null) <> (member_id is null));
+exception when duplicate_object then null; end $$;
+create unique index if not exists chat_threads_pair_idx on public.chat_threads
+  (least(client_id, member_id), greatest(client_id, member_id)) where member_id is not null;
+create index if not exists chat_threads_member_idx on public.chat_threads (member_id, last_at desc) where member_id is not null;
+
 alter table public.chat_threads enable row level security;
 alter table public.chat_messages enable row level security;
 revoke all on public.chat_threads, public.chat_messages from anon, authenticated;
@@ -2241,17 +2252,38 @@ returns text language sql stable security definer set search_path = public as $$
   where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email') limit 1;
 $$;
 
+-- The trainer card linked to an account, if any
+create or replace function public._trainer_of(p_user uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select t.id from public.trainers t join public.profiles p on lower(p.email) = lower(t.email)
+  where p.id = p_user and t.email is not null limit 1;
+$$;
+
 -- 'client', 'trainer' or null (not your conversation)
 create or replace function public._chat_side(p_thread public.chat_threads)
 returns text language sql stable security definer set search_path = public as $$
   select case when p_thread.client_id = auth.uid() then 'client'
-              when p_thread.trainer_id = public._my_trainer() then 'trainer' end;
+              when p_thread.member_id is not null and p_thread.member_id = auth.uid() then 'trainer'
+              when p_thread.member_id is null and p_thread.trainer_id = public._my_trainer() then 'trainer' end;
 $$;
 
--- The other person in a conversation, as the website shows them
+-- A member as the chat shows them (a trainer gets their card's id and role)
+create or replace function public._chat_person(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('name', p.name, 'avatarUrl', p.avatar_url, 'userId', p.id,
+           'trainerId', t.id, 'role', coalesce(case when t.id is not null then coalesce(t.role, 'Personal trainer') end, 'Player'))
+  from public.profiles p
+  left join public.trainers t on t.email is not null and lower(t.email) = lower(p.email) and t.active
+  where p.id = p_user;
+$$;
+
+-- The other person in a conversation
 create or replace function public._chat_peer(p_thread public.chat_threads, p_side text)
 returns jsonb language sql stable security definer set search_path = public as $$
-  select case when p_side = 'client' then
+  select case
+    when p_thread.member_id is not null then
+      public._chat_person(case when p_side = 'client' then p_thread.member_id else p_thread.client_id end)
+    when p_side = 'client' then
       (select jsonb_build_object('name', t.name, 'role', coalesce(t.role, 'Personal trainer'), 'trainerId', t.id,
               'avatarUrl', (select p.avatar_url from public.profiles p where p.id = public._trainer_user(t.id)))
        from public.trainers t where t.id = p_thread.trainer_id)
@@ -2271,7 +2303,7 @@ begin
   if auth.uid() is null then return '[]'::jsonb; end if;
   select coalesce(jsonb_agg(row order by (row ->> 'lastAt') desc), '[]'::jsonb) into out from (
     select public._chat_peer(th, s.side) || jsonb_build_object(
-      'id', th.id, 'side', s.side, 'lastAt', th.last_at,
+      'id', th.id, 'side', s.side, 'direct', th.member_id is not null, 'lastAt', th.last_at,
       'lastBody', m.body, 'lastMine', m.from_trainer = (s.side = 'trainer'),
       'unread', (select count(*) from public.chat_messages u
                  where u.thread_id = th.id and u.from_trainer = (s.side = 'client')
@@ -2281,8 +2313,9 @@ begin
     cross join lateral (select case when th.client_id = auth.uid() then 'client' else 'trainer' end as side) s
     left join lateral (select body, from_trainer from public.chat_messages
                        where thread_id = th.id order by id desc limit 1) m on true
-    where (th.client_id = auth.uid() or (me_trainer is not null and th.trainer_id = me_trainer))
-      and (s.side = 'client' or m.body is not null)   -- coaches only see conversations once there is a message
+    where (th.client_id = auth.uid() or th.member_id = auth.uid()
+           or (me_trainer is not null and th.member_id is null and th.trainer_id = me_trainer))
+      and (s.side = 'client' or m.body is not null)   -- the other side only sees it once there is a message
   ) q;
   return out;
 end $$;
@@ -2300,6 +2333,64 @@ begin
   insert into public.chat_threads (client_id, trainer_id) values (auth.uid(), p_trainer)
   on conflict (client_id, trainer_id) do nothing;
   select id into tid from public.chat_threads where client_id = auth.uid() and trainer_id = p_trainer;
+  return tid;
+end $$;
+
+-- Find members by name to start a chat (never emails); at least 2 letters
+create or replace function public.chat_search(p_query text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  q text := btrim(coalesce(p_query, ''));
+  out jsonb;
+begin
+  if auth.uid() is null or char_length(q) < 2 then return '[]'::jsonb; end if;
+  q := replace(replace(replace(q, '\', '\\'), '%', '\%'), '_', '\_');
+  select coalesce(jsonb_agg(public._chat_person(x.id) order by x.is_trainer desc, x.starts desc, lower(x.name)), '[]'::jsonb) into out
+  from (
+    select p.id, p.name, (public._trainer_of(p.id) is not null) as is_trainer, (p.name ilike q || '%') as starts
+    from public.profiles p
+    where p.id <> auth.uid() and p.name ilike '%' || q || '%'
+    order by (public._trainer_of(p.id) is not null) desc, (p.name ilike q || '%') desc, lower(p.name)
+    limit 12
+  ) x;
+  return out;
+end $$;
+
+-- Open (or start) a conversation with a member found by name.
+-- A trainer -> the usual coach conversation; a trainer who looks up their client -> that coach conversation;
+-- anyone else -> a private conversation between the two of you (never a second one).
+create or replace function public.chat_open_user(p_user uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  me_trainer text := public._my_trainer();
+  their_card text;
+  tid uuid;
+begin
+  if me is null then raise exception 'Log in first.'; end if;
+  if p_user is null or p_user = me then raise exception 'Pick someone else to chat with.'; end if;
+  if not exists (select 1 from public.profiles where id = p_user) then raise exception 'Member not found.'; end if;
+  their_card := public._trainer_of(p_user);
+  if their_card is not null and their_card is distinct from me_trainer
+     and exists (select 1 from public.trainers where id = their_card and active) then
+    return public.chat_open(their_card);
+  end if;
+  if me_trainer is not null then
+    insert into public.chat_threads (client_id, trainer_id) values (p_user, me_trainer)
+    on conflict (client_id, trainer_id) do nothing;
+    select id into tid from public.chat_threads where client_id = p_user and trainer_id = me_trainer;
+    return tid;
+  end if;
+  select id into tid from public.chat_threads
+  where member_id is not null and least(client_id, member_id) = least(me, p_user) and greatest(client_id, member_id) = greatest(me, p_user);
+  if tid is null then
+    insert into public.chat_threads (client_id, member_id) values (me, p_user)
+    on conflict do nothing returning id into tid;
+    if tid is null then
+      select id into tid from public.chat_threads
+      where member_id is not null and least(client_id, member_id) = least(me, p_user) and greatest(client_id, member_id) = greatest(me, p_user);
+    end if;
+  end if;
   return tid;
 end $$;
 
@@ -2326,11 +2417,11 @@ begin
     else update public.chat_threads set trainer_read_id = greatest(trainer_read_id, top) where id = th.id; end if;
   end if;
   return public._chat_peer(th, side) || jsonb_build_object(
-    'id', th.id, 'side', side, 'messages', msgs,
+    'id', th.id, 'side', side, 'direct', th.member_id is not null, 'messages', msgs,
     'peerReadId', case when side = 'client' then th.trainer_read_id else th.client_read_id end);
 end $$;
 
--- Send a message; the other side gets a push notification
+-- Send a message; the other person gets a push notification
 create or replace function public.chat_send(p_thread uuid, p_body text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -2340,6 +2431,7 @@ declare
   new_id bigint;
   at timestamptz;
   sender text;
+  recipient uuid;
 begin
   select * into th from public.chat_threads where id = p_thread;
   side := case when found then public._chat_side(th) end;
@@ -2354,14 +2446,15 @@ begin
   if side = 'client' then
     update public.chat_threads set last_at = at, client_read_id = new_id where id = th.id;
     select name into sender from public.profiles where id = auth.uid();
-    perform public._push(public._trainer_user(th.trainer_id), '💬 ' || coalesce(sender, 'New message'), left(msg, 140),
-                         'chat.html?t=' || th.id, 'chat-' || th.id);
+    recipient := coalesce(th.member_id, public._trainer_user(th.trainer_id));
   else
     update public.chat_threads set last_at = at, trainer_read_id = new_id where id = th.id;
-    select split_part(name, ' ', 1) into sender from public.trainers where id = th.trainer_id;
-    perform public._push(th.client_id, '💬 ' || coalesce(sender, 'Your coach'), left(msg, 140),
-                         'chat.html?t=' || th.id, 'chat-' || th.id);
+    if th.member_id is not null then select name into sender from public.profiles where id = auth.uid();
+    else select split_part(name, ' ', 1) into sender from public.trainers where id = th.trainer_id; end if;
+    recipient := th.client_id;
   end if;
+  perform public._push(recipient, '💬 ' || coalesce(sender, 'New message'), left(msg, 140),
+                       'chat.html?t=' || th.id, 'chat-' || th.id);
   return jsonb_build_object('id', new_id, 'mine', true, 'body', msg, 'at', at);
 end $$;
 
@@ -2379,10 +2472,13 @@ begin
   if auth.uid() is null then return jsonb_build_object('unread', 0); end if;
   with u as (
     select m.id, m.thread_id, m.body,
-           case when t.client_id = auth.uid() then (select split_part(tr.name, ' ', 1) from public.trainers tr where tr.id = t.trainer_id)
+           case when t.client_id = auth.uid() then
+                  coalesce((select p.name from public.profiles p where p.id = t.member_id),
+                           (select split_part(tr.name, ' ', 1) from public.trainers tr where tr.id = t.trainer_id))
                 else (select p.name from public.profiles p where p.id = t.client_id) end as name
     from public.chat_threads t join public.chat_messages m on m.thread_id = t.id
-    where (t.client_id = auth.uid() or (me_trainer is not null and t.trainer_id = me_trainer))
+    where (t.client_id = auth.uid() or t.member_id = auth.uid()
+           or (me_trainer is not null and t.member_id is null and t.trainer_id = me_trainer))
       and m.from_trainer = (t.client_id = auth.uid())
       and m.id > case when t.client_id = auth.uid() then t.client_read_id else t.trainer_read_id end
   )
@@ -2393,15 +2489,21 @@ begin
 end $$;
 
 revoke execute on function public._my_trainer() from public, anon, authenticated;
+revoke execute on function public._trainer_of(uuid) from public, anon, authenticated;
 revoke execute on function public._chat_side(public.chat_threads) from public, anon, authenticated;
+revoke execute on function public._chat_person(uuid) from public, anon, authenticated;
 revoke execute on function public._chat_peer(public.chat_threads, text) from public, anon, authenticated;
 revoke execute on function public.chat_list() from public, anon;
 revoke execute on function public.chat_open(text) from public, anon;
+revoke execute on function public.chat_search(text) from public, anon;
+revoke execute on function public.chat_open_user(uuid) from public, anon;
 revoke execute on function public.chat_thread(uuid, bigint) from public, anon;
 revoke execute on function public.chat_send(uuid, text) from public, anon;
 revoke execute on function public.chat_unread() from public, anon;
 grant execute on function public.chat_list() to authenticated;
 grant execute on function public.chat_open(text) to authenticated;
+grant execute on function public.chat_search(text) to authenticated;
+grant execute on function public.chat_open_user(uuid) to authenticated;
 grant execute on function public.chat_thread(uuid, bigint) to authenticated;
 grant execute on function public.chat_send(uuid, text) to authenticated;
 grant execute on function public.chat_unread() to authenticated;

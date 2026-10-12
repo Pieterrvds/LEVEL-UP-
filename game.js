@@ -1771,6 +1771,8 @@ const LevelUp = (() => {
   const chatThread = (id, after = 0) => call("chat_thread", { p_thread: id, p_after: after });
   const chatSend = (id, body) => call("chat_send", { p_thread: id, p_body: body });
   const chatOpen = (trainerId) => call("chat_open", { p_trainer: trainerId });
+  const chatSearch = (query) => call("chat_search", { p_query: query });
+  const chatOpenUser = (userId) => call("chat_open_user", { p_user: userId });
 
   function setChatBadge(n) {
     chatUnread = n;
@@ -2791,7 +2793,7 @@ const LevelUp = (() => {
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
-    chatList, chatThread, chatSend, chatOpen, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
+    chatList, chatThread, chatSend, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast
   };

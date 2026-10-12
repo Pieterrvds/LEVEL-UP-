@@ -16,8 +16,12 @@ const state = {
   pending: [],        // sent by me, waiting for the server
   error: "",
   listTimer: null,
-  threadTimer: null
+  threadTimer: null,
+  search: "",         // the member search box
+  results: null,      // chat_search rows (null = searching)
+  searchSeq: 0
 };
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
 
 const params = new URLSearchParams(location.search);
 // The messages box is skipped by the translator (people's own words), so its few labels go through t()
@@ -82,6 +86,9 @@ function render() {
           <header class="chat-list-head">
             <p class="section-kicker">Messages</p>
             <h1>Chat</h1>
+            <label class="chat-search">${SEARCH_ICON}<span class="sr-only">Search a member</span>
+              <input type="search" id="chatSearch" placeholder="Search a member by name…" autocomplete="off" enterkeyhint="search">
+            </label>
           </header>
           <div class="chat-threads" id="chatThreads"></div>
         </aside>
@@ -97,6 +104,7 @@ function renderList() {
   const box = document.getElementById("chatThreads");
   if (!box) return;
   if (state.threads === null) { box.innerHTML = `<p class="chat-empty muted">Loading…</p>`; return; }
+  if (state.search.trim().length >= 2) { box.innerHTML = searchHtml(); return; }
   const rows = state.threads.map((t) => `
     <a href="?t=${esc(t.id)}" class="chat-row ${state.active?.id === t.id ? "active" : ""} ${t.unread ? "unread" : ""}" data-thread="${esc(t.id)}">
       ${peerAvatar(t)}
@@ -109,6 +117,47 @@ function renderList() {
       ${t.unread ? `<span class="chat-row-badge">${t.unread > 9 ? "9+" : t.unread}</span>` : ""}
     </a>`).join("");
   box.innerHTML = LevelUp.pushCalloutHtml("Get a notification on this phone when a message comes in.") + rows + startHtml();
+}
+
+// Members found by name: tap one to open (or start) the conversation
+function searchHtml() {
+  if (state.results === null) return `<p class="chat-empty muted">Searching…</p>`;
+  if (!state.results.length) return `<p class="chat-empty muted">No members found with that name.</p>`;
+  return `<p class="chat-start-title">Members</p>` + state.results.map((r) => `
+    <button type="button" class="chat-row chat-row-new" data-user="${esc(r.userId)}">
+      ${peerAvatar(r)}
+      <span class="chat-row-main"><span class="chat-row-top"><b data-no-i18n>${esc(peerName(r))}</b></span><span class="chat-row-last"><em>${esc(peerRole(r))}</em></span></span>
+      <span class="chat-row-plus" aria-hidden="true">›</span>
+    </button>`).join("");
+}
+
+let searchTimer = null;
+function onSearch(value) {
+  state.search = value;
+  clearTimeout(searchTimer);
+  if (value.trim().length < 2) { state.results = null; renderList(); return; }
+  state.results = null;
+  renderList();
+  const seq = ++state.searchSeq;
+  searchTimer = setTimeout(async () => {
+    try {
+      const rows = await LevelUp.chatSearch(value.trim());
+      if (seq !== state.searchSeq) return;
+      state.results = rows || [];
+    } catch (err) {
+      if (seq !== state.searchSeq) return;
+      state.results = [];
+      console.warn(err.message);
+    }
+    renderList();
+  }, 250);
+}
+function clearSearch() {
+  const input = document.getElementById("chatSearch");
+  if (input) input.value = "";
+  state.search = "";
+  state.results = null;
+  renderList();
 }
 
 // Coaches you can start a conversation with (players only)
@@ -326,6 +375,20 @@ root.addEventListener("click", async (event) => {
     openThread(row.dataset.thread);
     return;
   }
+  const user = event.target.closest("[data-user]");
+  if (user) {
+    user.disabled = true;
+    try {
+      const id = await LevelUp.chatOpenUser(user.dataset.user);
+      clearSearch();
+      await loadList();
+      openThread(id);
+    } catch (err) {
+      alert(err.message);
+      user.disabled = false;
+    }
+    return;
+  }
   const start = event.target.closest("[data-start]");
   if (start) {
     start.disabled = true;
@@ -343,6 +406,13 @@ root.addEventListener("click", async (event) => {
     event.preventDefault();
     closeThread();
   }
+});
+
+root.addEventListener("input", (event) => {
+  if (event.target.id === "chatSearch") onSearch(event.target.value);
+});
+root.addEventListener("keydown", (event) => {
+  if (event.target.id === "chatSearch" && event.key === "Escape") clearSearch();
 });
 
 window.addEventListener("popstate", () => {

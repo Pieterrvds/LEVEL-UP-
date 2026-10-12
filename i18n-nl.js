@@ -472,6 +472,14 @@
   "(or Add to Home screen)": "(of Toevoegen aan startscherm)",
   "You opened this link inside another app. Installing only works in {0}:": "Je opende deze link in een andere app. Installeren lukt alleen in {0}:",
   "Copy link": "Link kopiëren",
+  // Chat: search members
+  "Search a member by name…": "Zoek een lid op naam…",
+  "Search a member": "Zoek een lid",
+  "Searching…": "Zoeken…",
+  "No members found with that name.": "Geen leden gevonden met die naam.",
+  "Members": "Leden",
+  "Pick someone else to chat with.": "Kies iemand anders om mee te chatten.",
+  "Member not found.": "Lid niet gevonden.",
   // Bonus XP (admin)
   "🎁 +{0} XP from LEVEL-UP": "🎁 +{0} XP van LEVEL-UP",
   "XP correction: {0} XP": "XP-correctie: {0} XP",

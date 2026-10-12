@@ -150,6 +150,9 @@ Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js
   A coach can only chat once their card is linked to an account (trainer application approved with "link to an
   existing card", or `trainers.email` set); until then the button says they aren't on the chat yet.
 - **Coaches** see the conversations their clients started; admins can't read other people's chats.
+- **Search a member:** the search box at the top of the chat finds players and trainers by name (2+ letters; name,
+  photo and role only, never emails). A trainer opens the usual coach chat; a trainer who looks up a player opens
+  (or starts) the coach chat with them; two members get a private chat of their own (`member_id`), never a second one.
 - **Unread:** red badge on the Chat tab (phones) and the chat icon in the header (computer); a pop-up at the top of
   any page when a new message comes in (tap = open it). A push notification arrives on phones with notifications on.
 - **Live:** an open conversation checks for new messages every 3 seconds (right away when a push comes in), other
