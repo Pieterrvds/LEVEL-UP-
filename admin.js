@@ -1139,7 +1139,7 @@ function renderMembers() {
       `<span class="num">${euro(p.spent)}</span>`,
       `<span class="nowrap">${fmtDate(p.createdAt)}</span>`,
       `<span class="nowrap">${fmtDate(p.lastSeen)}</span>`,
-      `<button type="button" class="btn btn-small btn-ghost" data-member="${esc(p.email)}">View</button>`
+      `<span class="btn-row nowrap"><button type="button" class="btn btn-small btn-ghost" data-member="${esc(p.email)}">View</button><button type="button" class="btn btn-small btn-primary" data-member="${esc(p.email)}" data-member-xp>+ XP</button></span>`
     ])
   );
 }
@@ -1170,6 +1170,21 @@ function openMember(email) {
     </div>
     <div class="xp-bar"><i style="width:${p.prog.pct.toFixed(1)}%"></i></div>
     <p class="xp-caption"><span>LVL ${p.prog.level} · ${p.prog.rank.title}</span><span>${p.xp.toLocaleString("en-US")} XP · ${p.prog.toNext} to LVL ${p.prog.level + 1}</span></p>
+
+    <form class="xp-grant" data-xp-grant="${esc(p.id)}" data-email="${esc(p.email)}" id="xpGrant">
+      <h3 class="panel-sub first">Reward with XP</h3>
+      <p class="muted small-text">For example for helping LEVEL-UP. ${esc(p.name)} gets a notification with your reason and the XP.</p>
+      <div class="xp-quick" role="group" aria-label="Quick amounts">
+        ${[25, 50, 100, 250].map((n) => `<button type="button" class="btn btn-small btn-ghost" data-xp-quick="${n}">+${n}</button>`).join("")}
+      </div>
+      <div class="field-row">
+        <label>XP<input name="amount" type="number" step="5" min="-5000" max="5000" value="50" required></label>
+        <label>Reason (${esc(p.name)} sees it)<input name="reason" maxlength="140" placeholder="e.g. Helped at the open day" required></label>
+      </div>
+      <p class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-small btn-primary">Give XP ▶</button>
+      <p class="muted small-text">A negative number takes XP back (a correction).</p>
+    </form>
 
     <div class="member-grid">
       <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${own.length}</span></div>
@@ -1359,6 +1374,18 @@ root.addEventListener("click", (event) => {
   const member = event.target.closest("[data-member]");
   if (member) {
     openMember(member.dataset.member);
+    if (member.hasAttribute("data-member-xp")) {
+      const form = document.getElementById("xpGrant");
+      form?.scrollIntoView({ block: "center" });
+      form?.elements.reason.focus();
+    }
+    return;
+  }
+  const quick = event.target.closest("[data-xp-quick]");
+  if (quick) {
+    const form = quick.closest("form");
+    form.elements.amount.value = quick.dataset.xpQuick;
+    form.elements.reason.focus();
     return;
   }
   const dialog = document.getElementById("memberDialog");
@@ -1456,5 +1483,33 @@ root.addEventListener("submit", async (event) => {
     await refreshReviewsPanel();
   } catch (err) {
     f.querySelector(".form-error").textContent = err.message;
+  }
+});
+
+// Reward a member with XP (or take some back) — the player gets a push notification
+root.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-xp-grant]");
+  if (!form) return;
+  event.preventDefault();
+  const amount = Math.round(Number(form.elements.amount.value));
+  const reason = form.elements.reason.value.trim();
+  const error = form.querySelector(".form-error");
+  const p = data.players.find((x) => x.id === form.dataset.xpGrant);
+  error.textContent = "";
+  if (!amount) { error.textContent = "Enter an amount of XP."; return; }
+  if (reason.length < 3) { error.textContent = "Write a short reason (the player sees it)."; return; }
+  const what = amount > 0 ? `give ${p?.name || "this player"} +${amount} XP` : `take ${-amount} XP back from ${p?.name || "this player"}`;
+  if (!confirm(`Are you sure you want to ${what}?\n“${reason}”`)) return;
+  const btn = form.querySelector("[type=submit]");
+  btn.disabled = true;
+  try {
+    const r = await LevelUp.adminGrantXp(form.dataset.xpGrant, amount, reason);
+    LevelUp.toast({ title: amount > 0 ? `+${amount} XP sent` : `${amount} XP`, text: `${p?.name || ""}: ${reason}`, icon: "🎁", tone: "green" });
+    document.getElementById("memberDialog")?.close();
+    await render();
+    if (p) openMember(form.dataset.email);
+  } catch (err) {
+    error.textContent = err.message;
+    btn.disabled = false;
   }
 });

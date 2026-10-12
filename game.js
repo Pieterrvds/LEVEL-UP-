@@ -312,7 +312,7 @@ const LevelUp = (() => {
 
   // Changes that can queue a push notification: send it right away
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
-    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send"]);
+    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -610,6 +610,12 @@ const LevelUp = (() => {
   }
   const adminReviews = async () => (await call("admin_reviews")) || [];
   async function adminSetReview(id, status) { await call("admin_set_review", { p_id: id, p_status: status }); await loadReviews(); emit(); }
+  // Admin: extra XP (or a correction) with a reason; the player gets a push notification
+  async function adminGrantXp(userId, amount, reason) {
+    const r = await call("admin_grant_xp", { p_user: userId, p_amount: Math.round(Number(amount)), p_reason: String(reason || "").trim() });
+    if (player && userId === player.id) await refreshPlayer({ announce: true }); // your own XP: show the toast here
+    return r;
+  }
   async function adminAddReview(name, quote, rating) { await call("admin_add_review", { p_name: name, p_quote: quote, p_rating: Number(rating) }); await loadReviews(); emit(); }
   async function loadLeaderboard(period = "all") {
     try {
@@ -2770,7 +2776,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

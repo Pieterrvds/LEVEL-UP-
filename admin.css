@@ -221,3 +221,12 @@
 @media (max-width: 760px) { .period-nav { flex-basis: 100%; } }
 
 
+
+/* Member dialog: reward with XP */
+.xp-grant { display: grid; gap: 10px; margin: 16px 0 6px; padding: 14px; background: rgba(var(--green-bright-rgb), 0.06); border: 1px solid rgba(var(--green-bright-rgb), 0.35); border-radius: 12px; }
+.xp-grant .panel-sub { margin: 0; }
+.xp-grant p { margin: 0; }
+.xp-grant .field-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; }
+.xp-grant [type=submit] { justify-self: start; }
+.xp-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 480px) { .xp-grant .field-row { grid-template-columns: 1fr; } }

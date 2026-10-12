@@ -5,7 +5,7 @@
 // - Supabase, payments and other servers are never touched.
 // - Push: shows the notifications the Edge Function "push" sends; tapping one opens the right page.
 // Bump VERSION to clear old caches.
-const VERSION = "levelup-v19";
+const VERSION = "levelup-v20";
 const PRECACHE = ["offline.html", "i18n-nl.js", "i18n.js", "img/app/icon-192.png", "img/app/badge-96.png"];
 
 // Push texts come from the server in English; in Dutch (the language the site last used) they are translated here
@@ -55,6 +55,7 @@ self.addEventListener("push", (event) => {
   let msg = {};
   try { msg = event.data ? event.data.json() : {}; } catch { msg = { body: event.data?.text() }; }
   const chat = /^chat-/.test(msg.tag || ""); // a chat message: people's own words, never translated
+  const note = /^note-/.test(msg.tag || ""); // e.g. bonus XP: the title is ours, the text is Pieter's own words
   event.waitUntil((async () => {
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     open.forEach((c) => c.postMessage({ type: "push", tag: msg.tag || "" })); // open pages refresh right away
@@ -62,7 +63,7 @@ self.addEventListener("push", (event) => {
     if (chat && open.some((c) => c.focused && c.visibilityState === "visible" && c.url.includes(`chat.html?t=${msg.tag.slice(5)}`))) return;
     const lang = chat ? "en" : await pushLang();
     await self.registration.showNotification(trPush(msg.title, lang) || "LEVEL-UP", {
-      body: trPush(msg.body, lang) || "",
+      body: (note ? msg.body : trPush(msg.body, lang)) || "",
       icon: "img/app/icon-192.png",
       badge: "img/app/badge-96.png",
       tag: msg.tag || undefined,

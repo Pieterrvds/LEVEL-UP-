@@ -472,6 +472,9 @@
   "(or Add to Home screen)": "(of Toevoegen aan startscherm)",
   "You opened this link inside another app. Installing only works in {0}:": "Je opende deze link in een andere app. Installeren lukt alleen in {0}:",
   "Copy link": "Link kopiëren",
+  // Bonus XP (admin)
+  "🎁 +{0} XP from LEVEL-UP": "🎁 +{0} XP van LEVEL-UP",
+  "XP correction: {0} XP": "XP-correctie: {0} XP",
   // Monthly statement (coach account + admin)
   "Print / Save as PDF": "Afdrukken / Opslaan als PDF",
   "Made on {0}": "Gemaakt op {0}",

@@ -157,6 +157,12 @@ Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js
 - **Server:** tables `chat_threads` + `chat_messages` (no direct access), functions `chat_list`, `chat_open`,
   `chat_thread`, `chat_send` (max 2000 characters, 20 messages a minute) and `chat_unread` in `supabase/schema.sql`.
 
+## Bonus XP (admin)
+Admin → Members: **+ XP** next to a member (or "Reward with XP" in their details) gives extra XP with your own reason,
+e.g. for helping LEVEL-UP; a negative number takes XP back (a correction). The player gets a push notification
+("🎁 +50 XP from LEVEL-UP" + your reason) and sees it in their XP log. You can reward yourself too. Server:
+`admin_grant_xp` in `supabase/schema.sql` (admins only, max 5000 XP at once, reason 3–140 characters).
+
 ## Push notifications
 
 Players and trainers can turn on notifications (My account → Me, after booking, or in the coach panel). They get:
@@ -164,6 +170,7 @@ Players and trainers can turn on notifications (My account → Me, after booking
 - **Players:** session confirmed, request declined or expired, reminder the day before, +XP after a session,
   no-show, free session earned, pack active, cancelled by LEVEL-UP.
 - **Trainers** (linked account): new session request, request withdrawn, cancellation and late cancellation.
+- **Bonus XP** from the admin, with the reason.
 - **Both:** a new chat message (title = who sent it, text = the start of the message; not shown when that chat is
   already open on screen).
 

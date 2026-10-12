@@ -2407,6 +2407,32 @@ grant execute on function public.chat_send(uuid, text) to authenticated;
 grant execute on function public.chat_unread() to authenticated;
 
 -- ---------------------------------------------------------
+-- Admin: give (or take back) XP by hand, e.g. for helping LEVEL-UP; the player gets a push with the reason
+-- ---------------------------------------------------------
+create or replace function public.admin_grant_xp(p_user uuid, p_amount integer, p_reason text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  why text := btrim(coalesce(p_reason, ''));
+  new_xp integer;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if p_amount is null or p_amount = 0 then raise exception 'Enter an amount of XP.'; end if;
+  if abs(p_amount) > 5000 then raise exception 'At most 5000 XP at once.'; end if;
+  if char_length(why) < 3 then raise exception 'Write a short reason (the player sees it).'; end if;
+  if char_length(why) > 140 then raise exception 'Keep the reason under 140 characters.'; end if;
+  if not exists (select 1 from public.profiles where id = p_user) then raise exception 'Player not found.'; end if;
+  perform public._grant_xp(p_user, p_amount, why);
+  select xp into new_xp from public.profiles where id = p_user;
+  perform public._push(p_user,
+    case when p_amount > 0 then '🎁 +' || p_amount || ' XP from LEVEL-UP' else 'XP correction: ' || p_amount || ' XP' end,
+    why, 'profile.html#rewards', 'note-xp-' || extract(epoch from now())::bigint);
+  return jsonb_build_object('xp', new_xp);
+end $$;
+
+revoke execute on function public.admin_grant_xp(uuid, integer, text) from public, anon;
+grant execute on function public.admin_grant_xp(uuid, integer, text) to authenticated;
+
+-- ---------------------------------------------------------
 -- Permissions: helpers are private, the website calls only these
 -- ---------------------------------------------------------
 revoke execute on function public._config(text) from public, anon, authenticated;
