@@ -843,6 +843,7 @@ input, select, textarea {
   transition: border-color 0.2s, box-shadow 0.2s;
   font-size-adjust: none; font-style: normal;
 }
+input[type="radio"], input[type="checkbox"] { width: auto; } /* never full width (hidden ones stuck out of pop-ups) */
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--green-bright);
@@ -1549,7 +1550,7 @@ textarea { resize: vertical; min-height: 130px; }
 .kind-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; padding: 0; border: 0; }
 .kind-picker legend { margin-bottom: 8px; font-family: var(--display); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .kind-option { display: block; cursor: pointer; }
-.kind-option input { position: absolute; opacity: 0; pointer-events: none; }
+.kind-option input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 .kind-option > span { font-family: var(--sans); font-size: 0.95rem; text-transform: none; letter-spacing: normal; color: var(--text); display: grid; gap: 4px; height: 100%; padding: 12px; background: #000; border: 1px solid var(--line); transition: border-color 0.15s; font-size-adjust: none; font-style: normal; }
 .kind-option input:checked + span { border-color: var(--green-bright); box-shadow: var(--shadow-sm); }
 .kind-option input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -1575,7 +1576,7 @@ textarea { resize: vertical; min-height: 130px; }
 .pay-picker[hidden] { display: none; }
 .pay-picker legend { margin-bottom: 8px; font-family: var(--display); font-size: 0.5rem; text-transform: uppercase; color: var(--muted); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .pay-option { display: block; cursor: pointer; }
-.pay-option input { position: absolute; opacity: 0; pointer-events: none; }
+.pay-option input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 .pay-option > span { display: block; padding: 12px; font-family: var(--sans); font-size: 0.95rem; text-transform: none; letter-spacing: normal; color: var(--text); background: #000; border: 1px solid var(--line); font-size-adjust: none; font-style: normal; }
 .pay-option input:checked + span { border-color: var(--green-bright); box-shadow: var(--shadow-sm); }
 .pay-option input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -2603,3 +2604,7 @@ html.stmt-open, html.stmt-open body { overflow: hidden; }
   .stmt-overlay { position: static; overflow: visible; padding: 0; }
   .stmt-actions { display: none; }
 }
+
+/* Pop-ups never scroll sideways, and scrolling inside one doesn't move the page behind it */
+dialog { max-width: calc(100vw - 16px); overflow-x: hidden; overscroll-behavior: contain; }
+dialog[open] { touch-action: pan-y; }

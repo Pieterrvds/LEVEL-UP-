@@ -1513,3 +1513,15 @@ root.addEventListener("submit", async (event) => {
     btn.disabled = false;
   }
 });
+
+// Phones: every table row becomes a card; each cell gets its column name (admin.css shows it as a label)
+function labelTables() {
+  root.querySelectorAll("table.data-table").forEach((table) => {
+    const heads = [...table.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+    table.querySelectorAll("tbody tr").forEach((tr) => {
+      [...tr.children].forEach((td, i) => { if (!td.hasAttribute("data-label")) td.setAttribute("data-label", heads[i] || ""); });
+    });
+  });
+}
+new MutationObserver(labelTables).observe(root, { childList: true, subtree: true });
+labelTables();
