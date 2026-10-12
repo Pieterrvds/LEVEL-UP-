@@ -2303,19 +2303,6 @@ const LevelUp = (() => {
           <label>What do you coach?<input name="specialties" maxlength="200" placeholder="e.g. Road cycling, endurance, bike fitness"></label>
           <label>About you (optional)<textarea name="bio" rows="3" maxlength="600" placeholder="Experience, certificates, where you train…"></textarea></label>
         </div>
-        <div class="signup-stats">
-          <p class="stats-intro">Step 2 of 2 · <strong>Body stats.</strong> We use these for your BMI, daily calories and progress. Only you and your coach can see them.</p>
-          <div class="field-row">
-            <label>Weight (kg)<input name="weight" type="number" min="30" max="300" step="0.1" inputmode="decimal"></label>
-            <label>Height (cm)<input name="height" type="number" min="120" max="230" inputmode="numeric"></label>
-          </div>
-          <div class="field-row">
-            <label>Age<input name="age" type="number" min="14" max="100" inputmode="numeric"></label>
-            <label>Sex<select name="sex"><option value="male">Male</option><option value="female">Female</option></select></label>
-          </div>
-          <label>Activity level<select name="activity">${ACTIVITY_LEVELS.map((a) => `<option value="${a.value}" ${a.value === 1.55 ? "selected" : ""}>${a.label}</option>`).join("")}</select></label>
-          <label>Goal<select name="goal">${Object.entries(GOALS).map(([v, l]) => `<option value="${v}" ${v === "maintain" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        </div>
         <p class="form-error" role="alert"></p>
         <p class="form-success" role="status"></p>
         <button type="button" class="text-link auth-resend" hidden>Resend the confirmation email</button>
@@ -2349,20 +2336,21 @@ const LevelUp = (() => {
       const mode = dialog.dataset.mode;
       submit.disabled = true;
       try {
-        if (mode === "signup" && dialog.dataset.step !== "2") {
-          // Step 1: account details. Check them before asking for stats.
+        if (mode === "signup" && dialog.dataset.step !== "2" && data.kind === "trainer") {
+          // Trainers: step 1 = account details, step 2 = the application. Players sign up in one step;
+          // they fill in their body stats later in My account → Body.
           if (!String(data.name || "").trim()) throw new Error("Enter your name.");
           if (!/^\S+@\S+\.\S+$/.test(String(data.email || "").trim())) throw new Error("Enter a valid email address.");
           if (!data.password || data.password.length < 6) throw new Error("Your password needs at least 6 characters.");
           setStep(2);
-          (dialog.dataset.kind === "trainer" ? form.elements.role : form.elements.weight).focus();
+          form.elements.role.focus();
           return;
         }
         if (mode === "signup") {
           const trainer = data.kind === "trainer";
           const result = trainer
             ? await signUp({ ...data, trainerApplication: cleanApplication(data) })
-            : await signUp({ ...data, stats: computeStats(data) });
+            : await signUp(data);
           if (trainer) toast({ title: "Application sent", text: "Pieter reviews it soon. You'll get an email.", icon: "✉", tone: "green" });
           if (result.needsConfirmation) {
             form.reset();
@@ -2401,9 +2389,9 @@ const LevelUp = (() => {
     dialog.dataset.step = String(step);
     dialog.dataset.kind = trainer ? "trainer" : "player";
     dialog.querySelector(".auth-submit").textContent = step === 2
-      ? (trainer ? "Send application ▶" : "Create profile ▶")
-      : (trainer ? "Next: trainer application ▶" : "Next: body stats ▶");
-    dialog.querySelector(".auth-title").textContent = step === 2 ? (trainer ? "Trainer application" : "Your body stats") : MODES.signup.title;
+      ? "Send application ▶"
+      : (trainer ? "Next: trainer application ▶" : MODES.signup.submit);
+    dialog.querySelector(".auth-title").textContent = step === 2 ? "Trainer application" : MODES.signup.title;
     dialog.querySelector(".form-error").textContent = "";
   }
 

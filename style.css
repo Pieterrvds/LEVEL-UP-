@@ -299,8 +299,7 @@ a { color: inherit; }
 .auth-dialog[data-mode="new-password"] .auth-tabs { display: none; }
 .auth-dialog:not([data-mode="login"]) .auth-forgot { display: none; }
 .auth-forgot { justify-self: center; font-weight: 500; color: var(--muted); }
-.signup-stats, .signup-trainer, .auth-back { display: none; }
-.auth-dialog[data-mode="signup"][data-step="2"][data-kind="player"] .signup-stats,
+.signup-trainer, .auth-back { display: none; }
 .auth-dialog[data-mode="signup"][data-step="2"][data-kind="trainer"] .signup-trainer { display: grid; gap: 14px; }
 .role-picker { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .role-picker legend { margin-bottom: 8px; }
@@ -2557,7 +2556,8 @@ input, select, textarea { border-radius: 8px; }
   html { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   input, select, textarea { font-size: max(16px, 1em); } /* iPhone zooms in on smaller fields */
 }
-@media (max-width: 760px) { .tabbar, .hud { transform: translateZ(0); -webkit-backface-visibility: hidden; } }
+/* (not on .hud: a transform there would trap the fixed menu inside the header) */
+@media (max-width: 760px) { .tabbar { transform: translateZ(0); -webkit-backface-visibility: hidden; } }
 
 /* Coach photos lead to the coach's card */
 img[data-coach] { cursor: pointer; transition: transform 0.15s, filter 0.15s; }

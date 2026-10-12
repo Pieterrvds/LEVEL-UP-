@@ -724,7 +724,7 @@ function render() {
       ${inTab("rewards", renderRanks(player, p))}
       ${inTab("shop", renderPacks(player))}
       ${inTab("shop", renderInventory(player))}
-      ${inTab("me", renderBodyStats(player))}
+      ${inTab("body", renderBodyStats(player))}
       ${inTab("me", renderHealth(player))}
       ${inTab("me", renderApplication(player))}
       ${inTab("me", renderAppPanel())}
@@ -751,12 +751,13 @@ function profileTabs(player) {
   const coach = LevelUp.isTrainer() ? LevelUp.getCoachBookings() : [];
   const requests = coach.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length;
   const toSettle = coach.filter((b) => LevelUp.canSettle(b)).length;
-  const needsSetup = (!player.bodyStats.length ? 1 : 0) + (!LevelUp.healthValid() ? 1 : 0);
+  const needsSetup = !LevelUp.healthValid() ? 1 : 0;
   return [
     { id: "overview", label: "Overview" },
     LevelUp.isTrainer() && { id: "coach", label: "Coach", badge: requests + toSettle },
     { id: "rewards", label: "Rewards", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
     { id: "shop", label: "Packs & shop" },
+    { id: "body", label: "Body stats", badge: player.bodyStats.length ? 0 : "!" },
     { id: "me", label: "Me", badge: needsSetup ? "!" : 0 }
   ].filter(Boolean);
 }
