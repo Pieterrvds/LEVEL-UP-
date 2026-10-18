@@ -81,6 +81,8 @@ const LevelUp = (() => {
     { level: 12, title: "Champion" },
     { level: 16, title: "Legend" }
   ];
+  // Phone status-bar colour per rank (applyRankTheme); up here so an early emit() can use it.
+  const RANK_BG = ["#070707", "#05070b", "#07060b", "#080606", "#080606", "#080706"];
 
   const ITEMS = [
     {
@@ -1931,7 +1933,6 @@ const LevelUp = (() => {
   // ---------- Events ----------
   // The site's main colour follows the player's rank (Rookie green … Legend gold); see style.css "Rank colours".
   // Remembered so the next page load starts in the right colour (inline script in each page's <head>).
-  const RANK_BG = ["#070707", "#05070b", "#07060b", "#080606", "#080606", "#080706"];
   // "Always Carbon green" (Account): this device keeps the green look whatever the rank.
   const carbonOnly = () => { try { return localStorage.getItem("levelup.carbon") === "1"; } catch { return false; } };
   function setCarbonOnly(on) {
