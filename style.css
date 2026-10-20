@@ -449,6 +449,27 @@ a { color: inherit; }
     linear-gradient(115deg, transparent 0 58%, rgba(255, 255, 255, 0.035) 58% 64%, transparent 64% 70%, rgba(255, 255, 255, 0.025) 70% 72%, transparent 72%),
     var(--bg);
 }
+/* Home page: a CrossFit box behind the hero, black and white and faded towards the text (left) and the page (bottom).
+   Photo: Unsplash (free licence), see README.md. The rank colour glow underneath still shows through. */
+#home .hero-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url(img/hero-box.jpg) center / cover no-repeat;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(90deg, transparent 10%, rgba(0, 0, 0, 0.6) 45%, #000 75%), linear-gradient(0deg, transparent 0%, #000 30%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 10%, rgba(0, 0, 0, 0.6) 45%, #000 75%), linear-gradient(0deg, transparent 0%, #000 30%);
+  mask-composite: intersect;
+}
+@media (max-width: 700px) {
+  #home .hero-bg::before {
+    background-image: url(img/hero-box-small.jpg);
+    opacity: 0.32;
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 55%, transparent 90%);
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 55%, transparent 90%);
+  }
+}
 
 
 .hero-grid {

@@ -2,7 +2,7 @@
 Personal training platform with a sports-game look ("FC Ultimate"): players and personal trainers meet, train and level up together.
 
 ## Pages
-- `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule, contact. A "Highlights" pop-up (hero button and footer) shows six posters: the logo and five exercises in `img/highlights/` (the first photos and video are in `archive/highlights/`)
+- `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule, contact. A "Highlights" pop-up (hero button and footer) shows six posters: the logo and five exercises in `img/highlights/` (the first photos and video are in `archive/highlights/`). Behind the hero: a black-and-white CrossFit box, `img/hero-box.jpg` (`hero-box-small.jpg` on phones), Unsplash photo `photo-1623874514711-0f321325f318` under the free Unsplash licence (commercial use allowed, no credit required)
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
