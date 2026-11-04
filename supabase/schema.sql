@@ -654,6 +654,12 @@ returns date language sql stable as $$
   select (date_trunc('month', now() at time zone 'Europe/Brussels') - interval '1 month')::date;
 $$;
 
+-- Start of a booked hour (Brussels time); defined here because _streak below already uses it
+create or replace function public._slot_start(p_day date, p_hour integer)
+returns timestamptz language sql stable as $$
+  select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
+$$;
+
 -- Weeks in a row (Monday to Sunday, Brussels) with at least one completed session.
 -- This week counts as soon as it has a completed session; until then the streak runs up to last week.
 create or replace function public._streak(p_user uuid)
@@ -747,11 +753,6 @@ $$;
 -- ---------------------------------------------------------
 -- Bookings
 -- ---------------------------------------------------------
-create or replace function public._slot_start(p_day date, p_hour integer)
-returns timestamptz language sql stable as $$
-  select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
-$$;
-
 -- The trainer (by linked account email) or an admin may handle a booking
 create or replace function public._can_coach(p_trainer text)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -2590,6 +2591,9 @@ grant execute on function public.admin_set_review(uuid, text) to authenticated;
 grant execute on function public.admin_add_review(text, text, integer) to authenticated;
 revoke execute on function public._settle_player_of_month() from public, anon, authenticated;
 revoke execute on function public._push_streak_reminders(timestamptz) from public, anon, authenticated;
+-- Internal helpers: anyone could otherwise read another member's monthly XP or streak by their id
+revoke execute on function public._month_xp(uuid, date) from public, anon, authenticated;
+revoke execute on function public._streak(uuid) from public, anon, authenticated;
 revoke execute on function public.set_avatar(text) from public, anon;
 revoke execute on function public.admin_clear_avatar(uuid) from public, anon;
 grant execute on function public.set_avatar(text) to authenticated;

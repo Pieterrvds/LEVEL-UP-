@@ -1487,14 +1487,15 @@ const LevelUp = (() => {
     session = newSession;
     if (event === "PASSWORD_RECOVERY") openAuth("new-password");
     if (!session) {
+      if (event === "INITIAL_SESSION") return; // startup already loaded everything for a visitor
       player = null;
       welcomed = false;
-      await Promise.all([loadSlots(), loadLeaderboard()]);
+      await Promise.all([loadSlots(), onHome ? loadLeaderboard() : null]);
       emit();
       return;
     }
     if ((event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && player) return;
-    await Promise.all([refreshPlayer(), loadSlots(), loadLeaderboard(), loadTrainerStats(), loadOpeningHours()]);
+    await Promise.all([refreshPlayer(), loadSlots(), onHome ? loadLeaderboard() : null, loadTrainerStats(), loadOpeningHours()]);
     if (!wasLoggedIn && player && !welcomed) {
       welcomed = true;
       call("touch_login").catch(() => {});
@@ -1715,6 +1716,8 @@ const LevelUp = (() => {
   }
 
   // ---------- Startup ----------
+  // High scores and reviews only show on the home page; other pages skip loading them.
+  const onHome = Boolean(document.getElementById("scores"));
   // Everything loads at once; only the calendar and the player wait for the trainer list
   // (so new trainers' hours and names are known). The loading screen shows the real progress.
   const ready = (async () => {
@@ -1733,8 +1736,8 @@ const LevelUp = (() => {
           bootTask(loadOpeningHours(), "Loading opening hours…"),
           bootTask(loadSlots(), "Loading open sessions…"),
           bootTask(loadTrainerStats(), "Loading trainer levels…"),
-          bootTask(loadLeaderboard(), "Loading high scores…"),
-          bootTask(loadReviews(), "Loading reviews…")
+          onHome ? bootTask(loadLeaderboard(), "Loading high scores…") : null,
+          onHome ? bootTask(loadReviews(), "Loading reviews…") : null
         ]);
         if (player) {
           welcomed = true;
