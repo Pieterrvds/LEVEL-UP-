@@ -315,3 +315,10 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .player-header-level strong { font-size: 1.9rem; line-height: 1.4; color: var(--green-bright); }
   .player-header-level span { font-size: 0.55rem; }
 }
+
+/* Shop: open tab and pack gifts */
+.pack-option span.pack-gift { color: var(--green-bright); font-weight: 700; font-size: 0.85rem; }
+.tab-box { display: grid; gap: 8px; margin: 16px 0 0; padding: 14px; background: #000; border: 2px dashed var(--gold); }
+.tab-box > p { margin: 0; }
+.tab-box strong { color: var(--gold); }
+.tab-box .log-list li { align-items: center; }

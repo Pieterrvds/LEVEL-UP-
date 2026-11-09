@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Item Shop | LEVEL-UP</title>
-  <script src="i18n-nl.js?v=202611121200"></script>
-  <script src="i18n.js?v=202611121200"></script>
+  <script src="i18n-nl.js?v=202611091800"></script>
+  <script src="i18n.js?v=202611091800"></script>
   <meta name="description" content="LEVEL-UP merch and training tools. Every euro you spend earns XP, so gear up and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,8 +29,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611121200">
-  <link rel="stylesheet" href="shop.css?v=202611121200">
+  <link rel="stylesheet" href="style.css?v=202611091800">
+  <link rel="stylesheet" href="shop.css?v=202611091800">
   <script src="https://www.paypal.com/sdk/js?client-id=AcJLXipsreQDWPNqUNKBknNhohnvhY3QtkXKNNSk0zMkYhvPgxcF-kFYKxaTadXAAbiyW4ZOO1Fummpb&currency=EUR" defer></script>
 </head>
 <body>
@@ -80,9 +80,13 @@
       <div class="hero-bg" aria-hidden="true"></div>
       <div class="container shop-hero-grid">
         <div>
-          <p class="eyebrow">▸ Official store</p>
-          <h1 class="shop-title">Gear up.<br><span>Level up.</span></h1>
-          <p class="lead">Official LEVEL-UP merch and training tools. Every euro you spend earns <strong>10 XP</strong>, and complete sets unlock bonus achievements.</p>
+          <p class="eyebrow shop-only">▸ Official store</p>
+          <h1 class="shop-title shop-only">Gear up.<br><span>Level up.</span></h1>
+          <p class="lead shop-only">Official LEVEL-UP merch, training tools and fuel for after your session. Every euro you spend earns <strong>10 XP</strong>, and complete sets unlock bonus achievements.</p>
+          <p class="eyebrow fridge-only">▸ The fridge</p>
+          <h1 class="shop-title fridge-only">Grab it.<br><span>Tap it.</span></h1>
+          <p class="lead fridge-only">Took a drink or a bar? Tap it here and put it on your tab, or pay right away. Pay your tab at the desk and the XP lands on your profile.</p>
+          <div class="xp-banner" id="xpBanner"></div>
         </div>
         <aside class="player-panel" id="playerPanel" aria-live="polite"></aside>
       </div>
@@ -102,14 +106,26 @@
             <button type="button" role="tab" aria-selected="true" data-filter="all">All</button>
             <button type="button" role="tab" aria-selected="false" data-filter="merch">Merch</button>
             <button type="button" role="tab" aria-selected="false" data-filter="tools">Tools</button>
+            <button type="button" role="tab" aria-selected="false" data-filter="fuel" hidden>Fuel</button>
+            <button type="button" role="tab" aria-selected="false" data-filter="limited" hidden>Limited</button>
           </div>
         </div>
         <div class="item-grid" id="itemGrid"></div>
       </div>
     </section>
 
+    <!-- Session packs with a free item (only shows when a pack has a gift, set in admin -> Shop) -->
+    <section class="section section-alt shop-only" id="bundles" hidden>
+      <div class="container">
+        <p class="section-kicker">Bundles</p>
+        <h2 class="section-title">Train more, get gear</h2>
+        <p class="section-intro">Session packs with a free item. You pick it up at the desk once the pack is paid.</p>
+        <div class="bundle-grid" id="bundleGrid"></div>
+      </div>
+    </section>
+
     <!-- Set bonuses -->
-    <section class="section section-alt">
+    <section class="section section-alt shop-only">
       <div class="container">
         <p class="section-kicker">Set bonuses</p>
         <h2 class="section-title">Unlock achievements</h2>
@@ -119,14 +135,14 @@
     </section>
 
     <!-- How it works -->
-    <section class="section">
+    <section class="section shop-only">
       <div class="container">
         <p class="section-kicker">How it works</p>
         <h2 class="section-title">From order to XP</h2>
         <ol class="loot-steps">
           <li><span class="step-no">1</span><h3>Log in</h3><p>Create your player profile so your XP gets saved.</p></li>
           <li><span class="step-no">2</span><h3>Fill your bag</h3><p>Pick your items and sizes. The bag shows how much XP you'll earn.</p></li>
-          <li><span class="step-no">3</span><h3>Check out</h3><p>Pay safely with PayPal or card. We contact you by email about delivery or pickup.</p></li>
+          <li><span class="step-no">3</span><h3>Check out</h3><p>Pay safely with PayPal or card. We contact you by email about delivery or pickup. Drinks and bars from the fridge can go on your tab.</p></li>
           <li><span class="step-no">★</span><h3>Level up</h3><p>Your XP and items land on your profile right away.</p></li>
         </ol>
       </div>
@@ -171,6 +187,7 @@
       <div class="bag-total"><span>Total</span><strong id="bagTotal">€0.00</strong></div>
       <div class="bag-xp" id="bagXp"></div>
       <div class="bag-login" id="bagLogin"></div>
+      <div class="bag-tab" id="bagTab"></div>
       <div id="paypal-button-container"></div>
       <p class="bag-status" id="bagStatus" role="alert"></p>
       <p class="bag-note">Secure payment with PayPal. After checkout we contact you by email to arrange delivery or pickup.</p>
@@ -184,7 +201,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="game.js?v=202611121200"></script>
-  <script src="shop.js?v=202611121200"></script>
+  <script src="game.js?v=202611091800"></script>
+  <script src="shop.js?v=202611091800"></script>
 </body>
 </html>

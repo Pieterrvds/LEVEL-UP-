@@ -56,7 +56,8 @@ insert into public.app_config (key, value) values
   ('class_capacity', '12'),       -- group class: default number of places
   ('class_cancel_hours', '4'),    -- group class: free sign-out up to this many hours before; later = charged
   ('class_reminder_minutes', '90'), -- group class: the "starts soon" push goes out this long before
-  ('class_chat_hours', '24')      -- group class: the class chat stays open this long after the class
+  ('class_chat_hours', '24'),     -- group class: the class chat stays open this long after the class
+  ('tab_limit', '30')             -- shop: most a member can have open "on their tab" (drinks and bars at the gym)
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -101,6 +102,21 @@ insert into public.shop_items (id, name, price) values
   ('hoodie', 'LEVEL-UP Hoodie', 45),
   ('parallettes', 'LEVEL-UP Parallettes', 40),
   ('bands', 'LEVEL-UP Resistance Bands', 25)
+on conflict (id) do nothing;
+
+-- Shop management (admin.html -> Shop): category, on/off, stock left (null = no limit) and an end date for limited drops.
+-- New products start switched off, so nobody can pay for something that isn't for sale yet.
+alter table public.shop_items add column if not exists category text not null default 'merch';
+alter table public.shop_items add column if not exists active boolean not null default true;
+alter table public.shop_items add column if not exists stock integer check (stock is null or stock >= 0);
+alter table public.shop_items add column if not exists drop_ends_at timestamptz;
+update public.shop_items set category = 'tools' where id in ('parallettes', 'bands') and category = 'merch';
+insert into public.shop_items (id, name, price, category, active, stock) values
+  ('shake', 'Protein shake', 3.5, 'fuel', false, null),
+  ('bar', 'Protein bar', 2.5, 'fuel', false, null),
+  ('energy', 'Energy drink', 2.5, 'fuel', false, null),
+  ('water', 'Water', 1.5, 'fuel', false, null),
+  ('hoodie_s1', 'Season 1 Hoodie', 55, 'limited', false, 25)
 on conflict (id) do nothing;
 
 create table if not exists public.profiles (
@@ -200,6 +216,9 @@ create table if not exists public.orders (
   xp integer not null default 0,
   created_at timestamptz not null default now()
 );
+-- "On my tab": drinks and bars taken at the gym, paid later at the desk. The XP comes once it's paid.
+alter table public.orders add column if not exists status text not null default 'paid' check (status in ('paid', 'open', 'cancelled'));
+alter table public.orders add column if not exists paid_at timestamptz;
 
 -- Session packs: a player requests a pack, an admin marks it as paid, then each 1:1
 -- booking uses one credit. A declined, expired or freely cancelled booking gives it back.
@@ -213,6 +232,9 @@ create table if not exists public.session_packs (
   paid_at timestamptz
 );
 create index if not exists session_packs_user_idx on public.session_packs (user_id);
+-- A pack can come with a gift from the shop (a bundle, e.g. 10 sessions + a T-shirt), handed out at the desk
+alter table public.session_packs add column if not exists gift text;
+alter table public.session_packs add column if not exists gift_given_at timestamptz;
 
 alter table public.session_packs add column if not exists pay_method text not null default 'in_person';
 alter table public.session_packs add column if not exists mollie_id text;
@@ -395,6 +417,7 @@ $$;
 create or replace function public._pack_json(sp public.session_packs)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object('id', sp.id, 'size', sp.size, 'price', sp.price, 'status', sp.status, 'payMethod', sp.pay_method,
+    'gift', sp.gift, 'giftGivenAt', sp.gift_given_at,
     'createdAt', sp.created_at, 'paidAt', sp.paid_at,
     'used', public._pack_used(sp.id), 'remaining', sp.size - public._pack_used(sp.id),
     'name', p.name, 'email', p.email)
@@ -618,7 +641,7 @@ begin
   if coalesce((p.inventory ->> 'parallettes')::int, 0) > 0 and coalesce((p.inventory ->> 'bands')::int, 0) > 0 then
     perform public._unlock(p_user, 'home_gym', 150, 'Home gym');
   end if;
-  select bool_and(coalesce((p.inventory ->> s.id)::int, 0) > 0) into owns_all from public.shop_items s;
+  select bool_and(coalesce((p.inventory ->> s.id)::int, 0) > 0) into owns_all from public.shop_items s where s.category in ('merch', 'tools');
   if owns_all then perform public._unlock(p_user, 'collector', 300, 'Collector'); end if;
 end $$;
 
@@ -804,8 +827,8 @@ returns jsonb language sql stable security definer set search_path = public as $
                               'sex', b.sex, 'goal', b.goal, 'bmi', b.bmi, 'bmr', b.bmr, 'maintenance', b.maintenance,
                               'target', b.target, 'protein', b.protein, 'activity', b.activity) order by b.day desc, b.id desc)
                            from public.body_stats b where b.user_id = p.id), '[]'::jsonb),
-    'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total) order by o.created_at desc)
-                           from public.orders o where o.user_id = p.id), '[]'::jsonb),
+    'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total, 'status', o.status, 'xp', o.xp) order by o.created_at desc)
+                           from public.orders o where o.user_id = p.id and o.status <> 'cancelled'), '[]'::jsonb),
     'bookings', coalesce((select jsonb_agg(public._booking_json(k) order by k.day, k.hour)
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb),
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
@@ -1387,37 +1410,209 @@ begin
   return o.xp;
 end $$;
 
--- Records a paid PayPal order. The total and XP are recalculated from the
--- shop prices, so a changed price in the browser can't inflate the XP.
-create or replace function public.record_order(p_id text, p_items jsonb)
-returns jsonb language plpgsql security definer set search_path = public as $$
+-- Can this be sold right now? Switched on, in stock, and the drop hasn't ended
+create or replace function public._shop_available(s public.shop_items)
+returns boolean language sql stable as $$
+  select s.active and (s.stock is null or s.stock > 0) and (s.drop_ends_at is null or s.drop_ends_at > now());
+$$;
+
+-- The shop as the website shows it: price, on/off, stock left and the end of a drop (anyone)
+create or replace function public.shop_catalog()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'price', s.price, 'category', s.category,
+           'active', s.active, 'stock', s.stock, 'dropEndsAt', s.drop_ends_at, 'available', public._shop_available(s)) order by s.id), '[]'::jsonb)
+  from public.shop_items s;
+$$;
+
+-- A basket checked against the shop: known items only, 1-10 each, prices from the database.
+-- p_strict: everything must be for sale right now (and, for the tab, be a drink or bar).
+create or replace function public._shop_basket(p_items jsonb, p_strict boolean, p_tab boolean default false)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
   clean jsonb := '[]'::jsonb;
   item jsonb;
   s public.shop_items;
   qty integer;
   v_total numeric := 0;
-  v_xp integer;
 begin
-  if p_id is null or length(p_id) < 6 then raise exception 'Invalid order.'; end if;
-  if exists (select 1 from public.orders where id = p_id) then
-    return jsonb_build_object('duplicate', true);
-  end if;
-  for item in select * from jsonb_array_elements(p_items) loop
+  for item in select * from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) loop
     select * into s from public.shop_items where id = item ->> 'id';
     if not found then continue; end if;
     qty := least(10, greatest(1, coalesce((item ->> 'qty')::int, 1)));
+    if p_strict then
+      if not public._shop_available(s) then raise exception '% is not available right now.', s.name; end if;
+      if s.stock is not null and qty > s.stock then raise exception 'Only % × % left.', s.stock, s.name; end if;
+      if p_tab and s.category <> 'fuel' then raise exception 'Only drinks and bars can go on your tab.'; end if;
+    elsif not s.active then
+      continue; -- a product that isn't for sale never earns XP
+    end if;
     v_total := v_total + s.price * qty;
     clean := clean || jsonb_build_array(jsonb_build_object('id', s.id, 'name', s.name, 'size', item ->> 'size', 'qty', qty, 'price', s.price));
   end loop;
   if jsonb_array_length(clean) = 0 then raise exception 'Invalid order.'; end if;
+  return jsonb_build_object('items', clean, 'total', v_total, 'xp', round(v_total * 10));
+end $$;
 
-  v_xp := round(v_total * 10);
-  insert into public.orders (id, user_id, items, total, xp) values (p_id, null, clean, v_total, v_xp);
+-- Before paying: is everything still for sale (sold out, drop ended)? Returns the total and XP.
+create or replace function public.shop_check(p_items jsonb)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  return public._shop_basket(p_items, true);
+end $$;
+
+-- Sold: lower the stock of limited items (never below 0)
+create or replace function public._shop_take_stock(p_items jsonb, p_sign integer default 1)
+returns void language sql security definer set search_path = public as $$
+  update public.shop_items s set stock = greatest(0, s.stock - p_sign * (i ->> 'qty')::int)
+  from jsonb_array_elements(p_items) i
+  where s.id = i ->> 'id' and s.stock is not null;
+$$;
+
+-- Records a paid PayPal order. The total and XP are recalculated from the
+-- shop prices, so a changed price in the browser can't inflate the XP.
+create or replace function public.record_order(p_id text, p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  basket jsonb;
+begin
+  if p_id is null or length(p_id) < 6 or p_id like 'TAB-%' then raise exception 'Invalid order.'; end if;
+  if exists (select 1 from public.orders where id = p_id) then
+    return jsonb_build_object('duplicate', true);
+  end if;
+  -- already paid: record it even if it sold out in the meantime (the stock just stays at 0)
+  basket := public._shop_basket(p_items, false);
+  insert into public.orders (id, user_id, items, total, xp, status, paid_at)
+  values (p_id, null, basket -> 'items', (basket ->> 'total')::numeric, (basket ->> 'xp')::int, 'paid', now());
+  perform public._shop_take_stock(basket -> 'items');
   if auth.uid() is not null then
     perform public._credit_order(p_id, auth.uid());
   end if;
-  return jsonb_build_object('xp', v_xp, 'total', v_total, 'guest', auth.uid() is null);
+  return jsonb_build_object('xp', (basket ->> 'xp')::int, 'total', (basket ->> 'total')::numeric, 'guest', auth.uid() is null);
+end $$;
+
+-- "On my tab": a member takes drinks or bars at the gym and pays later at the desk.
+-- At most tab_limit euro open at a time; the XP comes when an admin marks it as paid.
+create or replace function public.shop_tab_order(p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  basket jsonb;
+  open_total numeric;
+  oid text := 'TAB-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 10));
+begin
+  if auth.uid() is null then raise exception 'Log in to put it on your tab.'; end if;
+  perform 1 from public.profiles where id = auth.uid() for update;
+  basket := public._shop_basket(p_items, true, true);
+  select coalesce(sum(total), 0) into open_total from public.orders where user_id = auth.uid() and status = 'open';
+  if open_total + (basket ->> 'total')::numeric > public._config('tab_limit')::numeric then
+    raise exception 'Your tab is limited to % euro. Pay your open tab at the desk first.', public._config('tab_limit');
+  end if;
+  insert into public.orders (id, user_id, items, total, xp, status)
+  values (oid, auth.uid(), basket -> 'items', (basket ->> 'total')::numeric, (basket ->> 'xp')::int, 'open');
+  perform public._shop_take_stock(basket -> 'items');
+  return jsonb_build_object('id', oid, 'total', (basket ->> 'total')::numeric, 'xp', (basket ->> 'xp')::int,
+                            'openTotal', open_total + (basket ->> 'total')::numeric);
+end $$;
+
+-- Took the wrong drink: the member can undo an open tab line within 15 minutes; an admin any time
+create or replace function public.shop_tab_cancel(p_id text)
+returns void language plpgsql security definer set search_path = public as $$
+declare o public.orders;
+begin
+  select * into o from public.orders where id = p_id for update;
+  if not found or o.status <> 'open' or (o.user_id is distinct from auth.uid() and not public.is_admin()) then
+    raise exception 'Open tab not found.';
+  end if;
+  if not public.is_admin() and o.created_at < now() - interval '15 minutes' then
+    raise exception 'Ask at the desk to change this tab.';
+  end if;
+  update public.orders set status = 'cancelled' where id = p_id;
+  perform public._shop_take_stock(o.items, -1);
+end $$;
+
+-- Admin: the member paid their tab at the desk -> the order and its XP count
+create or replace function public.shop_tab_paid(p_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  o public.orders;
+  gained integer;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select * into o from public.orders where id = p_id for update;
+  if not found or o.status <> 'open' then raise exception 'Open tab not found.'; end if;
+  update public.orders set status = 'paid', paid_at = now() where id = p_id;
+  gained := public._credit_order(p_id, o.user_id);
+  perform public._push(o.user_id, 'Tab paid ✓', '+' || gained || ' XP for your drinks and bars', 'profile.html', 'tab-' || p_id);
+  return jsonb_build_object('id', p_id, 'xp', gained);
+end $$;
+
+-- Admin: everything for the Shop tab (products, open tabs, bundles and gifts to hand out)
+create or replace function public.admin_shop()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  return jsonb_build_object(
+    'items', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'price', s.price, 'category', s.category,
+                'active', s.active, 'stock', s.stock, 'dropEndsAt', s.drop_ends_at, 'available', public._shop_available(s),
+                'sold', (select coalesce(sum((i ->> 'qty')::int), 0) from public.orders o, jsonb_array_elements(o.items) i
+                         where o.status <> 'cancelled' and i ->> 'id' = s.id)) order by s.category, s.id), '[]'::jsonb)
+              from public.shop_items s),
+    'tabs', (select coalesce(jsonb_agg(jsonb_build_object('id', o.id, 'userId', o.user_id, 'name', p.name, 'email', p.email,
+                'items', o.items, 'total', o.total, 'xp', o.xp, 'date', o.created_at) order by p.name, o.created_at), '[]'::jsonb)
+             from public.orders o join public.profiles p on p.id = o.user_id where o.status = 'open'),
+    'packs', public._config('packs')::jsonb,
+    'gifts', (select coalesce(jsonb_agg(public._pack_json(sp) order by sp.paid_at), '[]'::jsonb)
+              from public.session_packs sp where sp.gift is not null and sp.status = 'paid' and sp.gift_given_at is null)
+  );
+end $$;
+
+-- Admin: change a product (price, on/off, stock left, end of the drop)
+create or replace function public.admin_shop_update(p_id text, p jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_price numeric := nullif(p ->> 'price', '')::numeric;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if not exists (select 1 from public.shop_items where id = p_id) then raise exception 'Product not found.'; end if;
+  if v_price is not null and (v_price < 0 or v_price > 1000) then raise exception 'Enter a price between 0 and 1000.'; end if;
+  update public.shop_items set
+    price = coalesce(v_price, price),
+    active = coalesce((p ->> 'active')::boolean, active),
+    stock = case when p ? 'stock' then nullif(p ->> 'stock', '')::int else stock end,
+    drop_ends_at = case when p ? 'dropEndsAt' then nullif(p ->> 'dropEndsAt', '')::timestamptz else drop_ends_at end
+  where id = p_id;
+end $$;
+
+-- Admin: a pack size comes with a gift from the shop (or none)
+create or replace function public.admin_pack_gift(p_size integer, p_gift text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare packs jsonb := public._config('packs')::jsonb;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if nullif(p_gift, '') is not null and not exists (select 1 from public.shop_items where id = p_gift) then
+    raise exception 'Product not found.';
+  end if;
+  select coalesce(jsonb_agg(case when (o ->> 'size')::int = p_size
+                                 then case when nullif(p_gift, '') is null then o - 'gift' else o || jsonb_build_object('gift', p_gift) end
+                                 else o end), '[]'::jsonb)
+    into packs from jsonb_array_elements(packs) o;
+  update public.app_config set value = packs::text where key = 'packs';
+  return packs;
+end $$;
+
+-- Admin: the gift that came with a pack was handed out; it lands in the member's inventory
+create or replace function public.mark_pack_gift_given(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare sp public.session_packs;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.session_packs set gift_given_at = now()
+    where id = p_id and gift is not null and status = 'paid' and gift_given_at is null returning * into sp;
+  if not found then raise exception 'No gift to hand out for this pack.'; end if;
+  update public.profiles
+    set inventory = jsonb_set(inventory, array[sp.gift], to_jsonb(coalesce((inventory ->> sp.gift)::int, 0) + 1))
+    where id = sp.user_id;
+  perform public._check_achievements(sp.user_id);
+  return public._pack_json(sp);
 end $$;
 
 -- Guests who log in afterwards claim the XP for their orders
@@ -1568,6 +1763,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'classCapacity', public._config('class_capacity')::int,
     'classCancelHours', public._config('class_cancel_hours')::int,
     'classTrainerFee', public._config('class_trainer_fee')::numeric,
+    'tabLimit', public._config('tab_limit')::numeric,
     'hq', 'Hoogstraat 40, 9308 Aalst',
     'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
   );
@@ -1589,7 +1785,9 @@ begin
   if exists (select 1 from public.session_packs where user_id = auth.uid() and status = 'requested') then
     raise exception 'You already have a pack waiting for payment.';
   end if;
-  insert into public.session_packs (user_id, size, price, pay_method) values (auth.uid(), p_size, (opt ->> 'price')::numeric, p_pay)
+  insert into public.session_packs (user_id, size, price, pay_method, gift)
+  values (auth.uid(), p_size, (opt ->> 'price')::numeric, p_pay,
+          (select s.id from public.shop_items s where s.id = opt ->> 'gift'))
     returning * into sp;
   return public._pack_json(sp);
 end $$;
@@ -2165,7 +2363,9 @@ create or replace function public._push_pack_event()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if old.status = 'requested' and new.status = 'paid' then
-    perform public._push(new.user_id, 'Pack active', new.size || ' session credits are ready to use.', 'index.html#schedule', 'pack-' || new.id);
+    perform public._push(new.user_id, 'Pack active', new.size || ' session credits are ready to use.'
+      || case when new.gift is not null then ' · Your free ' || (select name from public.shop_items where id = new.gift) || ' is waiting at the desk' else '' end,
+      'index.html#schedule', 'pack-' || new.id);
   end if;
   return new;
 end $$;
@@ -3534,6 +3734,26 @@ grant execute on function public.class_mark_paid(uuid, boolean) to authenticated
 grant execute on function public.class_finish(uuid) to authenticated;
 grant execute on function public.class_manage_list(integer) to authenticated;
 grant execute on function public.class_mark_refunded(uuid) to authenticated;
+
+-- Shop: catalogue and basket check are public; tabs need an account; the rest is admin only
+revoke execute on function public._shop_basket(jsonb, boolean, boolean) from public, anon, authenticated;
+revoke execute on function public._shop_take_stock(jsonb, integer) from public, anon, authenticated;
+revoke execute on function public.shop_tab_order(jsonb) from public, anon;
+revoke execute on function public.shop_tab_cancel(text) from public, anon;
+revoke execute on function public.shop_tab_paid(text) from public, anon;
+revoke execute on function public.admin_shop() from public, anon;
+revoke execute on function public.admin_shop_update(text, jsonb) from public, anon;
+revoke execute on function public.admin_pack_gift(integer, text) from public, anon;
+revoke execute on function public.mark_pack_gift_given(uuid) from public, anon;
+grant execute on function public.shop_catalog() to anon, authenticated;
+grant execute on function public.shop_check(jsonb) to anon, authenticated;
+grant execute on function public.shop_tab_order(jsonb) to authenticated;
+grant execute on function public.shop_tab_cancel(text) to authenticated;
+grant execute on function public.shop_tab_paid(text) to authenticated;
+grant execute on function public.admin_shop() to authenticated;
+grant execute on function public.admin_shop_update(text, jsonb) to authenticated;
+grant execute on function public.admin_pack_gift(integer, text) to authenticated;
+grant execute on function public.mark_pack_gift_given(uuid) to authenticated;
 
 -- Hand out the free session vouchers members already earned before rewards existed
 do $$ begin perform public._check_rewards(id) from public.profiles; end $$;

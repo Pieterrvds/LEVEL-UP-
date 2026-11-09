@@ -5,7 +5,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule (on phones a strip of 7 days, one day at a time), contact (one address line, small social buttons; on phones the form opens on request). Coach cards show the open hours in the coming 7 days on the photo ("Only 2 spots left this week") and their specialties as chips. Section intros are one short sentence, no "Read more" buttons. A "Highlights" pop-up (hero button and footer) shows six posters: the logo and five exercises in `img/highlights/` (the first photos and video are in `archive/highlights/`). Behind the hero: a black-and-white CrossFit box, `img/hero-box.jpg` (`hero-box-small.jpg` on phones), Unsplash photo `photo-1623874514711-0f321325f318` under the free Unsplash licence (commercial use allowed, no credit required)
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
-- `shop.html`: item shop for merch and tools. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation.
+- `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
 - `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. Sign-up is one step (name, email, password); body stats are filled in later in their own tab. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Body stats, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
 - `chat.html`: private chat between a player and a coach (see "Chat")
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
@@ -423,6 +423,22 @@ change or delete files in their own folder. The photo shows on the high scores (
 the account page, coach booking requests and in admin. Remove sets it back to the letter. As admin you can remove
 someone's photo in the member details (Remove photo). The bucket and its rules are created by `supabase/schema.sql`.
 
+## Shop: fuel, limited drops, the tab and bundles
+Everything is run from **admin → Shop**:
+- **Products**: switch each product on or off, change its price, set the stock and the end date of a drop. New
+  products start switched off, so nothing new shows until you turn it on. Leave stock empty for unlimited. A product
+  with stock or an end date shows "Only N left" and a countdown; at 0 or after the date it shows Sold out / Drop ended.
+  Before PayPal opens, the server checks the bag again (`shop_check`) and its prices are the ones charged.
+- **Fuel** (protein shake, bar, energy drink, water) is for the fridge at the gym. **The fridge**: print the poster with
+  the QR code to `shop.html?fridge`. Members scan it, tap what they took and pay right away with PayPal, or put it
+  **on their tab** (logged in, drinks and bars only, at most `tab_limit` euro open, default €30 in `app_config`). A wrong
+  tap can be undone within 15 minutes. Open tabs appear under **Open tabs**: tap **Paid** when they pay at the desk;
+  only then they get the XP (and a push). ✕ removes a line they don't pay for.
+- **Bundles**: give a session pack a free item (e.g. 10 sessions + Season 1 Hoodie). It shows in the shop and the pack
+  options; once that pack is paid it appears under **Gifts to hand out**, and **Handed out** puts it in their inventory.
+- **Season 1 Hoodie** (`hoodie_s1`) is the first limited drop: 25 pieces, switched off until you set it live.
+
 ## Adding a shop item
-Add an entry to `ITEMS` in `game.js` (id, name, price, category `merch` or `tools`, rarity, image, optional sizes,
-perks, description) and the same id, name and price to the `shop_items` table in Supabase.
+Add an entry to `ITEMS` in `game.js` (id, name, price, category `merch`, `tools`, `fuel` or `limited`, rarity, image or
+an emoji in `art`, optional sizes, perks, description) and the same id, name, price and category to the `shop_items`
+table (in `supabase/schema.sql`, with `active false`). Then switch it on in admin → Shop.

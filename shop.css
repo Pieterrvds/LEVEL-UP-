@@ -328,6 +328,78 @@ body.no-scroll { overflow: hidden; }
 .loot-reward .btn-row { margin: 0; }
 .loot-levelup { font-family: var(--display); font-size: 0.7rem; color: var(--gold); animation: blink 1s ease-in-out 3; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
+/* ---------- Fuel, drops, tab and bundles ---------- */
+.item-card.rarity-legendary { --rarity: var(--gold); }
+.filter-tabs button[hidden] { display: none; }
+.item-emoji {
+  display: grid; place-items: center; width: 100%; height: 100%;
+  font-size: clamp(4rem, 12vw, 6.5rem); line-height: 1;
+  background: radial-gradient(circle at 50% 40%, #1d2a1b, #070707 70%);
+}
+.bag-thumb .item-emoji { font-size: 2.2rem; }
+.stock-tag {
+  position: absolute; right: 12px; bottom: 12px; padding: 6px 8px;
+  font-family: var(--display); font-size: 0.55rem; text-transform: uppercase; color: #000; background: var(--red, #ff5a5f);
+  box-shadow: var(--shadow-sm); line-height: 1.9; font-style: italic; font-weight: 800;
+}
+.drop-timer { margin: 0; font-family: var(--display); font-size: 0.6rem; color: var(--gold); text-transform: uppercase; line-height: 1.9; font-style: italic; font-weight: 800; }
+.drop-timer::before { content: "⏳ "; }
+.item-card.sold-out .item-media { filter: grayscale(1) brightness(0.6); }
+.item-card.sold-out:hover { transform: none; border-color: var(--line); }
+.add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.sold-note { color: var(--red); font-weight: 700; }
+.shop-empty { grid-column: 1 / -1; padding: 24px; border: 1px dashed var(--line); text-align: center; }
+
+.xp-banner { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1.25rem; }
+.xp-banner:empty { display: none; }
+.xp-banner > span { padding: 6px 10px; font-size: 0.85rem; color: var(--muted); background: rgba(0, 0, 0, 0.55); border: 1px solid var(--line); }
+.xp-banner b { color: var(--gold); }
+.xp-banner .xp-rate { display: inline-flex; align-items: center; gap: 6px; color: #000; font-weight: 800; background: var(--gold); border-color: var(--gold); }
+.panel-tab { margin: 12px 0 0; padding: 10px 12px; border: 2px dashed var(--gold); }
+.panel-tab strong { color: var(--gold); }
+
+.bag-tab:empty { display: none; }
+.bag-tab { display: grid; gap: 8px; }
+.bag-tab-note { margin: 0; font-size: 0.84rem; color: var(--muted); }
+.bag-or { display: flex; align-items: center; gap: 10px; margin: 4px 0 0; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.bag-or::before, .bag-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.link-button { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+
+.bundle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+.bundle-card {
+  display: grid; gap: 8px; align-content: start; padding: 20px; color: var(--text); text-decoration: none;
+  background: var(--panel); border: 3px solid var(--line); transition: border-color 0.2s, transform 0.2s;
+}
+.bundle-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.bundle-card.has-gift { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+.bundle-card strong { font-family: var(--display); font-size: 1.6rem; color: var(--gold); font-style: italic; font-weight: 800; }
+.bundle-gift { display: flex; align-items: center; gap: 10px; padding: 8px; font-weight: 700; color: var(--green-bright); background: #000; border: 1px dashed var(--green-bright); }
+.bundle-gift img, .bundle-gift .item-emoji { width: 44px; height: 44px; object-fit: cover; font-size: 1.6rem; flex: none; }
+
+/* Fridge mode (shop.html?fridge): drinks and bars only, big tiles, the tab first */
+.fridge-only { display: none; }
+.fridge-mode .shop-only { display: none !important; }
+.fridge-mode .fridge-only { display: block; }
+.fridge-mode .shop-hero { padding: calc(var(--hud-h) + 20px) 0 16px; }
+.fridge-mode .shop-hero-grid { gap: 16px; }
+.fridge-mode .shop-title { font-size: clamp(1.6rem, 6vw, 2.4rem); line-height: 1.1; margin-bottom: 0.5rem; }
+.fridge-mode .shop-title br { display: none; }
+.fridge-mode .shop-title span { margin-left: 0.25em; }
+.fridge-mode .shop-hero .lead { font-size: 0.95rem; margin-bottom: 0; }
+.fridge-mode .xp-banner { margin-top: 0.75rem; }
+.fridge-mode .player-panel { padding: 14px 16px; }
+.fridge-mode .player-panel .xp-bar, .fridge-mode .player-panel .panel-xp, .fridge-mode .player-panel .panel-owned { display: none; }
+.fridge-mode .player-panel .panel-player { margin-bottom: 0; }
+.fridge-mode .player-panel .panel-tab { margin-top: 10px; }
+.fridge-mode .fuel-card .rarity-tag { display: none; }
+.fridge-mode .shop-section { padding-top: 24px; }
+.fridge-mode .shop-toolbar { display: none; }
+.fridge-mode .item-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.fridge-mode .fuel-card .item-media { aspect-ratio: 4 / 3; }
+.fridge-mode .fuel-card .item-desc, .fridge-mode .fuel-card .item-perks, .fridge-mode .fuel-card .item-type { display: none; }
+.fridge-mode .fuel-card .item-body { padding: 14px; gap: 10px; }
+.fridge-mode .fuel-card .add-btn { min-height: 52px; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
   .shop-hero-grid { grid-template-columns: 1fr; }
@@ -343,8 +415,10 @@ body.no-scroll { overflow: hidden; }
   .size-picker span { width: 44px; height: 42px; }
   .qty button { width: 40px; height: 36px; }
   .bag-remove { width: 40px; height: 40px; }
-  .filter-tabs { width: 100%; }
-  .filter-tabs button { flex: 1; }
+  .filter-tabs { width: 100%; flex-wrap: wrap; }
+  .filter-tabs button { flex: 1 1 auto; }
+  .fridge-mode .item-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .fridge-mode .fuel-card .item-body h3 { font-size: 0.62rem; }
   .footer-inner { padding-bottom: 96px; }
 }
 @media (max-width: 760px) {

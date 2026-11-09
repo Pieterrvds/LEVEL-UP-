@@ -41,11 +41,12 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop] = await Promise.all([
     LevelUp.adminData(),
     LevelUp.pushServerReady(),
     LevelUp.adminReviews().catch(() => []),
-    LevelUp.classManageList(800).catch(() => [])
+    LevelUp.classManageList(800).catch(() => []),
+    LevelUp.adminShop().catch(() => null)
   ]);
   // Finished group classes count in the finances as one line each: what the players were charged and the trainer's fee
   const classLines = classes.filter((c) => c.status === "done").map((c) => ({
@@ -60,7 +61,7 @@ async function loadData() {
       prog: LevelUp.progress(p.xp),
       sessions: own.filter((b) => b.status === "completed").length,
       upcoming: own.filter(isUpcoming).length,
-      spent: p.purchases.reduce((sum, o) => sum + o.total, 0),
+      spent: p.purchases.filter((o) => o.status !== "open").reduce((sum, o) => sum + o.total, 0),
       lastSeen: p.lastLogin || p.createdAt
     };
   });
@@ -75,6 +76,7 @@ async function loadData() {
     hours,
     rawBookings: bookings,
     classes,
+    shop: shop || { items: [], tabs: [], packs: [], gifts: [] },
     finLines: [...bookings, ...classLines],
     players: rows,
     members: rows.filter((p) => !p.admin),
@@ -194,6 +196,13 @@ async function render() {
 
     <section class="panel admin-panel gc-wrap" data-pane="classes" id="adminClasses"></section>
 
+    <div data-pane="shop">
+    <section class="panel admin-panel" id="tabsPanel"></section>
+    <section class="panel admin-panel" id="shopPanel"></section>
+    <section class="panel admin-panel" id="bundlePanel"></section>
+    <section class="panel admin-panel" id="fridgePanel"></section>
+    </div>
+
     <section class="panel admin-panel" data-pane="bookings">
       <div class="panel-head">
         <h2>Bookings</h2>
@@ -252,6 +261,7 @@ async function render() {
   renderHours();
   renderBookings();
   renderMembers();
+  renderShopAdmin();
   LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
 }
 
@@ -261,6 +271,7 @@ const ADMIN_TABS = [
   { id: "bookings", label: "Bookings" },
   { id: "classes", label: "Group classes" },
   { id: "finances", label: "Finances" },
+  { id: "shop", label: "Shop" },
   { id: "team", label: "Team" },
   { id: "members", label: "Members" }
 ];
@@ -274,7 +285,8 @@ function adminTabs() {
     classes: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0),
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
-      + data.rawBookings.filter((b) => b.refundStatus === "manual").length
+      + data.rawBookings.filter((b) => b.refundStatus === "manual").length,
+    shop: new Set(data.shop.tabs.map((o) => o.userId)).size + data.shop.gifts.length
   };
   return ADMIN_TABS.map((t) => ({ ...t, badge: badge[t.id] || 0 }));
 }
@@ -1540,3 +1552,278 @@ function labelTables() {
 }
 new MutationObserver(labelTables).observe(root, { childList: true, subtree: true });
 labelTables();
+
+// ---------- Shop: products, open tabs, bundles and the fridge poster ----------
+const SHOP_URL = "https://pieterrvds.github.io/LEVEL-UP-/shop.html";
+const FRIDGE_URL = `${SHOP_URL}?fridge`;
+const CATEGORY_LABEL = { merch: "Merch", tools: "Tools", fuel: "Fuel", limited: "Limited" };
+const shopName = (id) => LevelUp.ITEMS.find((i) => i.id === id)?.name || data.shop.items.find((i) => i.id === id)?.name || id;
+// <input type="datetime-local"> wants local time without a zone
+const localInput = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+function shopStatus(i) {
+  if (!i.active) return `<span class="status-chip">Off</span>`;
+  if (i.dropEndsAt && new Date(i.dropEndsAt) <= new Date()) return `<span class="status-chip declined">Drop ended</span>`;
+  if (i.stock != null && i.stock <= 0) return `<span class="status-chip declined">Sold out</span>`;
+  return `<span class="status-chip confirmed">On sale</span>`;
+}
+
+function renderShopAdmin() {
+  renderTabsPanel();
+  renderShopPanel();
+  renderBundlePanel();
+  renderFridgePanel();
+}
+
+// Open tabs, per member: what they took and "Paid" once they paid at the desk
+function renderTabsPanel() {
+  const el = document.getElementById("tabsPanel");
+  const byUser = new Map();
+  data.shop.tabs.forEach((o) => {
+    if (!byUser.has(o.userId)) byUser.set(o.userId, { name: o.name, email: o.email, orders: [] });
+    byUser.get(o.userId).orders.push(o);
+  });
+  const people = [...byUser.entries()];
+  const total = data.shop.tabs.reduce((n, o) => n + Number(o.total), 0);
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Open tabs ${people.length ? `<span class="count-chip">${people.length}</span>` : ""}</h2>
+      <span class="muted">${people.length ? `${money(total)} to collect` : `Drinks and bars members put on their tab · max ${money(LevelUp.getPricing().tabLimit)} each`}</span>
+    </div>
+    ${people.length ? `<ul class="application-list">${people.map(([userId, p]) => {
+      const sum = p.orders.reduce((n, o) => n + Number(o.total), 0);
+      return `
+      <li class="application-item">
+        <div>
+          <p class="coach-who">${esc(p.name)} <span class="muted small">· ${esc(p.email)}</span></p>
+          <ul class="tab-lines">${p.orders.map((o) => `
+            <li><span>${o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</span>
+              <span class="muted small">${fmtDate(o.date)} · ${money(o.total)}</span>
+              <button type="button" class="btn btn-small btn-ghost" data-tab-void="${esc(o.id)}" aria-label="Cancel this line">✕</button></li>`).join("")}</ul>
+        </div>
+        <div class="application-actions">
+          <strong class="tab-sum">${money(sum)}</strong>
+          <button type="button" class="btn btn-small btn-primary" data-tab-paid="${esc(userId)}">Paid ${money(sum)}</button>
+        </div>
+      </li>`;
+    }).join("")}</ul>` : `<p class="muted">No open tabs. Members put drinks and bars from the fridge on their tab via the QR code; they pay here at the desk and get the XP once you mark it paid.</p>`}`;
+}
+
+// Products: on/off, price, stock and the end of a drop
+function renderShopPanel() {
+  const el = document.getElementById("shopPanel");
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Products</h2>
+      <a class="btn btn-small btn-ghost" href="shop.html" target="_blank" rel="noopener">Open the shop ↗</a>
+    </div>
+    <p class="muted small">Switched-off products don't show in the shop. Leave stock empty for unlimited; a limited drop shows "Only N left" and its end date counts down. Prices count for new orders.</p>
+    <ul class="shop-admin-list">${data.shop.items.map((i) => `
+      <li>
+        <form class="shop-row" data-shop-item="${esc(i.id)}">
+          <div class="shop-row-name">
+            <strong>${esc(shopName(i.id))}</strong>
+            <span class="muted small">${CATEGORY_LABEL[i.category] || esc(i.category)} · ${i.sold} sold</span>
+            ${shopStatus(i)}
+          </div>
+          <label class="switch-field"><input type="checkbox" name="active" ${i.active ? "checked" : ""}> <span>On sale</span></label>
+          <label><span>Price €</span><input type="number" name="price" min="0" max="1000" step="0.5" value="${Number(i.price)}" required></label>
+          <label><span>Stock</span><input type="number" name="stock" min="0" max="10000" step="1" value="${i.stock ?? ""}" placeholder="∞"></label>
+          <label><span>Ends</span><input type="datetime-local" name="dropEndsAt" value="${localInput(i.dropEndsAt)}"></label>
+          <button type="submit" class="btn btn-small btn-primary">Save</button>
+        </form>
+      </li>`).join("")}</ul>
+    <p class="form-error" role="alert" id="shopError"></p>`;
+}
+
+// Session packs with a free item, and gifts to hand out at the desk
+function renderBundlePanel() {
+  const el = document.getElementById("bundlePanel");
+  const packs = data.shop.packs || [];
+  const options = (gift) => `<option value="">No gift</option>${data.shop.items.map((i) =>
+    `<option value="${esc(i.id)}" ${gift === i.id ? "selected" : ""}>${esc(shopName(i.id))} (€${Number(i.price).toFixed(2)})</option>`).join("")}`;
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Bundles ${data.shop.gifts.length ? `<span class="count-chip">${data.shop.gifts.length}</span>` : ""}</h2>
+      <span class="muted">A free item with a session pack</span>
+    </div>
+    <ul class="detail-list">${packs.map((o) => `
+      <li><span>${o.size}-session pack · ${money(o.price)}</span>
+        <label class="bundle-select"><span class="sr-only">Gift with the ${o.size}-session pack</span>
+          <select data-pack-gift="${o.size}">${options(o.gift)}</select></label></li>`).join("")}</ul>
+    <p class="muted small">Shows in the shop and in the pack options. The gift is for packs requested from now on; you hand it out once the pack is paid.</p>
+    ${data.shop.gifts.length ? `<h3 class="panel-sub">Gifts to hand out</h3><ul class="application-list">${data.shop.gifts.map((pk) => `
+      <li class="application-item">
+        <div>
+          <p class="coach-who">${esc(pk.name)} <span class="muted small">· ${esc(pk.email)}</span></p>
+          <p><strong>🎁 ${esc(shopName(pk.gift))}</strong> with their ${pk.size}-session pack (paid ${fmtDate(pk.paidAt)})</p>
+        </div>
+        <div class="application-actions"><button type="button" class="btn btn-small btn-primary" data-gift-given="${pk.id}">Handed out</button></div>
+      </li>`).join("")}</ul>` : ""}`;
+}
+
+// The QR code for the fridge: members scan it, tap what they take and put it on their tab
+let qrLib = null;
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  qrLib ||= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
+    script.onload = () => resolve(window.qrcode);
+    script.onerror = () => { qrLib = null; reject(new Error("The QR code couldn't load. Check your connection.")); };
+    document.head.appendChild(script);
+  });
+  return qrLib;
+}
+function qrSvg(url, cell = 6) {
+  const qr = window.qrcode(0, "M");
+  qr.addData(url);
+  qr.make();
+  return qr.createSvgTag({ cellSize: cell, margin: 2, scalable: true });
+}
+function renderFridgePanel() {
+  const el = document.getElementById("fridgePanel");
+  const fuel = data.shop.items.filter((i) => i.category === "fuel");
+  const on = fuel.filter((i) => i.active);
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>The fridge</h2>
+      <span class="muted">${on.length ? `${on.length} of ${fuel.length} drinks and bars on sale` : "Switch on the drinks and bars above first"}</span>
+    </div>
+    <div class="fridge-admin">
+      <div class="fridge-qr" id="fridgeQr" aria-label="QR code to the fridge page"></div>
+      <div>
+        <p>Stick this QR code on the fridge. Members scan it, tap what they take and pay right away or put it on their tab (max ${money(LevelUp.getPricing().tabLimit)}).
+        They pay the tab here at the desk: tap <strong>Paid</strong> under Open tabs and the XP lands on their profile.</p>
+        <p class="muted small"><a class="text-link" href="shop.html?fridge" target="_blank" rel="noopener">${esc(FRIDGE_URL)}</a></p>
+        <div class="btn-row"><button type="button" class="btn btn-small btn-primary" data-fridge-poster>Print fridge poster</button></div>
+      </div>
+    </div>`;
+  loadQrLib().then(() => {
+    const box = document.getElementById("fridgeQr");
+    if (box) box.innerHTML = qrSvg(FRIDGE_URL);
+  }).catch((err) => {
+    const box = document.getElementById("fridgeQr");
+    if (box) box.textContent = err.message;
+  });
+}
+
+// A printable A4 poster: logo, QR code and the prices
+function printFridgePoster() {
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups for this page to print the poster."); return; }
+  w.document.write("<p style='font-family:sans-serif'>Making the poster…</p>");
+  loadQrLib().then(() => {
+    const fuel = data.shop.items.filter((i) => i.category === "fuel" && i.active);
+    const base = new URL(".", location.href).href;
+    // The poster hangs at the gym: Dutch, with a short English line for everyone else
+    const NL_NAMES = { shake: "Proteïneshake", bar: "Proteïnereep", energy: "Energiedrank", water: "Water" };
+    w.document.open();
+    w.document.write(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>LEVEL-UP frigo</title>
+      <style>
+        @page { size: A4; margin: 14mm; }
+        body { font-family: "Arial Black", Arial, sans-serif; text-align: center; color: #000; margin: 0; }
+        img.logo { width: 34mm; margin-top: 4mm; }
+        h1 { font-size: 34pt; margin: 4mm 0 0; font-style: italic; letter-spacing: 1px; }
+        .sub { font-family: Arial, sans-serif; font-size: 15pt; margin: 2mm 0 6mm; }
+        .qr { width: 105mm; margin: 0 auto; }
+        .qr svg { width: 100%; height: auto; display: block; }
+        ol { font-family: Arial, sans-serif; font-size: 13pt; text-align: left; width: 120mm; margin: 6mm auto; }
+        table { margin: 4mm auto 0; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 13pt; }
+        td { padding: 1.5mm 6mm; border-bottom: 1px solid #ccc; } td:last-child { text-align: right; font-weight: bold; }
+        .xp { margin-top: 6mm; font-size: 14pt; }
+        .url { font-family: Arial, sans-serif; font-size: 9pt; color: #555; margin-top: 4mm; }
+        .en { font-family: Arial, sans-serif; font-size: 10pt; color: #444; margin: 2mm 0 0; }
+      </style></head><body>
+      <img class="logo" src="${base}img/app/icon-512.png" alt="">
+      <h1>PAK HET. TIK HET AAN.</h1>
+      <p class="sub">Scan, tik aan wat je neemt, betaal meteen of zet het op je rekening.</p>
+      <div class="qr">${qrSvg(FRIDGE_URL, 10)}</div>
+      <ol><li>Scan de code en log in</li><li>Tik aan wat je nam</li><li>Betaal meteen, of zet het op je rekening en betaal aan de balie</li></ol>
+      ${fuel.length ? `<table>${fuel.map((i) => `<tr><td>${esc(NL_NAMES[i.id] || shopName(i.id))}</td><td>€${Number(i.price).toFixed(2).replace(".", ",")}</td></tr>`).join("")}</table>` : ""}
+      <p class="xp">€1 = 10 XP ⚡</p>
+      <p class="en">EN · Scan, tap what you took, pay now or put it on your tab and pay at the desk.</p>
+      <p class="url">${esc(FRIDGE_URL)}</p>
+      <script>
+        var go = function () { setTimeout(function () { window.print(); }, 300); };
+        var logo = document.querySelector("img.logo");
+        if (logo.complete) go(); else { logo.addEventListener("load", go); logo.addEventListener("error", go); }
+      <\/script>
+      </body></html>`);
+    w.document.close();
+  }).catch((err) => { w.close(); alert(err.message); });
+}
+
+root.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-shop-item]");
+  if (!form) return;
+  event.preventDefault();
+  await saveShopItem(form);
+});
+root.addEventListener("change", (event) => {
+  if (event.target.name === "active" && event.target.closest("[data-shop-item]")) saveShopItem(event.target.closest("[data-shop-item]"));
+  const giftSelect = event.target.closest("[data-pack-gift]");
+  if (giftSelect) {
+    giftSelect.disabled = true;
+    LevelUp.packGift(Number(giftSelect.dataset.packGift), giftSelect.value)
+      .then(() => LevelUp.loadPricing())
+      .then(() => { LevelUp.toast({ title: "Bundle saved", text: giftSelect.value ? `+ free ${shopName(giftSelect.value)}` : "No gift", icon: "🎁", tone: "green" }); render(); })
+      .catch((err) => { giftSelect.disabled = false; alert(err.message); });
+  }
+});
+async function saveShopItem(form) {
+  const f = form.elements;
+  const error = document.getElementById("shopError");
+  error.textContent = "";
+  const btn = form.querySelector("[type=submit]");
+  btn.disabled = true;
+  try {
+    await LevelUp.adminShopUpdate(form.dataset.shopItem, {
+      active: f.active.checked,
+      price: f.price.value,
+      stock: f.stock.value.trim(),
+      dropEndsAt: f.dropEndsAt.value ? new Date(f.dropEndsAt.value).toISOString() : ""
+    });
+    await LevelUp.loadShopCatalog();
+    LevelUp.toast({ title: "Saved", text: `${shopName(form.dataset.shopItem)}${f.active.checked ? " · on sale" : " · off"}`, icon: "✓", tone: "green" });
+    render();
+  } catch (err) {
+    btn.disabled = false;
+    error.textContent = `${shopName(form.dataset.shopItem)}: ${err.message}`;
+  }
+}
+root.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-fridge-poster]")) { printFridgePoster(); return; }
+  const paid = event.target.closest("[data-tab-paid]");
+  const voidBtn = event.target.closest("[data-tab-void]");
+  const gift = event.target.closest("[data-gift-given]");
+  if (paid) {
+    const orders = data.shop.tabs.filter((o) => o.userId === paid.dataset.tabPaid);
+    const sum = orders.reduce((n, o) => n + Number(o.total), 0);
+    if (!orders.length || !confirm(`Did ${orders[0].name} pay ${money(sum)} for their tab? They get +${orders.reduce((n, o) => n + o.xp, 0)} XP.`)) return;
+    paid.disabled = true;
+    try {
+      for (const o of orders) await LevelUp.tabPaid(o.id);
+      LevelUp.toast({ title: "Tab paid", text: `${orders[0].name} · ${money(sum)}`, icon: "🧾", tone: "green" });
+      render();
+    } catch (err) { paid.disabled = false; alert(err.message); render(); }
+    return;
+  }
+  if (voidBtn) {
+    const o = data.shop.tabs.find((x) => x.id === voidBtn.dataset.tabVoid);
+    if (!o || !confirm(`Remove ${o.items.map((i) => `${i.qty}× ${i.name}`).join(", ")} (${money(o.total)}) from ${o.name}'s tab? They don't pay for it.`)) return;
+    voidBtn.disabled = true;
+    try { await LevelUp.tabCancel(o.id); render(); } catch (err) { voidBtn.disabled = false; alert(err.message); }
+    return;
+  }
+  if (gift) {
+    const pk = data.shop.gifts.find((x) => x.id === gift.dataset.giftGiven);
+    if (!pk || !confirm(`Did you give ${pk.name} their ${shopName(pk.gift)}? It goes into their inventory.`)) return;
+    gift.disabled = true;
+    try { await LevelUp.markPackGiftGiven(pk.id); render(); } catch (err) { gift.disabled = false; alert(err.message); }
+  }
+});

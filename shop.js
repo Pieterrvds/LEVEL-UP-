@@ -1,9 +1,11 @@
-// LEVEL-UP item shop: items, loot bag, PayPal checkout and XP rewards.
+// LEVEL-UP item shop: items, loot bag, PayPal checkout, the tab for the fridge and XP rewards.
+// shop.html?fridge is the fridge mode (the QR code on the fridge at the gym): drinks and bars only.
 
 const CART_KEY = "levelup.cart.v1";
 const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
 const MAX_QTY = 10;
 const { ITEMS, ACHIEVEMENTS, esc } = LevelUp;
+const FRIDGE = new URLSearchParams(location.search).has("fridge");
 
 const itemGrid = document.getElementById("itemGrid");
 const bonusGrid = document.getElementById("bonusGrid");
@@ -22,8 +24,14 @@ const bagStatus = document.getElementById("bagStatus");
 const paypalContainer = document.getElementById("paypal-button-container");
 const lootDialog = document.getElementById("lootDialog");
 const lootContent = document.getElementById("lootContent");
+const bagTab = document.getElementById("bagTab");
+const xpBanner = document.getElementById("xpBanner");
+const bundleSection = document.getElementById("bundles");
+const bundleGrid = document.getElementById("bundleGrid");
 
-let filter = "all";
+let filter = FRIDGE ? "fuel" : location.hash === "#fuel" ? "fuel" : "all";
+let tabBusy = false;
+let checkFailed = false;
 let paypalRendered = false;
 
 // ---------- Cart storage ----------
@@ -42,11 +50,25 @@ function saveCart() {
 
 let cart = loadCart(); // [{ id, size, qty }]
 
-const itemById = (id) => ITEMS.find((item) => item.id === id);
-const cartLines = () => cart.map((line) => ({ ...line, item: itemById(line.id) }));
+// The shop's items with today's price, stock and drop (switched-off products are left out)
+const shopItems = () => LevelUp.shopItems();
+const itemById = (id) => shopItems().find((item) => item.id === id);
+// Lines of products that were switched off stay in storage but don't count
+const cartLines = () => cart.map((line) => ({ ...line, item: itemById(line.id) })).filter((line) => line.item);
 const cartTotal = () => cartLines().reduce((sum, line) => sum + line.item.price * line.qty, 0);
-const cartQty = () => cart.reduce((sum, line) => sum + line.qty, 0);
-const euro = (n) => `€${n.toFixed(2)}`;
+const cartQty = () => cartLines().reduce((sum, line) => sum + line.qty, 0);
+const euro = (n) => `€${Number(n).toFixed(2)}`;
+const basket = () => cartLines().map(({ id, size, qty }) => ({ id, size, qty }));
+const tabTotal = () => LevelUp.openTab().reduce((sum, o) => sum + o.total, 0);
+const isLimited = (item) => item.stock != null || item.dropEndsAt;
+
+// "Ends in 2d 5h" for a drop
+function endsIn(iso) {
+  const ms = new Date(iso) - Date.now();
+  if (ms <= 0) return "Drop ended";
+  const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return d ? `Ends in ${d}d ${h}h` : h ? `Ends in ${h}h ${m % 60}m` : `Ends in ${Math.max(1, m)}m`;
+}
 
 // ---------- Item art ----------
 // Pixel-style icon for items without a photo
@@ -61,10 +83,32 @@ const bandsArt = `
     <path d="M4 12h2M26 12h2M6 18h2M24 18h2M8 24h2M22 24h2" stroke="#f2f5f0" stroke-width="2"/>
   </svg>`;
 
+const itemArt = (item) => item.img ? `<img src="${item.img}" alt="${esc(item.name)}" loading="lazy">`
+  : item.art ? `<span class="item-emoji" aria-hidden="true">${item.art}</span>` : bandsArt;
+const thumbArt = (item) => item.img ? `<img src="${item.img}" alt="">`
+  : `<span class="bag-thumb">${item.art ? `<span class="item-emoji" aria-hidden="true">${item.art}</span>` : bandsArt}</span>`;
+
 // ---------- Rendering ----------
+function renderTabs() {
+  const all = shopItems();
+  document.querySelectorAll("[data-filter]").forEach((tab) => {
+    const f = tab.dataset.filter;
+    tab.hidden = f !== "all" && !all.some((item) => item.category === f);
+  });
+  if (filter !== "all" && !FRIDGE && !all.some((item) => item.category === filter)) filter = "all";
+  document.querySelectorAll("[data-filter]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.filter === filter)));
+}
+
 function renderItems() {
   const player = LevelUp.getPlayer();
-  const items = ITEMS.filter((item) => filter === "all" || item.category === filter);
+  const items = shopItems().filter((item) => filter === "all" || item.category === filter);
+
+  if (!items.length) {
+    itemGrid.innerHTML = `<p class="muted shop-empty">${FRIDGE
+      ? "The fridge isn't in the app yet. Pay at the desk for now."
+      : "Nothing here right now. Check back soon."}</p>`;
+    return;
+  }
 
   itemGrid.innerHTML = items.map((item) => {
     const owned = player ? player.inventory[item.id] || 0 : 0;
@@ -75,26 +119,69 @@ function renderItems() {
           <label><input type="radio" name="size-${item.id}" value="${size}" ${i === 1 ? "checked" : ""}><span>${size}</span></label>`).join("")}
       </fieldset>` : "";
 
+    const ended = item.dropEndsAt && new Date(item.dropEndsAt) <= new Date();
+    const out = !item.available;
+    const stockTag = item.stock != null && !out ? `<span class="stock-tag">${item.stock <= 10 ? `Only ${item.stock} left` : `${item.stock} left`}</span>` : "";
+    const timer = item.dropEndsAt && !out ? `<p class="drop-timer" data-ends="${esc(item.dropEndsAt)}">${endsIn(item.dropEndsAt)}</p>` : "";
+    const label = out ? (ended ? "Drop ended" : "Sold out") : FRIDGE ? "Take one" : "Add to bag";
+
     return `
-      <article class="item-card rarity-${item.rarity}" data-id="${item.id}">
+      <article class="item-card rarity-${item.rarity}${out ? " sold-out" : ""}${item.category === "fuel" ? " fuel-card" : ""}" data-id="${item.id}">
         <div class="item-media">
-          ${item.img ? `<img src="${item.img}" alt="${esc(item.name)}" loading="lazy">` : bandsArt}
-          <span class="rarity-tag">${item.rarity}</span>
+          ${itemArt(item)}
+          <span class="rarity-tag">${isLimited(item) ? "limited" : item.rarity}</span>
           ${owned ? `<span class="owned-tag">Owned ×${owned}</span>` : ""}
+          ${stockTag}
         </div>
         <div class="item-body">
           <p class="item-type">${item.type}</p>
           <h3>${esc(item.name)}</h3>
           <p class="item-desc">${esc(item.desc)}</p>
           <ul class="item-perks">${item.perks.map((perk) => `<li>${perk}</li>`).join("")}</ul>
-          ${sizes}
+          ${timer}
+          ${out ? "" : sizes}
           <div class="item-foot">
             <span class="price"><span class="coin" aria-hidden="true"></span>${euro(item.price)}</span>
             <span class="xp-reward">+${LevelUp.orderXp(item.price)} XP</span>
           </div>
-          <button type="button" class="btn btn-primary btn-block add-btn">Add to bag</button>
+          <button type="button" class="btn ${out ? "btn-ghost" : "btn-primary"} btn-block add-btn" ${out ? "disabled" : ""}>${label}</button>
         </div>
       </article>`;
+  }).join("");
+}
+
+// €1 = 10 XP, with a couple of real examples from the shop
+function renderXpBanner() {
+  if (!xpBanner) return;
+  const items = shopItems().filter((item) => item.available && (!FRIDGE || item.category === "fuel"));
+  const top = [...items].sort((a, b) => b.price - a.price)[0];
+  const fuel = items.find((item) => item.category === "fuel");
+  const examples = [
+    top && `${esc(top.name)} <b>+${LevelUp.orderXp(top.price)} XP</b>`,
+    fuel && fuel !== top && `${esc(fuel.name)} <b>+${LevelUp.orderXp(fuel.price)} XP</b>`,
+    !FRIDGE && `Every session <b>+${LevelUp.SESSION_XP} XP</b>`
+  ].filter(Boolean);
+  xpBanner.innerHTML = `<span class="xp-rate"><span class="coin" aria-hidden="true"></span> €1 = 10 XP</span>${examples.map((e) => `<span>${e}</span>`).join("")}`;
+}
+
+// Session packs that come with a free item (set in admin -> Shop)
+function renderBundles() {
+  if (!bundleSection) return;
+  const packs = LevelUp.getPricing().packs;
+  const single = LevelUp.getPricing().price;
+  const gifted = packs.filter((o) => o.gift && ITEMS.some((item) => item.id === o.gift));
+  bundleSection.hidden = FRIDGE || !gifted.length;
+  if (bundleSection.hidden) return;
+  bundleGrid.innerHTML = packs.map((o) => {
+    const gift = o.gift && ITEMS.find((item) => item.id === o.gift);
+    return `
+      <a class="bundle-card${gift ? " has-gift" : ""}" href="profile.html#packs">
+        <span class="price-tag">${o.size} sessions</span>
+        <strong>${euro(o.price)}</strong>
+        <span class="muted">${euro(o.price / o.size)} per session · save ${euro(single * o.size - o.price)}</span>
+        ${gift ? `<span class="bundle-gift">${gift.img ? `<img src="${gift.img}" alt="">` : `<span class="item-emoji" aria-hidden="true">${gift.art || "🎁"}</span>`}+ free ${esc(gift.name)}</span>` : ""}
+        <span class="text-link">Get this pack →</span>
+      </a>`;
   }).join("");
 }
 
@@ -141,7 +228,8 @@ function renderPlayerPanel() {
       <i style="width:${p.pct.toFixed(1)}%"></i>
     </div>
     <p class="panel-xp">${p.into} / ${p.needed} XP · ${p.toNext} XP to LVL ${p.level + 1}</p>
-    <p class="panel-owned">Items owned: <strong>${itemsOwned}</strong> · <a href="profile.html" class="text-link">View profile</a></p>`;
+    <p class="panel-owned">Items owned: <strong>${itemsOwned}</strong> · <a href="profile.html" class="text-link">View profile</a></p>
+    ${tabTotal() > 0 ? `<p class="panel-tab">🧾 Open tab: <strong>${euro(tabTotal())}</strong> · pay at the desk · <a href="profile.html#inventory" class="text-link">Details</a></p>` : ""}`;
 }
 
 function renderBag() {
@@ -155,12 +243,12 @@ function renderBag() {
   bagEmpty.hidden = !empty;
   bagFoot.hidden = empty;
 
-  bagItems.innerHTML = lines.map((line, index) => `
+  bagItems.innerHTML = lines.map((line) => { const index = cart.findIndex((c) => c.id === line.id && c.size === line.size); return `
     <li class="bag-line">
-      ${line.item.img ? `<img src="${line.item.img}" alt="">` : `<span class="bag-thumb">${bandsArt}</span>`}
+      ${thumbArt(line.item)}
       <div class="bag-line-info">
         <p class="bag-line-name">${esc(line.item.name)}</p>
-        <p class="bag-line-meta">${line.size ? `Size ${line.size} · ` : ""}${euro(line.item.price)} · +${LevelUp.orderXp(line.item.price)} XP</p>
+        <p class="bag-line-meta">${line.size ? `Size ${line.size} · ` : ""}${euro(line.item.price)} · +${LevelUp.orderXp(line.item.price)} XP${line.item.available ? "" : ` · <span class="sold-note">Sold out</span>`}</p>
         <div class="qty">
           <button type="button" data-qty="-1" data-index="${index}" aria-label="Remove one">−</button>
           <span aria-label="Quantity">${line.qty}</span>
@@ -168,7 +256,7 @@ function renderBag() {
         </div>
       </div>
       <button type="button" class="bag-remove" data-remove="${index}" aria-label="Remove ${esc(line.item.name)}">✕</button>
-    </li>`).join("");
+    </li>`; }).join("");
 
   bagTotal.textContent = euro(total);
 
@@ -188,12 +276,63 @@ function renderBag() {
       <button type="button" class="btn btn-small" data-auth-open="login">Log in</button>`;
   }
 
+  renderTabOption(lines, total);
   paypalContainer.hidden = empty;
   if (!empty && bag.classList.contains("open")) renderPayPal();
 }
 
+// Drinks and bars can go on the member's tab: pay later at the desk, XP when it's paid
+function renderTabOption(lines, total) {
+  if (!bagTab) return;
+  const fuelOnly = lines.length > 0 && lines.every((line) => line.item.category === "fuel");
+  if (!fuelOnly) { bagTab.innerHTML = ""; return; }
+  const player = LevelUp.getPlayer();
+  if (!player) {
+    bagTab.innerHTML = `<p class="bag-tab-note">Log in to put drinks and bars on your tab and pay at the desk later.</p>`;
+    return;
+  }
+  const open = tabTotal();
+  const limit = LevelUp.getPricing().tabLimit;
+  const over = open + total > limit;
+  bagTab.innerHTML = `
+    <button type="button" class="btn ${FRIDGE ? "btn-primary" : "btn-ghost"} btn-block" data-tab-order ${over || tabBusy ? "disabled" : ""}>🧾 Put ${euro(total)} on my tab</button>
+    <p class="bag-tab-note">${over
+      ? `Your tab is limited to ${euro(limit)}. Pay your open tab of ${euro(open)} at the desk first, or pay now below.`
+      : `Pay at the desk later${open ? ` · open now: ${euro(open)}` : ""}. The XP comes when it's paid.`}</p>
+    <p class="bag-or"><span>or pay now</span></p>`;
+}
+
+async function putOnTab() {
+  if (tabBusy) return;
+  tabBusy = true;
+  bagStatus.textContent = "";
+  renderBag();
+  const lines = cartLines();
+  try {
+    const r = await LevelUp.tabOrder(basket());
+    cart = [];
+    saveCart();
+    closeBag();
+    tabBusy = false;
+    renderAll();
+    showTabLoot(lines, r);
+  } catch (err) {
+    tabBusy = false;
+    await LevelUp.loadShopCatalog();
+    renderAll();
+    bagStatus.textContent = err.message;
+  }
+}
+
+bagTab?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-tab-order]")) putOnTab();
+});
+
 function renderAll() {
+  renderTabs();
   renderItems();
+  renderXpBanner();
+  renderBundles();
   renderBonuses();
   renderPlayerPanel();
   renderBag();
@@ -212,6 +351,7 @@ function addToCart(id, size) {
   renderBag();
 
   const item = itemById(id);
+  if (FRIDGE) { openBag(); return; }
   LevelUp.toast({ title: "Added to bag", text: `${item.name}${size ? ` (${size})` : ""}`, icon: "🎒", tone: "green" });
   bagButton.classList.remove("bump");
   void bagButton.offsetWidth; // restart animation
@@ -231,6 +371,7 @@ bagItems.addEventListener("click", (event) => {
   const removeButton = event.target.closest("[data-remove]");
   if (qtyButton) {
     const line = cart[Number(qtyButton.dataset.index)];
+    if (!line) return;
     line.qty = Math.min(MAX_QTY, line.qty + Number(qtyButton.dataset.qty));
     if (line.qty <= 0) cart.splice(Number(qtyButton.dataset.index), 1);
   } else if (removeButton) {
@@ -271,7 +412,7 @@ document.addEventListener("keydown", (event) => {
 document.querySelectorAll("[data-filter]").forEach((tab) => {
   tab.addEventListener("click", () => {
     filter = tab.dataset.filter;
-    document.querySelectorAll("[data-filter]").forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+    renderTabs();
     renderItems();
   });
 });
@@ -290,9 +431,21 @@ function renderPayPal() {
   paypal.Buttons({
     style: { layout: "vertical", color: "gold", shape: "rect", label: "pay" },
 
-    createOrder: (data, actions) => {
-      const lines = cartLines();
-      const total = cartTotal().toFixed(2);
+    // The server checks the bag first (sold out, drop ended) and its prices are the ones charged
+    createOrder: async (data, actions) => {
+      bagStatus.textContent = "";
+      let check;
+      try {
+        check = await LevelUp.shopCheck(basket());
+      } catch (err) {
+        checkFailed = true;
+        await LevelUp.loadShopCatalog();
+        renderAll();
+        bagStatus.textContent = err.message;
+        throw err;
+      }
+      const lines = check.items.map((i) => ({ item: { name: i.name, price: Number(i.price) }, size: i.size, qty: i.qty }));
+      const total = Number(check.total).toFixed(2);
       return actions.order.create({
         purchase_units: [{
           description: "LEVEL-UP gear",
@@ -345,6 +498,7 @@ function renderPayPal() {
     },
 
     onError: (err) => {
+      if (checkFailed) { checkFailed = false; return; } // the message about the bag is already shown
       console.error("PayPal error:", err);
       bagStatus.textContent = "Something went wrong with the payment. Nothing was charged. Please try again.";
     }
@@ -429,6 +583,38 @@ function showLoot(order, reward) {
   lootDialog.showModal();
 }
 
+// Put on the tab: what was taken, the open total and an undo for a wrong tap
+function showTabLoot(lines, r) {
+  const itemsHtml = lines.map((line) => `
+    <li><span>${line.qty}× ${esc(line.item.name)}</span><span>${euro(line.item.price * line.qty)}</span></li>`).join("");
+  lootContent.innerHTML = `
+    <p class="section-kicker">On your tab</p>
+    <h2 class="auth-title" id="lootTitle">Enjoy! 🧾</h2>
+    <ul class="loot-items">${itemsHtml}</ul>
+    <p class="loot-total">Open tab <strong>${euro(r.openTotal)}</strong></p>
+    <div class="loot-reward">
+      <span class="xp-chip gold">+${r.xp} XP when paid</span>
+      <p>Pay at the desk. The XP lands on your profile as soon as it's marked paid.</p>
+    </div>
+    <p class="auth-note">Wrong drink? <button type="button" class="text-link link-button" data-tab-undo="${esc(r.id)}">Undo</button> (within 15 minutes)</p>
+    <p class="form-error" role="alert"></p>`;
+  lootDialog.showModal();
+}
+
+lootContent.addEventListener("click", async (event) => {
+  const undo = event.target.closest("[data-tab-undo]");
+  if (!undo) return;
+  undo.disabled = true;
+  try {
+    await LevelUp.tabCancel(undo.dataset.tabUndo);
+    lootDialog.close();
+    LevelUp.toast({ title: "Removed from your tab", text: "Nothing to pay for this one.", icon: "↩", tone: "green" });
+  } catch (err) {
+    undo.disabled = false;
+    lootContent.querySelector(".form-error").textContent = err.message;
+  }
+});
+
 lootDialog.querySelector("[data-close]").addEventListener("click", () => lootDialog.close());
 lootDialog.addEventListener("click", (event) => {
   if (event.target === lootDialog) lootDialog.close();
@@ -436,5 +622,17 @@ lootDialog.addEventListener("click", (event) => {
 });
 
 // ---------- Init ----------
+if (FRIDGE) {
+  document.body.classList.add("fridge-mode");
+  document.title = "The fridge | LEVEL-UP";
+}
 document.addEventListener("levelup:change", renderAll);
 renderAll();
+LevelUp.ready.then(renderAll);
+// Drop countdowns tick every minute
+setInterval(() => {
+  document.querySelectorAll("[data-ends]").forEach((el) => {
+    el.textContent = endsIn(el.dataset.ends);
+    if (new Date(el.dataset.ends) <= new Date()) LevelUp.loadShopCatalog().then(renderAll);
+  });
+}, 60000);

@@ -130,8 +130,28 @@ const LevelUp = (() => {
       img: null,
       perks: ["+8 STR", "+8 Mobility"],
       desc: "Resistance bands for warm-ups, assisted pull-ups and mobility. Small enough to take to every session."
-    }
+    },
+    // Limited drop: a set number of pieces until a date (stock and end date are set in admin -> Shop)
+    {
+      id: "hoodie_s1",
+      name: "Season 1 Hoodie",
+      price: 55,
+      category: "limited",
+      type: "Limited drop",
+      rarity: "legendary",
+      img: "img/teammembermaximtruimerch.jpg",
+      sizes: ["S", "M", "L", "XL"],
+      perks: ["+15 Style", "Season 1 only"],
+      desc: "Numbered Season 1 hoodie with the gold pull-up logo. Only made once: when it's gone, it's gone."
+    },
+    // Fuel: drinks and bars from the fridge at the gym (shop.html?fridge, the QR code on the fridge)
+    { id: "shake", name: "Protein shake", price: 3.5, category: "fuel", type: "Fuel", rarity: "common", art: "🥤", perks: ["+20 g protein"], desc: "Ready-to-drink protein shake, cold from the fridge. Recovery starts now." },
+    { id: "bar", name: "Protein bar", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "🍫", perks: ["+20 g protein"], desc: "Protein bar for before or after the session." },
+    { id: "energy", name: "Energy drink", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "⚡", perks: ["+Energy"], desc: "A sugar-free energy drink to get going." },
+    { id: "water", name: "Water", price: 1.5, category: "fuel", type: "Fuel", rarity: "common", art: "💧", perks: ["+Hydration"], desc: "Bottle of still water." }
   ];
+  // Until the server's shop list is in, only the gear that was always on sale shows
+  const ALWAYS_ON = ["merch", "tools"];
 
   const ACHIEVEMENTS = [
     { id: "new_player", icon: "★", title: "New player", desc: "Create your player profile.", xp: 50 },
@@ -299,7 +319,7 @@ const LevelUp = (() => {
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
     packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false,
-    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35
+    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
@@ -316,7 +336,7 @@ const LevelUp = (() => {
   // Changes that can queue a push notification: send it right away
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
     "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp",
-    "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish"]);
+    "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish", "shop_tab_paid"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -425,6 +445,44 @@ const LevelUp = (() => {
     }
   }
 
+  // ---------- Shop catalogue (prices, on/off, stock and drops come from the server) ----------
+  let shopCatalog = null; // id -> { price, active, stock, dropEndsAt, available }
+  async function loadShopCatalog() {
+    try {
+      const rows = await call("shop_catalog");
+      shopCatalog = Object.fromEntries((rows || []).map((r) => [r.id, { ...r, price: Number(r.price), stock: r.stock == null ? null : Number(r.stock) }]));
+    } catch (err) {
+      console.error("Loading the shop failed:", err);
+    }
+  }
+  // The shop's items with today's price and status; switched-off products are left out
+  function shopItems() {
+    return ITEMS.map((item) => {
+      const c = shopCatalog?.[item.id];
+      if (!c) return ALWAYS_ON.includes(item.category) ? { ...item, available: true, stock: null, dropEndsAt: null } : null;
+      if (!c.active) return null;
+      return { ...item, price: c.price, available: c.available, stock: c.stock, dropEndsAt: c.dropEndsAt };
+    }).filter(Boolean);
+  }
+  const shopCheck = (items) => call("shop_check", { p_items: items });
+  async function tabOrder(items) {
+    const r = await call("shop_tab_order", { p_items: items });
+    await Promise.all([refreshPlayer(), loadShopCatalog()]);
+    emit();
+    return r;
+  }
+  async function tabCancel(id) {
+    await call("shop_tab_cancel", { p_id: id });
+    await Promise.all([refreshPlayer(), loadShopCatalog()]);
+    emit();
+  }
+  const openTab = (p = player) => (p?.purchases || []).filter((o) => o.status === "open");
+  const adminShop = () => call("admin_shop");
+  const adminShopUpdate = (id, p) => call("admin_shop_update", { p_id: id, p });
+  const tabPaid = (id) => call("shop_tab_paid", { p_id: id });
+  const packGift = (size, gift) => call("admin_pack_gift", { p_size: size, p_gift: gift || "" });
+  const markPackGiftGiven = (id) => call("mark_pack_gift_given", { p_id: id });
+
   // ---------- Group classes ----------
   // class_list rows for the bookable weeks (the schedule); a player's own classes come with their data
   let classes = [];
@@ -520,11 +578,11 @@ const LevelUp = (() => {
       if (!p) return;
       pricing = {
         price: Number(p.price), fee: Number(p.fee), introPrice: Number(p.introPrice), duoPrice: Number(p.duoPrice),
-        packs: (p.packs || []).map((o) => ({ size: Number(o.size), price: Number(o.price) })),
+        packs: (p.packs || []).map((o) => ({ size: Number(o.size), price: Number(o.price), gift: o.gift || null })),
         onlinePayments: Boolean(p.onlinePayments),
         classPrice: Number(p.classPrice ?? pricing.classPrice), classXp: Number(p.classXp ?? pricing.classXp),
         classCapacity: Number(p.classCapacity ?? pricing.classCapacity), classCancelHours: Number(p.classCancelHours ?? pricing.classCancelHours),
-        classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee),
+        classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee), tabLimit: Number(p.tabLimit ?? pricing.tabLimit),
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
     } catch (err) {
@@ -1449,6 +1507,7 @@ const LevelUp = (() => {
       p_items: order.items.map(({ id, size, qty }) => ({ id, size, qty }))
     });
     const xp = Number(result?.xp) || orderXp(order.total);
+    await loadShopCatalog(); // stock of limited drops
     if (!player) {
       write(GUEST_ORDERS_KEY, [...new Set([...read(GUEST_ORDERS_KEY, []), order.id])]);
       return { guest: true, xp };
@@ -1815,6 +1874,7 @@ const LevelUp = (() => {
   // High scores and reviews only show on the home page; other pages skip loading them.
   const onHome = Boolean(document.getElementById("scores"));
   const onSchedule = Boolean(document.getElementById("weekBoard"));
+  const onShop = Boolean(document.getElementById("itemGrid"));
   // Everything loads at once; only the calendar and the player wait for the trainer list
   // (so new trainers' hours and names are known). The loading screen shows the real progress.
   const ready = (async () => {
@@ -1833,6 +1893,7 @@ const LevelUp = (() => {
           bootTask(loadOpeningHours(), "Loading opening hours…"),
           bootTask(loadSlots(), "Loading open sessions…"),
           onSchedule ? bootTask(loadClasses(), "Loading group classes…") : null,
+          onShop ? bootTask(loadShopCatalog(), "Loading the shop…") : null,
           bootTask(loadTrainerStats(), "Loading trainer levels…"),
           onHome ? bootTask(loadLeaderboard(), "Loading high scores…") : null,
           onHome ? bootTask(loadReviews(), "Loading reviews…") : null
@@ -2900,6 +2961,7 @@ const LevelUp = (() => {
     openAuth, toast,
     getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classCancel, loadClasses,
-    refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); }
+    refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
+    shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven
   };
 })();

@@ -323,6 +323,8 @@ function renderRewards(player) {
     </section>`;
 }
 
+const giftName = (id) => (id && ITEMS.find((item) => item.id === id)?.name) || "";
+
 function renderPacks(player) {
   const euro = LevelUp.euro;
   const credits = LevelUp.packCredits();
@@ -340,6 +342,7 @@ function renderPacks(player) {
       ${open ? `
         <div class="pack-open">
           <p><strong>${open.size}-session pack · ${euro(open.price)}</strong> <span class="status-chip pending">Waiting for payment</span></p>
+          ${giftName(open.gift) ? `<p class="muted small">🎁 Comes with a free ${esc(giftName(open.gift))}: pick it up at the desk once it's paid.</p>` : ""}
           <div class="btn-row">
             ${online ? `<button type="button" class="btn btn-small btn-primary" data-pack-pay="${open.id}">Pay ${LevelUp.euro(open.price)} online</button>` : ""}
             <button type="button" class="btn btn-small btn-ghost" data-pack-cancel="${open.id}">Cancel request</button>
@@ -354,11 +357,12 @@ function renderPacks(player) {
             <span class="price-tag">${o.size} sessions</span>
             <strong>${euro(o.price)}</strong>
             <span>${euro(o.price / o.size)} per session · save ${euro(single * o.size - o.price)}</span>
+            ${giftName(o.gift) ? `<span class="pack-gift">🎁 + free ${esc(giftName(o.gift))}</span>` : ""}
           </button>`).join("")}
         </div>`}
       <p class="form-error" role="alert" id="packError"></p>
       ${history.some((pk) => pk.status === "paid") ? `<h3 class="panel-sub">My packs</h3><ul class="detail-list">${history.filter((pk) => pk.status === "paid").map((pk) => `
-        <li><span>${pk.size}-session pack · ${euro(pk.price)}</span><span class="muted small">${pk.used}/${pk.size} used · ${pk.remaining} left</span></li>`).join("")}</ul>` : ""}
+        <li><span>${pk.size}-session pack · ${euro(pk.price)}${giftName(pk.gift) ? ` · 🎁 ${esc(giftName(pk.gift))} ${pk.giftGivenAt ? "✓" : "<em class=\"muted\">(pick up at the desk)</em>"}` : ""}</span><span class="muted small">${pk.used}/${pk.size} used · ${pk.remaining} left</span></li>`).join("")}</ul>` : ""}
     </section>`;
 }
 
@@ -647,8 +651,11 @@ function renderAchievements(player) {
 
 function renderInventory(player) {
   const owned = ITEMS.filter((item) => player.inventory[item.id]);
+  const tab = LevelUp.openTab(player);
+  const tabSum = tab.reduce((n, o) => n + o.total, 0);
+  const paid = player.purchases.filter((o) => o.status !== "open");
   return `
-    <section class="panel panel-wide">
+    <section class="panel panel-wide" id="inventory">
       <div class="panel-head">
         <h2>Inventory</h2>
         <a href="shop.html" class="btn btn-small">Item shop</a>
@@ -657,19 +664,30 @@ function renderInventory(player) {
         <ul class="inventory">
           ${owned.map((item) => `
             <li class="rarity-${item.rarity}">
-              ${item.img ? `<img src="${item.img}" alt="">` : `<span class="inv-placeholder" aria-hidden="true">≋</span>`}
+              ${item.img ? `<img src="${item.img}" alt="">` : `<span class="inv-placeholder" aria-hidden="true">${item.art || "≋"}</span>`}
               <span class="inv-name">${esc(item.name)}</span>
               <span class="inv-qty">×${player.inventory[item.id]}</span>
             </li>`).join("")}
         </ul>` : `<p class="muted">Your inventory is empty. Every item you buy earns XP and shows up here.</p>`}
-      ${player.purchases.length ? `
-        <h3 class="panel-sub">Orders</h3>
-        <ul class="log-list">
-          ${player.purchases.slice(0, 5).map((order) => `
+      ${tab.length ? `
+        <div class="tab-box">
+          <p><strong>🧾 Open tab: ${euro(tabSum)}</strong> · pay at the desk. You get +${tab.reduce((n, o) => n + (o.xp || 0), 0)} XP as soon as it's marked paid.</p>
+          <ul class="log-list">${tab.map((order) => `
             <li>
               <span>${order.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</span>
               <span class="muted">${formatDate(order.date)} · ${euro(order.total)}</span>
-              <span class="log-xp">+${LevelUp.orderXp(order.total)} XP</span>
+              ${Date.now() - new Date(order.date) < 15 * 60000 ? `<button type="button" class="btn btn-small btn-ghost" data-tab-cancel="${esc(order.id)}">Undo</button>` : `<span class="status-chip pending">On your tab</span>`}
+            </li>`).join("")}</ul>
+          <p class="form-error" role="alert" id="tabError"></p>
+        </div>` : ""}
+      ${paid.length ? `
+        <h3 class="panel-sub">Orders</h3>
+        <ul class="log-list">
+          ${paid.slice(0, 5).map((order) => `
+            <li>
+              <span>${order.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</span>
+              <span class="muted">${formatDate(order.date)} · ${euro(order.total)}</span>
+              <span class="log-xp">+${order.xp ?? LevelUp.orderXp(order.total)} XP</span>
             </li>`).join("")}
         </ul>` : ""}
     </section>`;
@@ -1017,6 +1035,19 @@ function bindEvents(player) {
       submit.disabled = false;
       submit.textContent = "Try again";
     }
+  });
+
+  // Undo a drink or bar put on the tab by mistake (within 15 minutes)
+  root.querySelectorAll("[data-tab-cancel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await LevelUp.tabCancel(button.dataset.tabCancel);
+      } catch (err) {
+        button.disabled = false;
+        root.querySelector("#tabError").textContent = err.message;
+      }
+    });
   });
 
   root.querySelectorAll("[data-pack-size]").forEach((button) => {
