@@ -565,18 +565,28 @@ begin
   if owns_all then perform public._unlock(p_user, 'collector', 300, 'Collector'); end if;
 end $$;
 
--- Saves a set of character stats; the first save each week earns check-in XP
-create or replace function public._insert_stats(p_user uuid, p jsonb)
-returns integer language plpgsql security definer set search_path = public as $$
+-- The checks every saved set of stats must pass (new check-in or a correction)
+create or replace function public._check_stats(p jsonb)
+returns void language plpgsql immutable as $$
 declare
   w numeric := (p ->> 'weight')::numeric;
   h numeric := (p ->> 'height')::numeric;
   a integer := (p ->> 'age')::int;
-  gained integer := 0;
 begin
   if w is null or w < 30 or w > 300 then raise exception 'Enter a weight between 30 and 300 kg.'; end if;
   if h is null or h < 120 or h > 230 then raise exception 'Enter a height between 120 and 230 cm.'; end if;
   if a is null or a < 14 or a > 100 then raise exception 'Enter an age between 14 and 100.'; end if;
+end $$;
+
+-- Saves a set of character stats; the first save each week earns check-in XP.
+-- A second save on the same day corrects that day's row instead of adding one.
+create or replace function public._insert_stats(p_user uuid, p jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  gained integer := 0;
+begin
+  perform public._check_stats(p);
 
   if not exists (
     select 1 from public.xp_log
@@ -585,9 +595,21 @@ begin
     gained := 25;
   end if;
 
+  update public.body_stats set
+    weight = (p ->> 'weight')::numeric, height = (p ->> 'height')::numeric, age = (p ->> 'age')::int,
+    sex = left(coalesce(p ->> 'sex', 'male'), 10), goal = left(coalesce(p ->> 'goal', 'maintain'), 20),
+    activity = least(2.0, greatest(1.0, coalesce((p ->> 'activity')::numeric, 1.55))),
+    bmi = (p ->> 'bmi')::numeric, bmr = (p ->> 'bmr')::int, maintenance = (p ->> 'maintenance')::int,
+    target = (p ->> 'target')::int, protein = (p ->> 'protein')::int
+  where id = (select max(id) from public.body_stats where user_id = p_user and day = today);
+  if found then
+    perform public._grant_xp(p_user, gained, 'Weekly check-in');
+    return gained;
+  end if;
+
   insert into public.body_stats (user_id, day, weight, height, age, sex, goal, activity, bmi, bmr, maintenance, target, protein)
-  values (p_user, (now() at time zone 'Europe/Brussels')::date,
-    w, h, a, left(coalesce(p ->> 'sex', 'male'), 10), left(coalesce(p ->> 'goal', 'maintain'), 20),
+  values (p_user, today,
+    (p ->> 'weight')::numeric, (p ->> 'height')::numeric, (p ->> 'age')::int, left(coalesce(p ->> 'sex', 'male'), 10), left(coalesce(p ->> 'goal', 'maintain'), 20),
     least(2.0, greatest(1.0, coalesce((p ->> 'activity')::numeric, 1.55))),
     (p ->> 'bmi')::numeric, (p ->> 'bmr')::int, (p ->> 'maintenance')::int, (p ->> 'target')::int, (p ->> 'protein')::int);
 
@@ -705,7 +727,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                        from (select * from public.xp_log where user_id = p.id order by id desc limit 50) x), '[]'::jsonb),
     'workouts', coalesce((select jsonb_agg(jsonb_build_object('date', w.day, 'type', w.type, 'minutes', w.minutes, 'xp', w.xp) order by w.id desc)
                           from public.workouts w where w.user_id = p.id), '[]'::jsonb),
-    'bodyStats', coalesce((select jsonb_agg(jsonb_build_object('date', b.day, 'weight', b.weight, 'height', b.height, 'age', b.age,
+    'bodyStats', coalesce((select jsonb_agg(jsonb_build_object('id', b.id, 'date', b.day, 'weight', b.weight, 'height', b.height, 'age', b.age,
                               'sex', b.sex, 'goal', b.goal, 'bmi', b.bmi, 'bmr', b.bmr, 'maintenance', b.maintenance,
                               'target', b.target, 'protein', b.protein, 'activity', b.activity) order by b.day desc, b.id desc)
                            from public.body_stats b where b.user_id = p.id), '[]'::jsonb),
@@ -1188,6 +1210,24 @@ $$;
 -- ---------------------------------------------------------
 -- "Log a workout" was removed: old logged workouts stay in public.workouts, but nobody can add new ones.
 drop function if exists public.log_workout(text, integer);
+
+-- Corrects one of your own earlier check-ins (a typo in the weight …). Only the values change: the date stays,
+-- and no XP or achievement is ever given, so editing can't be used to earn extra XP.
+create or replace function public.update_body_stats(p_id bigint, p jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'Log in first.'; end if;
+  perform public._check_stats(p);
+  update public.body_stats set
+    weight = (p ->> 'weight')::numeric, height = (p ->> 'height')::numeric, age = (p ->> 'age')::int,
+    sex = left(coalesce(p ->> 'sex', 'male'), 10), goal = left(coalesce(p ->> 'goal', 'maintain'), 20),
+    activity = least(2.0, greatest(1.0, coalesce((p ->> 'activity')::numeric, 1.55))),
+    bmi = (p ->> 'bmi')::numeric, bmr = (p ->> 'bmr')::int, maintenance = (p ->> 'maintenance')::int,
+    target = (p ->> 'target')::int, protein = (p ->> 'protein')::int
+  where id = p_id and user_id = uid;
+  if not found then raise exception 'Check-in not found.'; end if;
+end $$;
 
 drop function if exists public.save_body_stats(jsonb);
 create or replace function public.save_body_stats(p jsonb)
@@ -2605,6 +2645,7 @@ revoke execute on function public.touch_login() from public, anon;
 revoke execute on function public.book_session(text, date, integer, text, text, text, text) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.save_body_stats(jsonb) from public, anon;
+revoke execute on function public.update_body_stats(bigint, jsonb) from public, anon;
 revoke execute on function public.claim_orders(text[]) from public, anon;
 revoke execute on function public.delete_my_account() from public, anon;
 revoke execute on function public.admin_data() from public, anon;
@@ -2684,6 +2725,7 @@ grant execute on function public.save_trainer_hours(uuid, text, integer, date, i
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;
+grant execute on function public.update_body_stats(bigint, jsonb) to authenticated;
 grant execute on function public.claim_orders(text[]) to authenticated;
 grant execute on function public.delete_my_account() to authenticated;
 grant execute on function public.admin_data() to authenticated;

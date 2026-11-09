@@ -176,6 +176,17 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .weight-chart .pt:hover circle:last-of-type, .weight-chart .pt:focus-visible circle:last-of-type { r: 6; }
 .chart-hint { padding: 16px; background: #000; border: 2px dashed var(--line); }
 #stats .form-success { margin-top: 12px; }
+.stats-log { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.stats-log-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
+.stats-log-row.editing { border-color: var(--green-bright); }
+.stats-log-date { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.stats-log-val { font-variant-numeric: tabular-nums; }
+.stats-log-more { margin-top: 8px; }
+@media (max-width: 640px) {
+  .stats-log-row { grid-template-columns: 1fr auto; row-gap: 2px; }
+  .stats-log-date, .stats-log-val { grid-column: 1; white-space: nowrap; }
+  .stats-log-row .btn { grid-column: 2; grid-row: 1 / span 2; }
+}
 
 /* Responsive */
 @media (max-width: 960px) {

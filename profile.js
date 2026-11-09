@@ -3,7 +3,7 @@
 const root = document.getElementById("profileRoot");
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, statsEdit: null, statsLogOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -456,12 +456,15 @@ function weightChart(entries) {
     </svg>`;
 }
 
-function statsForm(latest) {
+// latest: the values to start from; editing: the earlier check-in being corrected (no XP for that)
+function statsForm(latest, editing = null) {
   const v = latest || { sex: "male", activity: 1.55, goal: "maintain" };
   const next = LevelUp.nextCheckin();
-  const reward = next
-    ? `Next check-in XP on ${next.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`
-    : `+${LevelUp.CHECKIN_XP} XP weekly check-in`;
+  const reward = editing
+    ? "A correction earns no XP"
+    : next
+      ? `Next check-in XP on ${next.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`
+      : `+${LevelUp.CHECKIN_XP} XP weekly check-in`;
   return `
     <form class="stats-form-inline" id="statsForm" novalidate>
       <div class="field-row four">
@@ -476,10 +479,26 @@ function statsForm(latest) {
       </div>
       <p class="form-error" role="alert"></p>
       <div class="stats-submit">
-        <button type="submit" class="btn btn-primary">${latest ? "Save check-in ▶" : "Save my stats ▶"}</button>
-        <span class="xp-chip ${next ? "muted-chip" : ""}">${reward}</span>
+        <button type="submit" class="btn btn-primary">${editing ? "Save correction ▶" : latest ? "Save check-in ▶" : "Save my stats ▶"}</button>
+        ${editing ? `<button type="button" class="btn btn-ghost btn-small" id="statsCancel">Cancel</button>` : ""}
+        <span class="xp-chip ${next || editing ? "muted-chip" : ""}">${reward}</span>
       </div>
     </form>`;
+}
+
+// Every check-in, newest first, each with a button to correct a typo
+function statsLog(entries) {
+  const shown = state.statsLogOpen ? entries : entries.slice(0, 5);
+  const row = (e) => `
+    <li class="stats-log-row ${state.statsEdit === e.id ? "editing" : ""}">
+      <span class="stats-log-date">${formatDate(e.date)}</span>
+      <span class="stats-log-val"><b>${e.weight}</b> kg · BMI ${e.bmi}</span>
+      <button type="button" class="btn btn-ghost btn-small" data-stats-edit="${e.id}" aria-label="Edit check-in of ${formatDate(e.date)}">Edit</button>
+    </li>`;
+  return `
+    <h3 class="panel-sub">My check-ins</h3>
+    <ul class="stats-log">${shown.map(row).join("")}</ul>
+    ${entries.length > 5 ? `<button type="button" class="btn btn-ghost btn-small stats-log-more" id="statsLogMore">${state.statsLogOpen ? "Show fewer ▲" : `Show all ${entries.length} check-ins ▼`}</button>` : ""}`;
 }
 
 function renderBodyStats(player) {
@@ -493,6 +512,7 @@ function renderBodyStats(player) {
         ${statsForm(null)}
       </section>`;
   }
+  const editing = entries.find((e) => e.id === state.statsEdit) || null;
   const first = entries[entries.length - 1];
   const change = latest.weight - first.weight;
   const since = new Date(first.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -520,10 +540,15 @@ function renderBodyStats(player) {
           </div>
           <h3 class="panel-sub">Weight progress</h3>
           ${weightChart(entries)}
+          ${statsLog(entries)}
         </div>
         <div>
-          <h3 class="panel-sub first">Weekly check-in</h3>
-          ${statsForm(latest)}
+          ${editing
+            ? `<h3 class="panel-sub first">Correct the check-in of ${formatDate(editing.date)}</h3>
+               <p class="muted small-text">Typed something wrong? Change it here. The date stays the same and a correction earns no XP.</p>
+               ${statsForm(editing, editing)}`
+            : `<h3 class="panel-sub first">Weekly check-in</h3>
+               ${statsForm(latest)}`}
           ${statsMessage ? `<p class="form-success">${esc(statsMessage)}</p>` : ""}
           <h3 class="panel-sub">Starter meal plan</h3>
           <ul class="meal-list">
@@ -883,6 +908,15 @@ function bindEvents(player) {
     }
   });
 
+  root.querySelectorAll("[data-stats-edit]").forEach((btn) => btn.addEventListener("click", () => {
+    state.statsEdit = Number(btn.dataset.statsEdit);
+    statsMessage = "";
+    render();
+    document.getElementById("statsForm")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }));
+  document.getElementById("statsCancel")?.addEventListener("click", () => { state.statsEdit = null; render(); });
+  document.getElementById("statsLogMore")?.addEventListener("click", () => { state.statsLogOpen = !state.statsLogOpen; render(); });
+
   const statsFormEl = document.getElementById("statsForm");
   statsFormEl?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -892,8 +926,16 @@ function bindEvents(player) {
     submit.disabled = true;
     submit.textContent = "Saving…";
     try {
-      const result = await LevelUp.saveBodyStats(Object.fromEntries(new FormData(statsFormEl)));
-      statsMessage = result.xp ? `Check-in saved: +${result.xp} XP.` : "Stats updated. Check-in XP is once a week.";
+      const values = Object.fromEntries(new FormData(statsFormEl));
+      const editing = LevelUp.getPlayer()?.bodyStats.find((e) => e.id === state.statsEdit);
+      if (editing) {
+        await LevelUp.updateBodyStats(editing.id, values);
+        state.statsEdit = null;
+        statsMessage = `Check-in of ${formatDate(editing.date)} corrected.`;
+      } else {
+        const result = await LevelUp.saveBodyStats(values);
+        statsMessage = result.xp ? `Check-in saved: +${result.xp} XP.` : "Stats updated. Check-in XP is once a week.";
+      }
       render();
     } catch (err) {
       error.textContent = err.message;

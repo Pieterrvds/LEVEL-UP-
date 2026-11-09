@@ -80,7 +80,7 @@ database can't be reached. Trainers can overlap: the training area fits two trai
 ## Trainers and bookings
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`
 table in Supabase. Sessions are 1 hour, need at least 12 hours notice and can be booked up to 4 weeks ahead.
-Clients earn 75 XP per booking and 25 XP for the first stats check-in each week; trainers earn 100 XP per session and 50 XP per unique client.
+Clients earn 75 XP per booking and 25 XP for the first stats check-in each week (a second save on the same day corrects that day's check-in; earlier check-ins can be corrected under "My check-ins" with `update_body_stats`, which only changes the values and never gives XP); trainers earn 100 XP per session and 50 XP per unique client.
 Trainers sign up as "Personal trainer" (or apply later from their profile). The admin gets an email and a pop-up,
 and approves the application in the admin dashboard: either linked to an existing trainer card (Filip, Maxim) or as a
 new trainer card, which then appears in the team, the schedule filter and the booking board automatically. Coaching

@@ -1345,6 +1345,15 @@ const LevelUp = (() => {
     return { xp: Number(result?.xp) || 0, stats };
   }
 
+  // Corrects an earlier check-in (same date, new values); never earns XP
+  async function updateBodyStats(id, input) {
+    const stats = computeStats(input);
+    await call("update_body_stats", { p_id: id, p: stats });
+    await refreshPlayer();
+    emit();
+    return stats;
+  }
+
   // Records a paid order. Guests' orders are remembered on this device
   // and credited as soon as they log in.
   async function recordPurchase(order) {
@@ -2783,7 +2792,7 @@ const LevelUp = (() => {
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
-    saveBodyStats, recordPurchase,
+    saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
