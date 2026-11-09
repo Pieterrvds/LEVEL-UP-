@@ -178,10 +178,11 @@ function renderBoard() {
 
 // ---------- Phones: the week as a list, per day one row per trainer with time buttons ----------
 const weekList = document.getElementById("weekList");
+let listDay = null; // the day picked in the strip (phones); null = pick one automatically
 function renderWeekList(days, trainers, now, todayKey) {
   if (!weekList) return;
   const tomorrowKey = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-  const html = days.map((day) => {
+  const blocks = days.map((day) => {
     const groups = (activeTrainer === "all" ? LevelUp.groupSessions(day.key) : []).filter((g) => g.end > now);
     const rows = trainers.map((t) => {
       const chips = LevelUp.trainerHours(t.id, day.key).map((hour) => {
@@ -204,25 +205,39 @@ function renderWeekList(days, trainers, now, todayKey) {
         <span class="list-trainer"><span class="list-group-icon" aria-hidden="true">👥</span><b>Group</b></span>
         <p class="list-group-text"><b>${timeText(g.start)}</b> ${esc(g.title)}${g.location ? ` · ${esc(g.location)}` : ""}</p>
       </div>`).join("");
-    if (!rows && !groupRows) return "";
+    if (!rows && !groupRows) return { day, html: "", open: 0 };
+    const open = (rows.match(/class="time-chip free"/g) || []).length + groups.length;
     const when = day.key === todayKey ? "Today" : day.key === tomorrowKey ? "Tomorrow" : "";
-    return `
+    return { day, open, html: `
       <div class="list-day${day.key === todayKey ? " today" : ""}">
         <h3 class="list-day-head">${day.date.toLocaleDateString("en-GB", { weekday: "long" })} <span>${day.date.getDate()} ${day.date.toLocaleDateString("en-GB", { month: "short" })}</span>${when ? `<em>${when}</em>` : ""}</h3>
         ${groupRows}${rows}
-      </div>`;
-  }).join("");
-  weekList.innerHTML = html || `<p class="list-empty">No open hours left this week.${weekOffset < LevelUp.BOOKING_WEEKS_AHEAD - 1 ? " Tap ▶ for next week." : ""}</p>`;
+      </div>` };
+  });
+  const withContent = blocks.filter((b) => b.html);
+  if (!withContent.length) {
+    weekList.innerHTML = `<p class="list-empty">No open hours left this week.${weekOffset < LevelUp.BOOKING_WEEKS_AHEAD - 1 ? " Tap ▶ for next week." : ""}</p>`;
+    return;
+  }
+  if (!withContent.some((b) => b.day.key === listDay)) listDay = (withContent.find((b) => b.open) || withContent[0]).day.key;
+  const strip = blocks.map(({ day, html, open }) => `
+    <button type="button" class="day-pill${day.key === listDay ? " on" : ""}${day.key === todayKey ? " today" : ""}" data-list-day="${day.key}"
+      aria-pressed="${day.key === listDay}" ${html ? "" : "disabled"} aria-label="${day.date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}${open ? `, ${open} open` : ""}">
+      <small>${day.date.toLocaleDateString("en-GB", { weekday: "short" })}</small><b>${day.date.getDate()}</b><i>${open || "–"}</i>
+    </button>`).join("");
+  weekList.innerHTML = `<div class="day-strip" role="group" aria-label="Pick a day">${strip}</div>${blocks.find((b) => b.day.key === listDay).html}`;
 }
 
 weekList?.addEventListener("click", (event) => {
+  const pill = event.target.closest("[data-list-day]");
+  if (pill && !pill.disabled) { listDay = pill.dataset.listDay; renderBoard(); return; }
   const chip = event.target.closest(".time-chip");
   if (!chip || chip.disabled) return;
   openSlot({ trainerId: chip.dataset.trainer, date: chip.dataset.date, hour: Number(chip.dataset.hour) });
 });
 
-weekPrev.addEventListener("click", () => { weekPicked = true; weekOffset = Math.max(0, weekOffset - 1); renderBoard(); });
-weekNext.addEventListener("click", () => { weekPicked = true; weekOffset = Math.min(LevelUp.BOOKING_WEEKS_AHEAD - 1, weekOffset + 1); renderBoard(); });
+weekPrev.addEventListener("click", () => { weekPicked = true; listDay = null; weekOffset = Math.max(0, weekOffset - 1); renderBoard(); });
+weekNext.addEventListener("click", () => { weekPicked = true; listDay = null; weekOffset = Math.min(LevelUp.BOOKING_WEEKS_AHEAD - 1, weekOffset + 1); renderBoard(); });
 
 // ---------- Quest board in the header: next open sessions ----------
 function nextOpenSlots(limit) {
@@ -596,6 +611,29 @@ function availabilityText(trainer) {
     .join(" · ");
 }
 
+// Bookable hours of a trainer in the coming 7 days (shown on the team card's photo)
+function freeSpotsThisWeek(trainerId) {
+  const now = new Date();
+  let n = 0;
+  for (let i = 0; i < 7; i++) {
+    const key = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i));
+    LevelUp.trainerHours(trainerId, key).forEach((hour) => {
+      if (!LevelUp.slotBlocker(key, hour, now) && !LevelUp.findBooking(trainerId, key, hour)) n++;
+    });
+  }
+  return n;
+}
+function renderTeamSpots() {
+  document.querySelectorAll("[data-team-spots]").forEach((el) => {
+    if (!LevelUp.isReady()) { el.hidden = true; return; }
+    const n = freeSpotsThisWeek(el.dataset.teamSpots);
+    el.hidden = false;
+    el.classList.toggle("full", n === 0);
+    el.classList.toggle("few", n > 0 && n <= 3);
+    el.textContent = n === 0 ? "Fully booked this week" : n <= 3 ? `Only ${n} spot${n === 1 ? "" : "s"} left this week` : `${n} open hours this week`;
+  });
+}
+
 function renderTrainerStats() {
   document.querySelectorAll("[data-trainer-stats]").forEach((el) => {
     const trainer = LevelUp.trainerById(el.dataset.trainerStats);
@@ -629,11 +667,13 @@ function renderDynamicTeam() {
     card.className = "team-card";
     card.id = `team-${t.id}`;
     card.style.setProperty("--c", t.color);
+    const chips = String(t.specialties || "").split(/[,·]/).map((x) => x.trim()).filter(Boolean).slice(0, 4);
     card.innerHTML = `
-      <div class="team-photo team-photo-new" aria-hidden="true"><span>${esc(t.short.charAt(0).toUpperCase())}</span></div>
+      <div class="team-photo-wrap"><div class="team-photo team-photo-new" aria-hidden="true"><span>${esc(t.short.charAt(0).toUpperCase())}</span></div><span class="team-spots" data-team-spots="${t.id}" hidden></span></div>
       <div class="team-body">
         <p class="team-role">${esc(t.role)}</p>
         <h3>${esc(t.name)}</h3>
+        ${chips.length ? `<ul class="team-chips">${chips.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
         <div class="trainer-stats" data-trainer-stats="${t.id}"></div>
         <div class="btn-row team-actions">
           <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${t.id}">Book ${esc(t.short)}</a>
@@ -731,7 +771,18 @@ function renderHighScores() {
     msg = `You're <b>#${me.place}</b>${ahead ? ` · <b>${(ahead.xp - me.xp + 1).toLocaleString("en-US")} XP</b> to pass ${esc(ahead.name)}` : " · You're the champion! 👑"}`;
   }
   foot.innerHTML = `<span class="hs-next">${msg}</span><a href="#schedule" class="hs-coin">Book a session ▸ +${LevelUp.SESSION_XP} XP</a>`;
+  const more = document.getElementById("hsMore");
+  const rest = list.querySelectorAll(".hs-row").length;
+  if (more) {
+    more.hidden = !rest;
+    more.textContent = hsOpen ? "Hide ranking ▲" : `Full ranking · ${rest + Math.min(top.length, 3)} players ▼`;
+    more.setAttribute("aria-expanded", String(hsOpen));
+    // the podium shows the top 3; the board only holds the rest (or the "no scores yet" note)
+    document.getElementById("hsBoard").hidden = rest ? !hsOpen : top.length > 0;
+  }
 }
+let hsOpen = false;
+document.getElementById("hsMore")?.addEventListener("click", () => { hsOpen = !hsOpen; renderHighScores(); });
 
 document.addEventListener("click", async (event) => {
   const tab = event.target.closest("[data-hs-period]");
@@ -750,6 +801,7 @@ function renderAll() {
   renderBoard();
   renderQuestBoard();
   renderTrainerStats();
+  renderTeamSpots();
 }
 
 document.addEventListener("levelup:change", () => {

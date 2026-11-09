@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202611091500"></script>
-  <script src="i18n.js?v=202611091500"></script>
+  <script src="i18n-nl.js?v=202611101200"></script>
+  <script src="i18n.js?v=202611101200"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611091500">
+  <link rel="stylesheet" href="style.css?v=202611101200">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -97,6 +97,7 @@
             <a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>
             <a href="#team" class="btn btn-ghost">Meet the team</a>
           </div>
+          <p class="hero-proof" id="heroProof" hidden></p>
           <button type="button" class="replay-open" data-replays>▶ Watch highlights <span>logo &amp; exercises</span></button>
           <ul class="hero-stats">
             <li><strong id="trainerCount">3</strong><span>Trainers</span></li>
@@ -105,7 +106,11 @@
           </ul>
         </div>
 
-        <aside class="quest-board pixel-frame" aria-labelledby="questTitle">
+        <aside class="quest-board pixel-frame phone-mock" aria-labelledby="questTitle">
+          <div class="mock-bar" aria-hidden="true">
+            <span class="mock-logo"><img src="img/logo.JPG" alt="" width="22" height="22">LEVEL-UP</span>
+            <span class="mock-xp"><b>LVL 3</b><i><u style="width:62%"></u></i></span>
+          </div>
           <div class="player-top">
             <span class="tag live">● Live</span>
             <span class="player-title">Up next</span>
@@ -132,10 +137,7 @@
         <div class="about-grid">
           <div>
             <p class="section-kicker">Level 1 · How it works</p>
-            <h2 class="section-title">Hey there!</h2>
-            <p class="text-lg" data-more>
-              <strong>Welcome to the LEVEL-UP movement.</strong> LEVEL-UP is where players and personal trainers meet. Create your player profile, pick a coach from our team and book a one-hour session straight from their weekly schedule.
-            </p>
+            <h2 class="section-title">Four steps to your first level</h2>
             <div class="btn-row" id="aboutCta">
               <button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your profile</button>
             </div>
@@ -191,7 +193,7 @@
       <div class="container">
         <p class="section-kicker">Level 2 · Training</p>
         <h2 class="section-title">Choose your training</h2>
-        <p class="section-intro" data-more>Every training builds different stats: strength (STR), endurance (END) and technique (TEC). Train <strong>1:1 with a coach</strong> (€60 per hour) or join a <strong>group session</strong>, both straight from the schedule.</p>
+        <p class="section-intro">Train <strong>1:1 with a coach</strong> or join a <strong>group session</strong>, both straight from the schedule.</p>
 
         <div class="class-grid collapsed" id="classGrid">
           <article class="class-card">
@@ -280,10 +282,11 @@
         </div>
         <div class="team-grid">
           <article class="team-card team-card-lead" id="team-pieter">
-            <img src="img/pf.jpg" alt="Pieter Van den Spiegel" class="team-photo" loading="lazy">
+            <div class="team-photo-wrap"><img src="img/pf.jpg" alt="Pieter Van den Spiegel" class="team-photo" loading="lazy"><span class="team-spots" data-team-spots="pieter" hidden></span></div>
             <div class="team-body">
               <p class="team-role">Head coach · Founder</p>
               <h3>Pieter Van den Spiegel</h3>
+              <ul class="team-chips"><li>CrossFit</li><li>Calisthenics</li><li>HIIT</li><li>Muay Thai</li></ul>
               <div class="trainer-stats" data-trainer-stats="pieter"></div>
               <div class="btn-row team-actions">
                 <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="pieter">Book Pieter</a>
@@ -293,10 +296,11 @@
           </article>
 
           <article class="team-card" id="team-maxim">
-            <img src="img/teammembermaximtshirt.jpg" alt="Maxim Buyl" class="team-photo" loading="lazy">
+            <div class="team-photo-wrap"><img src="img/teammembermaximtshirt.jpg" alt="Maxim Buyl" class="team-photo" loading="lazy"><span class="team-spots" data-team-spots="maxim" hidden></span></div>
             <div class="team-body">
               <p class="team-role">Cycling coach</p>
               <h3>Maxim Buyl</h3>
+              <ul class="team-chips"><li>Cycling</li><li>Group training</li></ul>
               <div class="trainer-stats" data-trainer-stats="maxim"></div>
               <div class="btn-row team-actions">
                 <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="maxim">Book Maxim</a>
@@ -306,10 +310,11 @@
           </article>
 
           <article class="team-card" id="team-filip">
-            <img src="img/filipironmancoach.jpg" alt="Filip De Meyst" class="team-photo" loading="lazy">
+            <div class="team-photo-wrap"><img src="img/filipironmancoach.jpg" alt="Filip De Meyst" class="team-photo" loading="lazy"><span class="team-spots" data-team-spots="filip" hidden></span></div>
             <div class="team-body">
               <p class="team-role">Triathlon coach</p>
               <h3>Filip De Meyst</h3>
+              <ul class="team-chips"><li>Triathlon</li><li>Group training</li></ul>
               <div class="trainer-stats" data-trainer-stats="filip"></div>
               <div class="btn-row team-actions">
                 <a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="filip">Book Filip</a>
@@ -346,7 +351,8 @@
             <button type="button" role="tab" data-hs-period="month" aria-selected="false">This month</button>
           </div>
           <div class="hs-podium" id="hsPodium"></div>
-          <div class="hs-board">
+          <button type="button" class="btn btn-ghost btn-block hs-more" id="hsMore" aria-controls="hsBoard" aria-expanded="false" hidden>Full ranking ▼</button>
+          <div class="hs-board" id="hsBoard">
             <div class="hs-board-head" aria-hidden="true"><span>Rank</span><span>Player</span><span>LVL</span><span>Score</span></div>
             <ol class="hs-list" id="hsList"><li class="hs-empty">Loading high scores…</li></ol>
           </div>
@@ -370,9 +376,9 @@
       <div class="container">
         <p class="section-kicker">Level 5 · Schedule</p>
         <h2 class="section-title">Book your trainer</h2>
-        <p class="section-intro" data-more>Live from the LEVEL-UP calendar. Every open square is a one-hour session: send a request, your trainer confirms it, and after the session you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
+        <p class="section-intro">Pick an hour, your trainer confirms it and you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
 
-        <ul class="price-list" id="priceList" aria-label="Prices" data-more></ul>
+        <ul class="price-list" id="priceList" aria-label="Prices"></ul>
 
         <div class="schedule-toolbar">
           <div class="week-nav">
@@ -411,7 +417,7 @@
         <div class="contact-info">
           <p class="section-kicker">Level 6 · Contact</p>
           <h2 class="section-title">Let's connect!</h2>
-          <p class="contact-intro" data-more>Book a session, ask a question or tell us what you want to achieve. Call, send a WhatsApp or use the form: we usually reply the same day.</p>
+          <p class="contact-intro">Call, WhatsApp or send the form: we usually reply the same day.</p>
 
           <!-- One tap: call, WhatsApp, route -->
           <div class="ct-quick">
@@ -420,62 +426,23 @@
             <a class="q-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=Hoogstraat+40,+9308+Aalst,+Belgium" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11.5a7 7 0 0 1 14 0C19 14.7 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><b>Route</b><small>Aalst</small></a>
           </div>
 
-          <article class="hq-card pixel-frame" aria-labelledby="hqTitle">
-            <header class="hq-head">
-              <span class="hq-pin" aria-hidden="true">📍</span>
-              <div>
-                <p class="hq-kicker">Training base</p>
-                <h3 id="hqTitle">LEVEL-UP Head Office</h3>
-              </div>
-            </header>
+          <p class="ct-address">
+            <span>📍 <a href="https://www.google.com/maps/dir/?api=1&amp;destination=Hoogstraat+40,+9308+Aalst,+Belgium" target="_blank" rel="noopener">Hoogstraat 40, 9308 Aalst</a></span>
+            <span>📞 <a href="tel:+32471955489">+32 471 95 54 89</a></span>
+            <span>✉ <a href="mailto:PieterV-D-S@hotmail.com">PieterV-D-S@hotmail.com</a></span>
+          </p>
 
-            <dl class="hq-list">
-              <div>
-                <dt>Address</dt>
-                <dd>
-                  <address>Hoogstraat 40<br>9308 Aalst, Belgium</address>
-                  <a class="hq-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=Hoogstraat+40,+9308+Aalst,+Belgium" target="_blank" rel="noopener">Plan route ▶</a>
-                </dd>
-              </div>
-              <div>
-                <dt>Phone</dt>
-                <dd>
-                  <a class="hq-value" href="tel:+32471955489">+32 471 95 54 89</a>
-                  <span class="hq-note">Call or text, Pieter answers</span>
-                </dd>
-              </div>
-              <div>
-                <dt>Email</dt>
-                <dd>
-                  <a class="hq-value" href="mailto:PieterV-D-S@hotmail.com">PieterV-D-S@hotmail.com</a>
-                  <span class="hq-note">Replies within a day</span>
-                </dd>
-              </div>
-            </dl>
-          </article>
-
-          <!-- Social media: big brand cards -->
+          <!-- Social media: three small buttons -->
           <h3 class="ct-social-title">Join the <span>LEVEL-UP</span> crew</h3>
-          <div class="ct-social">
-            <a class="ct-soc ig" href="https://www.instagram.com/levelupcrossfitpvds/" target="_blank" rel="noopener">
-              <span class="ct-ico"><img src="img/Instagram.png" alt="" loading="lazy" width="32" height="32"></span>
-              <span class="ct-txt"><b>Instagram</b><small>@levelupcrossfitpvds</small><em>Workouts · highlights</em></span>
-              <span class="ct-go">Follow ▶</span>
-            </a>
-            <a class="ct-soc wa" href="https://chat.whatsapp.com/EGDu4ZuQn1A8VyeGrmPFoG" target="_blank" rel="noopener">
-              <span class="ct-ico"><img src="img/whatsapp.png" alt="" loading="lazy" width="32" height="32"></span>
-              <span class="ct-txt"><b>Community</b><small>WhatsApp group</small><em>News · group sessions · tips</em></span>
-              <span class="ct-go">Join ▶</span>
-            </a>
-            <a class="ct-soc fb" href="https://www.facebook.com/profile.php?id=61569874411174" target="_blank" rel="noopener">
-              <span class="ct-ico"><img src="img/facebook.png" alt="" loading="lazy" width="32" height="32"></span>
-              <span class="ct-txt"><b>Facebook</b><small>LEVEL-UP Movement</small><em>Events · photos · updates</em></span>
-              <span class="ct-go">Like ▶</span>
-            </a>
+          <div class="ct-social ct-social-mini">
+            <a class="ct-soc ig" href="https://www.instagram.com/levelupcrossfitpvds/" target="_blank" rel="noopener"><img src="img/Instagram.png" alt="" loading="lazy" width="22" height="22"><b>Instagram</b></a>
+            <a class="ct-soc wa" href="https://chat.whatsapp.com/EGDu4ZuQn1A8VyeGrmPFoG" target="_blank" rel="noopener"><img src="img/whatsapp.png" alt="" loading="lazy" width="22" height="22"><b>Community</b></a>
+            <a class="ct-soc fb" href="https://www.facebook.com/profile.php?id=61569874411174" target="_blank" rel="noopener"><img src="img/facebook.png" alt="" loading="lazy" width="22" height="22"><b>Facebook</b></a>
           </div>
         </div>
 
         <div class="contact-side">
+        <button type="button" class="btn btn-ghost btn-block form-toggle" id="formToggle" aria-controls="contactForm" aria-expanded="false">✉ Send us a message ▼</button>
         <form class="contact-form pixel-frame" id="contactForm" action="https://formsubmit.co/PieterV-D-S@hotmail.com" method="POST">
           <input type="hidden" name="_subject" value="New LEVEL-UP website message">
           <input type="hidden" name="_template" value="table">
@@ -528,6 +495,7 @@
           <p class="section-intro">The quick answers. Something else? <a href="#contact" class="text-link">Ask us</a> or send a WhatsApp.</p>
         </div>
         <div class="faq-list" id="faqList"></div>
+        <button type="button" class="btn btn-ghost btn-block faq-more" id="faqMore" aria-controls="faqList" aria-expanded="false" hidden></button>
       </div>
     </section>
   </main>
@@ -568,8 +536,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202611091500"></script>
-  <script src="script.js?v=202611091500"></script>
-  <script src="schedule.js?v=202611091500"></script>
+  <script src="game.js?v=202611101200"></script>
+  <script src="script.js?v=202611101200"></script>
+  <script src="schedule.js?v=202611101200"></script>
 </body>
 </html>

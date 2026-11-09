@@ -80,26 +80,6 @@ classToggle.addEventListener("click", () => {
   if (!open) document.getElementById("programs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-// ===== Phones: section descriptions behind "Read more" (always shown on bigger screens) =====
-document.querySelectorAll("section").forEach((section, i) => {
-  const parts = section.querySelectorAll("[data-more]");
-  const title = section.querySelector(".section-title");
-  if (!parts.length || !title) return;
-  parts.forEach((el, j) => { el.id ||= `more-${i}-${j}`; });
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "read-more";
-  button.setAttribute("aria-expanded", "false");
-  button.setAttribute("aria-controls", [...parts].map((el) => el.id).join(" "));
-  button.textContent = "Read more ▼";
-  title.after(button);
-  button.addEventListener("click", () => {
-    const open = section.classList.toggle("more-open");
-    button.setAttribute("aria-expanded", String(open));
-    button.textContent = open ? "Read less ▲" : "Read more ▼";
-  });
-});
-
 // ===== Phones: XP table and map open on request (always open on bigger screens) =====
 function foldToggle(buttonId, targetId, openText, closedText) {
   const button = document.getElementById(buttonId);
@@ -113,6 +93,7 @@ function foldToggle(buttonId, targetId, openText, closedText) {
 }
 foldToggle("xpToggle", "levels", "Hide the XP table ▲", "How does XP work? ▼");
 foldToggle("mapToggle", "hqMap", "📍 Hide map", "📍 Show map");
+foldToggle("formToggle", "contactForm", "✉ Hide the form ▲", "✉ Send us a message ▼");
 
 // ===== Level 01: one call to action, depending on who is visiting =====
 const aboutCta = document.getElementById("aboutCta");
@@ -134,7 +115,7 @@ renderAboutCta();
 (function loopRows() {
   const SPEED = 26; // pixels per second
   const phone = window.matchMedia("(max-width: 640px)");
-  const rows = [".quest-steps", "#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
+  const rows = ["#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
 
   rows.forEach((row) => {
     let originals = [];
@@ -226,7 +207,7 @@ function renderReviews() {
   const esc = LevelUp.esc;
   const avg = list.reduce((sum, r) => sum + Number(r.rating), 0) / list.length;
   document.getElementById("reviewSummary").innerHTML = list.length >= 3
-    ? `${stars(Math.round(avg))}<b>${avg.toFixed(1)}</b><span>from ${list.length} players</span>` : "";
+    ? `${stars(Math.round(avg))}<b>${avg.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b><span>from ${list.length} players</span>` : "";
   document.getElementById("reviewGrid").innerHTML = list.map((r) => `
     <figure class="review-card">
       ${stars(Number(r.rating))}
@@ -239,6 +220,22 @@ function renderReviews() {
 }
 document.addEventListener("levelup:change", renderReviews);
 LevelUp.ready.then(renderReviews);
+
+// ---------- Hero: price of a first session, plus the rating and player count once there are enough ----------
+function renderHeroProof() {
+  const el = document.getElementById("heroProof");
+  if (!el || !LevelUp.isReady()) return;
+  const reviews = LevelUp.getReviews();
+  const players = (LevelUp.getLeaderboard("all") || []).length;
+  const avg = reviews.length ? reviews.reduce((sum, r) => sum + Number(r.rating), 0) / reviews.length : 0;
+  const parts = [`<span>First session <b>${LevelUp.euro(LevelUp.getPricing().introPrice).replace(/[.,]00$/, "")}</b></span>`];
+  if (reviews.length >= 3) parts.push(`<a href="#reviews"><b class="hero-stars">★ ${avg.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b> from ${reviews.length} players</a>`);
+  if (players >= 5) parts.push(`<a href="#scores"><b>${players}</b> players on the board</a>`);
+  el.innerHTML = parts.join("");
+  el.hidden = false;
+}
+document.addEventListener("levelup:change", renderHeroProof);
+LevelUp.ready.then(renderHeroProof);
 
 // ---------- Q&A: answers use the live prices and rules ----------
 function renderFaq() {
@@ -267,12 +264,24 @@ function renderFaq() {
     ["Who sees my health answers and body stats?",
       "Only you, your trainer and LEVEL-UP. They are used to train you safely and to show your progress."]
   ];
-  box.innerHTML = qa.map(([q, a], i) => `
-    <details class="faq-item"${i === 0 ? " open" : ""}>
+  box.innerHTML = qa.map(([q, a]) => `
+    <details class="faq-item">
       <summary>${q}</summary>
       <p>${a}</p>
     </details>`).join("");
+  // phones: the first questions, the rest on request
+  const more = document.getElementById("faqMore");
+  if (more) {
+    more.hidden = qa.length <= FAQ_SHOWN;
+    more.textContent = box.classList.contains("all") ? "Fewer questions ▲" : `All ${qa.length} questions ▼`;
+  }
 }
+const FAQ_SHOWN = 5;
+document.getElementById("faqMore")?.addEventListener("click", () => {
+  const all = document.getElementById("faqList").classList.toggle("all");
+  document.getElementById("faqMore").setAttribute("aria-expanded", String(all));
+  renderFaq();
+});
 document.addEventListener("levelup:change", renderFaq);
 LevelUp.ready.then(renderFaq);
 
