@@ -28,6 +28,7 @@ function renderHeader(player, p) {
     <section class="player-header pixel-frame">
       <div class="avatar-edit">
         ${LevelUp.avatarHtml(player, "xl")}
+        ${LevelUp.likeHtml({ ...player, isMe: true }, "xl at-left")}
         <label class="avatar-edit-btn" title="${player.avatarUrl ? "Change your photo" : "Add your photo"}">
           <span aria-hidden="true">📷</span><span class="sr-only">${player.avatarUrl ? "Change your profile photo" : "Add a profile photo"}</span>
           <input type="file" accept="image/*" data-avatar-input hidden>
@@ -48,6 +49,25 @@ function renderHeader(player, p) {
         <strong>${p.level}</strong>
       </div>
       <button type="button" class="btn btn-small btn-ghost share-card-btn" data-share-card>Share my card</button>
+    </section>`;
+}
+
+// Hearts from other players (given on the high scores, once per player per week)
+function renderLikes(player) {
+  if (player.trainerId) return "";
+  const n = player.likes;
+  return `
+    <section class="panel panel-wide likes-panel" id="likes">
+      <div class="panel-head">
+        <h2>Likes</h2>
+        <span class="like-total"><span aria-hidden="true">♥</span> ${n}${player.likesWeek ? ` <small>· +${player.likesWeek} this week</small>` : ""}</span>
+      </div>
+      ${player.likedBy.length ? `
+        <ul class="liked-by">${player.likedBy.map((f) => `
+          <li>${LevelUp.avatarHtml({ name: f.name, avatarUrl: f.avatarUrl })}<span><b>${esc(f.name)}</b> liked you</span><small class="muted">${formatDate(f.date)}</small></li>`).join("")}
+        </ul>` : `<p class="muted">No likes yet. Players give each other a heart on the high scores: tap the ♥ on someone's photo.</p>`}
+      ${player.showOnLeaderboard === false ? `<p class="muted small">You're hidden from the high scores, so nobody can like you right now. Change this under Me → Account.</p>` : ""}
+      <a href="index.html#highScores" class="text-link">♥ Give someone a like on the high scores →</a>
     </section>`;
 }
 
@@ -818,6 +838,7 @@ function render() {
     ${inTab("overview", renderSummary(player))}
     <div class="panel-grid">
       ${inTab("overview", renderSessions())}
+      ${inTab("overview", renderLikes(player))}
       ${inTab("overview", renderMyClasses(player))}
       ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}

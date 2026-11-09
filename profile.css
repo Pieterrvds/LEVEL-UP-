@@ -322,3 +322,11 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .tab-box > p { margin: 0; }
 .tab-box strong { color: var(--gold); }
 .tab-box .log-list li { align-items: center; }
+
+/* Likes: the heart on your own photo and who liked you */
+.avatar-edit .like-badge.at-left { right: auto; left: -8px; top: -8px; bottom: auto; }
+.like-total { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 1.1rem; color: #ff5c86; }
+.like-total small { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+.liked-by { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.liked-by li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: #000; border-left: 4px solid #ff3b6b; }
+.liked-by .avatar { width: 34px; height: 34px; font-size: 0.8rem; }

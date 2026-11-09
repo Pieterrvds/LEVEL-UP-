@@ -377,6 +377,15 @@ you're unsure about anything legal.
 - **Link preview:** `img/og-image.jpg` (1200×630) with the Open Graph tags on every page, used by WhatsApp,
   Facebook, LinkedIn… WhatsApp keeps old previews for a while; new shares show the new image.
 
+## Likes (hearts on the high scores)
+Logged-in players give each other a like by tapping the ♥ on someone's photo: on the podium, in the high score rows
+and on the Player of the Month card. One like per player per week (Monday to Sunday); the number on the heart is
+everything that player ever received, and a filled heart means you already liked them this week. The player gets a
+push notification ("❤️ Lien gave you a like"), at most once per person per week. In the profile (Overview → Likes)
+players see their total, this week's likes and who liked them. Visitors see the counts; tapping a heart asks them to
+log in. You can't like yourself or players hidden from the high scores, and one account can give at most 40 likes a
+day. Everything goes through `give_like` in `supabase/schema.sql` (table `player_likes`).
+
 ## Player card, promotions, Player of the Month and streaks
 - **Share my card** (account page, under the player card): makes a 1080×1350 image in Ultimate Team style (photo,
   level, rank colour, total XP, sessions, streak, crown) with the site link. Phones open the share sheet

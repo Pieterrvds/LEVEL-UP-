@@ -364,7 +364,10 @@ const LevelUp = (() => {
       streak: { weeks: Number(data.streak?.weeks) || 0, thisWeek: Boolean(data.streak?.thisWeek),
                 planned: Boolean(data.streak?.planned), atRisk: Boolean(data.streak?.atRisk) },
       potm: data.potm || null,                 // { month, xp } when you won last month
-      potmWins: Number(data.potmWins) || 0
+      potmWins: Number(data.potmWins) || 0,
+      likes: Number(data.likes) || 0,           // hearts other players gave you (all time)
+      likesWeek: Number(data.likesWeek) || 0,
+      likedBy: data.likedBy || []               // the latest likes: { name, avatarUrl, date }
     };
   }
 
@@ -721,9 +724,60 @@ const LevelUp = (() => {
 
   const scoreRows = (rows) => (rows || []).map((r) => ({
     place: Number(r.place), name: r.name, xp: Number(r.xp), totalXp: Number(r.total_xp ?? r.xp), isMe: Boolean(r.is_me), avatarUrl: r.avatar_url || null,
-    potm: Boolean(r.potm)
+    potm: Boolean(r.potm), userId: r.user_id || null, likes: Number(r.likes) || 0, liked: Boolean(r.liked)
   }));
   let playerOfMonth = null;
+
+  // ---------- Likes (hearts on the high scores) ----------
+  // One like per player per week; the heart sits on the corner of the photo with the total count.
+  // Players on the board and the Player of the Month card share it, so a like updates everywhere at once.
+  function likeHtml(r, size = "") {
+    if (!r) return "";
+    const n = Number(r.likes) || 0;
+    const label = `${n} like${n === 1 ? "" : "s"}`;
+    if (r.isMe) return n ? `<span class="like-badge mine ${size}" title="${label}" aria-label="${label}"><span aria-hidden="true">♥</span>${n}</span>` : "";
+    const id = r.userId || "";
+    return `<button type="button" class="like-badge ${size} ${r.liked ? "liked" : ""}" data-like="${esc(id)}" data-like-name="${esc(r.name)}"
+      aria-pressed="${r.liked}" aria-label="${r.liked ? `You liked ${esc(r.name)} this week` : `Like ${esc(r.name)}`} (${label})"><span aria-hidden="true">♥</span>${n || ""}</button>`;
+  }
+  function eachLikeTarget(userId, fn) {
+    [leaderboard, leaderboardMonth].forEach((rows) => (rows || []).forEach((r) => { if (r.userId === userId) fn(r); }));
+    if (playerOfMonth && playerOfMonth.userId === userId) fn(playerOfMonth);
+  }
+  let likeBusy = false;
+  async function giveLike(userId, name) {
+    if (!player) { openAuth("login"); return; }
+    if (likeBusy || !userId) return;
+    let already = false;
+    eachLikeTarget(userId, (r) => { already = already || r.liked; });
+    if (already) {
+      toast({ title: "Already liked this week", text: `You can like ${name} again on Monday.`, icon: "♥", tone: "gold" });
+      return;
+    }
+    likeBusy = true;
+    eachLikeTarget(userId, (r) => { r.liked = true; r.likes += 1; });  // show it right away
+    emit();
+    try {
+      const res = await call("give_like", { p_to: userId });
+      eachLikeTarget(userId, (r) => { r.likes = Number(res?.likes) || r.likes; });
+      toast({ title: "Like sent", text: `${name} gets a heart from you ❤️`, icon: "♥", tone: "green" });
+    } catch (err) {
+      eachLikeTarget(userId, (r) => { r.liked = false; r.likes = Math.max(0, r.likes - 1); });
+      toast({ title: "No like sent", text: err.message, icon: "!", tone: "gold" });
+    } finally {
+      likeBusy = false;
+      emit();
+    }
+  }
+  document.addEventListener("click", (event) => {
+    const heart = event.target.closest("button[data-like]");
+    if (!heart) return;
+    event.preventDefault();
+    heart.classList.remove("pop");
+    void heart.offsetWidth; // restart the animation
+    heart.classList.add("pop");
+    giveLike(heart.dataset.like, heart.dataset.likeName);
+  });
 
   // ---------- Reviews (real clients, approved by the admin) ----------
   let reviews = [];
@@ -2941,7 +2995,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, likeHtml, giveLike, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

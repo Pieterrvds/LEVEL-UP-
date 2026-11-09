@@ -2070,7 +2070,7 @@ textarea { resize: vertical; min-height: 130px; }
   line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .hs-pod-av.photo { padding: 0; overflow: visible; }
-.hs-pod-av img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.hs-pod-av img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; border-radius: 5px; }
 .hs-pod.p1 .hs-pod-av { width: 70px; height: 70px; font-size: 1.35rem; animation: hs-bob 1.4s ease-in-out infinite; }
 .hs-crown { position: absolute; top: -24px; left: 50%; transform: translateX(-50%); font-size: 1.2rem; filter: drop-shadow(2px 2px 0 #000); }
 .hs-pod-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; font-size: 0.95rem; }
@@ -2095,7 +2095,7 @@ textarea { resize: vertical; min-height: 130px; }
 .hs-rank { white-space: nowrap; }
 .hs-rank b { font-weight: 400; color: var(--green-bright); margin-right: 3px; }
 .hs-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--sans); font-weight: 700; font-size: 0.92rem; color: var(--text); font-size-adjust: none; font-style: normal; }
-.hs-name > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-name > .hs-av + span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-name i, .hs-face { flex: none; width: 26px; height: 26px; border: 2px solid var(--tier); }
 .hs-name i { display: grid; place-items: center; font-family: var(--display); font-style: normal; font-size: 0.55rem; color: #000; background: var(--tier); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .hs-face { object-fit: cover; background: var(--tier); }
@@ -2499,7 +2499,7 @@ input, select, textarea { border-radius: 8px; }
 /* Small: tabs, chips, buttons, swatches */
 .filter-tabs { border-radius: 8px; overflow: hidden; }
 .hs-seasons button, .chart-toggle, .nav-shop, .hours-chip, .hours-chip-del, .hours-chip-lock,
-.item-perks > li, .rarity-tag, .xp-reward, .tab-badge, .count-chip, .admin-tag, .hs-you, .hs-name > i, .stamp-card > li,
+.item-perks > li, .rarity-tag, .xp-reward, .tab-badge, .count-chip, .admin-tag, .hs-you, .hs-av > i, .stamp-card > li,
 .size-picker span, .list-day-head em, code, mark { border-radius: 6px; }
 .page-tabs { border-radius: 10px; }
 .page-tab { border-radius: 6px 6px 0 0; }
@@ -2771,3 +2771,29 @@ dialog[open] { touch-action: pan-y; }
   .gc-person .gc-pay { grid-column: 2; justify-self: start; min-height: 34px; }
   .gc-person .gc-check { grid-column: 3; grid-row: 1 / span 2; }
 }
+
+/* ---------- Likes: a heart with the count on the corner of a player's photo ---------- */
+.hs-av { position: relative; flex: none; display: inline-flex; margin-right: 6px; }
+.hs-potm-av-wrap { position: relative; flex: none; display: inline-flex; }
+.like-badge {
+  position: absolute; right: -9px; bottom: -7px; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 99px; border: 2px solid var(--bg);
+  font: 800 0.68rem/1 var(--sans); font-style: normal; font-size-adjust: none; letter-spacing: 0; text-transform: none;
+  color: #ff5c86; background: #26161c; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s, background 0.15s, color 0.15s;
+}
+.like-badge > span { font-size: 0.82rem; line-height: 1; }
+button.like-badge::after { content: ""; position: absolute; inset: -10px; }  /* a bigger tap area */
+button.like-badge:hover { transform: scale(1.12); }
+button.like-badge:focus-visible { outline: 2px solid #ff5c86; outline-offset: 2px; }
+.like-badge.liked, .like-badge.mine { color: #fff; background: #ff3b6b; }
+.like-badge.mine { cursor: default; }
+.like-badge.small { right: -10px; bottom: -6px; height: 18px; min-width: 18px; padding: 0 4px; font-size: 0.62rem; }
+.like-badge.small > span { font-size: 0.72rem; }
+.like-badge.big { right: -12px; bottom: -10px; height: 26px; min-width: 26px; padding: 0 8px; font-size: 0.8rem; }
+.like-badge.big > span { font-size: 0.95rem; }
+.like-badge.xl { right: -6px; bottom: -6px; height: 30px; min-width: 30px; padding: 0 9px; font-size: 0.9rem; }
+.like-badge.pop { animation: like-pop 0.5s ease-out; }
+@keyframes like-pop { 0% { transform: scale(1); } 35% { transform: scale(1.6) rotate(-8deg); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .like-badge.pop { animation: none; } }

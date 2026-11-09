@@ -135,6 +135,19 @@ alter table public.profiles add column if not exists show_on_leaderboard boolean
 alter table public.profiles add column if not exists avatar_url text;
 alter table public.profiles add column if not exists streak_reminded_week date;  -- training streak: last week a reminder went out
 
+-- Likes between players (the hearts on the high scores): one like per person per player per week
+-- (Monday to Sunday, Brussels time). The count is everything someone ever received.
+create table if not exists public.player_likes (
+  from_id uuid not null references public.profiles (id) on delete cascade,
+  to_id uuid not null references public.profiles (id) on delete cascade,
+  week date not null,
+  created_at timestamptz not null default now(),
+  primary key (from_id, to_id, week),
+  check (from_id <> to_id)
+);
+create index if not exists player_likes_to_idx on public.player_likes (to_id, week);
+alter table public.player_likes enable row level security;  -- no policies: only the functions below read and write it
+
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -842,6 +855,12 @@ returns jsonb language sql stable security definer set search_path = public as $
     'review', (select jsonb_build_object('quote', r.quote, 'rating', r.rating, 'status', r.status, 'createdAt', r.created_at)
                from public.reviews r where r.user_id = p.id),
     'rewards', public._rewards_json(p.id),
+    'likes', (select count(*) from public.player_likes l where l.to_id = p.id),
+    'likesWeek', (select count(*) from public.player_likes l where l.to_id = p.id
+                  and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date),
+    'likedBy', coalesce((select jsonb_agg(jsonb_build_object('name', f.name, 'avatarUrl', f.avatar_url, 'date', l.created_at) order by l.created_at desc)
+                         from (select * from public.player_likes where to_id = p.id order by created_at desc limit 8) l
+                         join public.profiles f on f.id = l.from_id), '[]'::jsonb),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
                                  and k.status in ('awaiting_payment', 'pending', 'confirmed', 'completed', 'no_show', 'late_cancel'))
   )
@@ -1331,8 +1350,11 @@ $$;
 -- total_xp is always the all-time XP (for the level). Trainers and hidden players are left out.
 drop function if exists public.leaderboard();
 drop function if exists public.leaderboard(text);
+-- user_id is only given to logged-in players (they need it to give a like); likes = all likes ever received,
+-- liked = you already liked this player this week
 create or replace function public.leaderboard(p_period text default 'all')
-returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean, avatar_url text, potm boolean)
+returns table (place bigint, name text, xp integer, total_xp integer, is_me boolean, avatar_url text, potm boolean,
+               user_id uuid, likes integer, liked boolean)
 language sql stable security definer set search_path = public as $$
   with players as (
     select p.id, p.name, p.xp as total_xp, p.created_at, p.avatar_url,
@@ -1346,11 +1368,41 @@ language sql stable security definer set search_path = public as $$
     where p_period <> 'month' or score > 0
   )
   select r.place, r.name, r.score, r.total_xp, coalesce(r.id = auth.uid(), false), r.avatar_url,
-    exists (select 1 from public.monthly_awards a where a.user_id = r.id and a.month = public._potm_month())
+    exists (select 1 from public.monthly_awards a where a.user_id = r.id and a.month = public._potm_month()),
+    case when auth.uid() is not null then r.id end,
+    (select count(*)::int from public.player_likes l where l.to_id = r.id),
+    exists (select 1 from public.player_likes l where l.from_id = auth.uid() and l.to_id = r.id
+            and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date)
   from ranked r
   where r.place <= 25 or r.id = auth.uid()
   order by r.place;
 $$;
+
+-- Give a player a like (a heart). Once per player per week; the player gets a push notification.
+create or replace function public.give_like(p_to uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  w date := date_trunc('week', now() at time zone 'Europe/Brussels')::date;
+  me public.profiles;
+  total integer;
+  added integer;
+begin
+  if auth.uid() is null then raise exception 'Log in to give a like.'; end if;
+  if p_to is null or p_to = auth.uid() then raise exception 'You can''t like yourself. Others can like you.'; end if;
+  if not exists (select 1 from public.profiles where id = p_to and show_on_leaderboard) then raise exception 'Player not found.'; end if;
+  select * into me from public.profiles where id = auth.uid();
+  if (select count(*) from public.player_likes where from_id = auth.uid() and created_at > now() - interval '1 day') >= 40 then
+    raise exception 'That''s a lot of love for one day. Try again tomorrow.';
+  end if;
+  insert into public.player_likes (from_id, to_id, week) values (auth.uid(), p_to, w) on conflict do nothing;
+  get diagnostics added = row_count;
+  select count(*)::int into total from public.player_likes where to_id = p_to;
+  if added > 0 then  -- a second tap in the same week sends nothing
+    perform public._push(p_to, '❤️ ' || me.name || ' gave you a like', 'You have ' || total || ' like' || case when total = 1 then '' else 's' end || '. Keep it up!',
+      'profile.html', 'like-' || auth.uid());
+  end if;
+  return jsonb_build_object('likes', total, 'liked', true);
+end $$;
 
 create or replace function public.set_leaderboard_visibility(p_show boolean)
 returns void language sql security definer set search_path = public as $$
@@ -2516,7 +2568,11 @@ end $$;
 create or replace function public.player_of_month()
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object('month', a.month, 'xp', a.xp, 'name', p.name, 'avatarUrl', p.avatar_url,
-                            'isMe', coalesce(p.id = auth.uid(), false))
+                            'isMe', coalesce(p.id = auth.uid(), false),
+                            'userId', case when auth.uid() is not null and p.show_on_leaderboard then p.id end,
+                            'likes', (select count(*) from public.player_likes l where l.to_id = p.id),
+                            'liked', exists (select 1 from public.player_likes l where l.from_id = auth.uid() and l.to_id = p.id
+                                             and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date))
   from public.monthly_awards a join public.profiles p on p.id = a.user_id
   where a.month = public._potm_month();
 $$;
@@ -3582,6 +3638,8 @@ grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
+revoke execute on function public.give_like(uuid) from public, anon;
+grant execute on function public.give_like(uuid) to authenticated;
 grant execute on function public.player_of_month() to anon, authenticated;
 grant execute on function public.public_reviews() to anon, authenticated;
 revoke execute on function public.submit_review(text, integer) from public, anon;
