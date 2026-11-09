@@ -35,12 +35,47 @@ function boardHours(days, trainers) {
   days.forEach((day) => {
     trainers.forEach((t) => LevelUp.trainerHours(t.id, day.key).forEach((h) => hours.add(h)));
     LevelUp.groupSessions(day.key).forEach((g) => hours.add(g.start.getHours()));
+    shownClasses(day.key).forEach((c) => hours.add(c.hour));
   });
   if (!hours.size) return Array.from({ length: 9 }, (_, i) => 9 + i);
   const list = [...hours];
   const min = Math.min(...list);
   const max = Math.max(...list);
   return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
+
+// ---------- Group classes on the board ----------
+// The trainer filter applies to classes too; a trainer's own 1:1 hour during their class is hidden
+const shownClasses = (key) => LevelUp.classesOn(key).filter((c) => activeTrainer === "all" || c.trainerId === activeTrainer);
+const classHour = (trainerId, key, hour) => LevelUp.findBooking(trainerId, key, hour)?.status === "class";
+const classOpenPlaces = (c) => Math.max(0, c.capacity - c.taken);
+function classState(c) {
+  if (c.status === "cancelled") return "cancelled";
+  if (LevelUp.classStarted(c)) return c.mine && ["attended", "booked"].includes(c.mine.status) ? "class-done" : "past";
+  if (c.mine?.status === "waitlist") return "class-wait";
+  if (LevelUp.classIn(c)) return "class-mine";
+  return LevelUp.classFull(c) ? "class-full" : "class-open";
+}
+function classBadge(c) {
+  const st = classState(c);
+  if (st === "cancelled") return "Cancelled";
+  if (st === "class-mine") return c.mine.status === "awaiting_payment" ? "Not paid yet" : "You're in ✓";
+  if (st === "class-wait") return `Waitlist #${c.mine.waitPos}`;
+  if (st === "class-done") return "Done";
+  if (st === "past") return "Closed";
+  return st === "class-full" ? `Full · waitlist` : `${c.taken}/${c.capacity}`;
+}
+function classButton(c, cls = "slot") {
+  const t = LevelUp.trainerById(c.trainerId);
+  const st = classState(c);
+  return `
+    <button type="button" class="${cls} class-slot ${st}" style="--c:${t?.color || "#7cff6b"};--fill:${Math.min(100, (c.taken / c.capacity) * 100).toFixed(0)}%"
+      data-class="${c.id}" aria-label="${esc(c.title)} with ${esc(t?.short || "")}, ${c.time}, ${c.taken} of ${c.capacity} places, ${classBadge(c)}">
+      <span class="slot-time">${c.time}</span>
+      <span class="slot-name">👥 ${esc(c.title)}</span>
+      <span class="slot-state">${classBadge(c)}</span>
+      <i class="class-fill" aria-hidden="true"></i>
+    </button>`;
 }
 
 // ---------- Trainer filter ----------
@@ -81,7 +116,8 @@ function weekHasOpen(offset) {
   const now = new Date();
   const trainers = TRAINERS.filter((t) => activeTrainer === "all" || t.id === activeTrainer);
   return weekDays(offset).some((day) => trainers.some((t) =>
-    LevelUp.trainerHours(t.id, day.key).some((hour) => slotState(t, day.key, hour, now).state === "free")));
+    LevelUp.trainerHours(t.id, day.key).some((hour) => slotState(t, day.key, hour, now).state === "free"))
+    || shownClasses(day.key).some((c) => ["class-open", "class-full"].includes(classState(c))));
 }
 function firstOpenWeek() {
   for (let offset = 0; offset < LevelUp.BOOKING_WEEKS_AHEAD; offset++) if (weekHasOpen(offset)) return offset;
@@ -136,8 +172,14 @@ function renderBoard() {
           </div>`;
       }).join("");
 
+      const classSlots = shownClasses(day.key).filter((c) => c.hour === hour).map((c) => {
+        itemCount++;
+        if (!["past", "class-done"].includes(classState(c))) openCount++;
+        return classButton(c);
+      }).join("");
+
       const trainerSlots = trainers
-        .filter((t) => LevelUp.trainerHours(t.id, day.key).includes(hour))
+        .filter((t) => LevelUp.trainerHours(t.id, day.key).includes(hour) && !classHour(t.id, day.key, hour))
         .map((t) => {
           itemCount++;
           const { state } = slotState(t, day.key, hour, now);
@@ -154,7 +196,7 @@ function renderBoard() {
             </button>`;
         }).join("");
 
-      const content = group + trainerSlots;
+      const content = group + classSlots + trainerSlots;
       return `<div class="board-cell ${content ? "" : "empty"}">${content}</div>`;
     }).join("");
 
@@ -187,7 +229,7 @@ function renderWeekList(days, trainers, now, todayKey) {
     const rows = trainers.map((t) => {
       const chips = LevelUp.trainerHours(t.id, day.key).map((hour) => {
         const { state } = slotState(t, day.key, hour, now);
-        if (state === "past") return "";
+        if (state === "past" || classHour(t.id, day.key, hour)) return "";
         const label = { free: `Book ${t.short}`, requested: "Requested", mine: "Confirmed", done: "Done", taken: "Booked" }[state];
         return `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
             data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
@@ -205,13 +247,19 @@ function renderWeekList(days, trainers, now, todayKey) {
         <span class="list-trainer"><span class="list-group-icon" aria-hidden="true">👥</span><b>Group</b></span>
         <p class="list-group-text"><b>${timeText(g.start)}</b> ${esc(g.title)}${g.location ? ` · ${esc(g.location)}` : ""}</p>
       </div>`).join("");
-    if (!rows && !groupRows) return { day, html: "", open: 0 };
-    const open = (rows.match(/class="time-chip free"/g) || []).length + groups.length;
+    const dayClasses = shownClasses(day.key).filter((c) => classState(c) !== "past");
+    const classRows = dayClasses.map((c) => `
+      <div class="list-row list-class" style="--c:${LevelUp.trainerById(c.trainerId)?.color || "#7cff6b"}">
+        ${classButton(c, "class-chip")}
+      </div>`).join("");
+    if (!rows && !groupRows && !classRows) return { day, html: "", open: 0 };
+    const open = (rows.match(/class="time-chip free"/g) || []).length + groups.length
+      + dayClasses.filter((c) => ["class-open", "class-full"].includes(classState(c))).length;
     const when = day.key === todayKey ? "Today" : day.key === tomorrowKey ? "Tomorrow" : "";
     return { day, open, html: `
       <div class="list-day${day.key === todayKey ? " today" : ""}">
         <h3 class="list-day-head">${day.date.toLocaleDateString("en-GB", { weekday: "long" })} <span>${day.date.getDate()} ${day.date.toLocaleDateString("en-GB", { month: "short" })}</span>${when ? `<em>${when}</em>` : ""}</h3>
-        ${groupRows}${rows}
+        ${classRows}${groupRows}${rows}
       </div>` };
   });
   const withContent = blocks.filter((b) => b.html);
@@ -231,6 +279,8 @@ function renderWeekList(days, trainers, now, todayKey) {
 weekList?.addEventListener("click", (event) => {
   const pill = event.target.closest("[data-list-day]");
   if (pill && !pill.disabled) { listDay = pill.dataset.listDay; renderBoard(); return; }
+  const cls = event.target.closest("[data-class]");
+  if (cls) { openClass(cls.dataset.class); return; }
   const chip = event.target.closest(".time-chip");
   if (!chip || chip.disabled) return;
   openSlot({ trainerId: chip.dataset.trainer, date: chip.dataset.date, hour: Number(chip.dataset.hour) });
@@ -268,12 +318,28 @@ function renderQuestBoard() {
   document.getElementById("partyText").textContent = `${TRAINERS.length} trainers ready to coach you`;
 
   if (!LevelUp.isReady()) return;
-  const open = nextOpenSlots(3);
-  if (!open.length) {
-    questList.innerHTML = `<li class="quest-empty">No open sessions right now. Check the full schedule or ask us on WhatsApp.</li>`;
+  // the next group class with a free place goes first, then the next open 1:1 hours
+  const nextClass = LevelUp.getClasses().find((c) => classState(c) === "class-open");
+  const open = nextOpenSlots(nextClass ? 2 : 3);
+  if (!open.length && !nextClass) {
+    questList.innerHTML = `<li class="quest-empty">No open sessions right now. Check the full schedule or ask us in the chat.</li>`;
     return;
   }
-  questList.innerHTML = open.map((q) => `
+  const classItem = nextClass ? (() => {
+    const t = LevelUp.trainerById(nextClass.trainerId);
+    return `
+    <li>
+      <button type="button" class="quest-item quest-class" style="--c:${t?.color || "#7cff6b"}" data-class="${nextClass.id}">
+        <span class="quest-class-ico" aria-hidden="true">👥</span>
+        <span class="quest-info">
+          <span class="quest-when">${nextClass.day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${nextClass.time}</span>
+          <span class="quest-who">${esc(nextClass.title)} · ${classOpenPlaces(nextClass)} place${classOpenPlaces(nextClass) === 1 ? "" : "s"} left</span>
+        </span>
+        <span class="xp-chip">+${nextClass.xp} XP</span>
+      </button>
+    </li>`;
+  })() : "";
+  questList.innerHTML = classItem + open.map((q) => `
     <li>
       <button type="button" class="quest-item" style="--c:${q.trainer.color}"
         data-quest-trainer="${q.trainer.id}" data-date="${q.key}" data-hour="${q.hour}">
@@ -288,6 +354,8 @@ function renderQuestBoard() {
 }
 
 questList?.addEventListener("click", (event) => {
+  const cls = event.target.closest("[data-class]");
+  if (cls) { openClass(cls.dataset.class); return; }
   const item = event.target.closest("[data-quest-trainer]");
   if (!item) return;
   openSlot({ trainerId: item.dataset.questTrainer, date: item.dataset.date, hour: Number(item.dataset.hour) });
@@ -296,11 +364,14 @@ questList?.addEventListener("click", (event) => {
 // ---------- Booking dialog ----------
 function openSlot(slot) {
   pendingSlot = slot;
+  pendingClass = null;
   renderBookingDialog();
   if (!bookingDialog.open) bookingDialog.showModal();
 }
 
 weekBoard.addEventListener("click", (event) => {
+  const cls = event.target.closest("[data-class]");
+  if (cls) { openClass(cls.dataset.class); return; }
   const slot = event.target.closest("button.slot");
   if (!slot || slot.disabled) return;
   openSlot({ trainerId: slot.dataset.trainer, date: slot.dataset.date, hour: Number(slot.dataset.hour) });
@@ -575,6 +646,215 @@ function showBooked(booked) {
   pendingSlot = null;
 }
 
+// ---------- Group class dialog: details, places, sign up / sign out ----------
+let pendingClass = null;
+function openClass(id) {
+  pendingClass = id;
+  pendingSlot = null;
+  renderClassDialog();
+  if (!bookingDialog.open) bookingDialog.showModal();
+}
+
+function classCalendarLink(c) {
+  const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `LEVEL-UP ${c.title}`,
+    dates: `${stamp(c.start)}/${stamp(c.end)}`,
+    details: `Group class with ${LevelUp.trainerById(c.trainerId)?.name || "your coach"}.`,
+    location: c.location
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+function renderClassDialog(message = "") {
+  const c = LevelUp.classById(pendingClass);
+  if (!c) { bookingDialog.close(); return; }
+  const t = LevelUp.trainerById(c.trainerId);
+  const player = LevelUp.getPlayer();
+  const st = classState(c);
+  const euro = LevelUp.euro;
+  const dateText = c.day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const endText = c.endTime;
+  const left = classOpenPlaces(c);
+  const head = `
+    <div class="booking-trainer" style="--c:${t?.color || "#7cff6b"}">
+      ${t?.img ? `<img src="${t.img}" alt="" data-coach="${t.id}">` : ""}
+      <div>
+        <p class="booking-trainer-name">${esc(c.title)}</p>
+        <p class="muted">Group class with ${esc(t?.short || "")}</p>
+      </div>
+    </div>
+    <p class="booking-when">${dateText} · ${c.time}–${endText}</p>
+    <p class="class-where">📍 ${esc(c.location)}</p>
+    <div class="class-meter" style="--fill:${Math.min(100, (c.taken / c.capacity) * 100).toFixed(0)}%">
+      <span class="class-meter-bar" aria-hidden="true"><i></i></span>
+      <span class="class-meter-text"><b>${c.taken}</b> of ${c.capacity} places taken${c.waitlist ? ` · ${c.waitlist} on the waitlist` : ""}${left && left <= 3 && st === "class-open" ? ` · <strong>only ${left} left</strong>` : ""}</span>
+    </div>
+    ${c.note ? `<p class="booking-note-view">“${esc(c.note)}”</p>` : ""}
+    <p class="booking-price">${c.price > 0 ? `<strong>${euro(c.price)}</strong>` : "<strong>Free</strong>"} · <span class="xp-chip">+${c.xp} XP</span> when ${esc(t?.short || "your trainer")} ticks you off as present</p>`;
+
+  if (st === "cancelled") {
+    bookingContent.innerHTML = `
+      <p class="section-kicker">Group class</p>
+      <h2 class="auth-title" id="bookingTitle">Cancelled</h2>
+      ${head}
+      <p class="status-line"><span class="status-chip declined">Cancelled</span> ${c.cancelReason ? esc(c.cancelReason) : "This class doesn't go ahead."} ${c.mine?.payStatus === "paid" ? "Your payment is refunded." : "No costs."}</p>`;
+    return;
+  }
+
+  // Your own place: status, pay, chat, sign out
+  if (c.mine && !["cancelled"].includes(c.mine.status)) {
+    const m = c.mine;
+    const title = { booked: "You're in ✓", awaiting_payment: "Waiting for payment", waitlist: `On the waitlist (#${m.waitPos})`,
+                    attended: "Present ✓", no_show: "Missed", late_cancel: "Signed out late" }[m.status] || "Your place";
+    const line = {
+      booked: `<span class="status-chip confirmed">Signed up</span> See you there! Your +${c.xp} XP comes when ${esc(t?.short || "your trainer")} ticks you off.`,
+      awaiting_payment: `<span class="status-chip pending">Not paid</span> Finish the payment to keep your place. It's held for a few minutes.`,
+      waitlist: `<span class="status-chip pending">Waitlist</span> The class is full. When a place opens up you're in automatically and get a notification.`,
+      attended: `<span class="status-chip completed">Present</span> +${m.xp} XP earned. Nice work!`,
+      no_show: `<span class="status-chip declined">No-show</span> You weren't ticked off as present.`,
+      late_cancel: `<span class="status-chip declined">Late sign-out</span> Signed out less than ${LevelUp.getPricing().classCancelHours} hours before: charged in full.`
+    }[m.status] || "";
+    const started = LevelUp.classStarted(c);
+    const canLeave = !started && ["booked", "awaiting_payment", "waitlist"].includes(m.status);
+    const late = LevelUp.isClassLateCancel(c);
+    bookingContent.innerHTML = `
+      <p class="section-kicker">Your group class</p>
+      <h2 class="auth-title" id="bookingTitle">${title}</h2>
+      ${head}
+      <p class="status-line">${line}</p>
+      ${LevelUp.classPayLabel(m) ? `<p class="booking-price">${esc(LevelUp.classPayLabel(m))}</p>` : ""}
+      ${LevelUp.canPayClassOnline(c) ? `<button type="button" class="btn btn-primary btn-block" id="payClass">Pay ${euro(m.price)} online ▶</button>` : ""}
+      ${late ? `<p class="booking-warning">Starts in less than ${LevelUp.getPricing().classCancelHours} hours: signing out now is charged in full (${euro(m.price)}).</p>` : ""}
+      <p class="form-error" role="alert">${esc(message)}</p>
+      <div class="btn-row">
+        ${c.chatId && c.chatOpen && LevelUp.classIn(c) ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Class chat</a>` : ""}
+        ${!started ? `<a class="btn btn-ghost btn-small" href="${classCalendarLink(c)}" target="_blank" rel="noopener">Add to Google Calendar</a>` : ""}
+        ${canLeave ? `<button type="button" class="btn btn-small btn-danger" id="leaveClass">${m.status === "waitlist" ? "Leave the waitlist" : "Sign out"}</button>` : ""}
+      </div>`;
+    document.getElementById("payClass")?.addEventListener("click", async (event) => {
+      event.target.disabled = true;
+      event.target.textContent = "To the payment page…";
+      try { await LevelUp.startPayment("class", m.id); } catch (err) { renderClassDialog(err.message); }
+    });
+    document.getElementById("leaveClass")?.addEventListener("click", async (event) => {
+      if (late && !confirm(`Signing out now is charged in full (${euro(m.price)}). Sign out anyway?`)) return;
+      event.target.disabled = true;
+      try {
+        const r = await LevelUp.cancelClassSignup(m.id);
+        LevelUp.toast({ title: r.late ? "Signed out (charged)" : m.status === "waitlist" ? "Left the waitlist" : "Signed out", text: c.title, icon: "✓" });
+        bookingDialog.close();
+      } catch (err) { renderClassDialog(err.message); }
+    });
+    return;
+  }
+
+  if (LevelUp.classStarted(c)) {
+    bookingContent.innerHTML = `<p class="section-kicker">Group class</p><h2 class="auth-title" id="bookingTitle">Already started</h2>${head}`;
+    return;
+  }
+  if (!player) {
+    bookingContent.innerHTML = `
+      <p class="section-kicker">Group class</p>
+      <h2 class="auth-title" id="bookingTitle">${esc(c.title)}</h2>
+      ${head}
+      <div class="booking-login">
+        <p>Log in or create your profile to sign up and earn <strong>+${c.xp} XP</strong>.</p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-primary btn-small" data-auth-open="signup">New player</button>
+          <button type="button" class="btn btn-ghost btn-small" data-auth-open="login">Log in</button>
+        </div>
+      </div>`;
+    return;
+  }
+  if (player.trainerId === c.trainerId) {
+    bookingContent.innerHTML = `<p class="section-kicker">Your group class</p><h2 class="auth-title" id="bookingTitle">You lead this class</h2>${head}
+      <a class="btn btn-primary btn-block" href="profile.html#coach">Open the class list ▶</a>`;
+    return;
+  }
+  if (!LevelUp.healthValid()) {
+    bookingContent.innerHTML = `
+      <p class="section-kicker">Before your first class</p>
+      <h2 class="auth-title" id="bookingTitle">Health check</h2>
+      <p class="booking-when">${esc(c.title)} · ${dateText} ${c.time}</p>
+      <p class="muted">A few quick questions so your trainer can train you safely. Only you, your trainer and LEVEL-UP see your answers.</p>
+      ${LevelUp.healthFormHtml()}`;
+    bookingContent.querySelector("[data-health-form]").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      form.querySelector('button[type="submit"]').disabled = true;
+      try { await LevelUp.saveHealthForm(form); renderClassDialog(); }
+      catch (err) { form.querySelector(".form-error").textContent = err.message; form.querySelector('button[type="submit"]').disabled = false; }
+    });
+    return;
+  }
+
+  const full = LevelUp.classFull(c);
+  const online = LevelUp.getPricing().onlinePayments && c.price > 0 && !full;
+  bookingContent.innerHTML = `
+    <p class="section-kicker">Group class</p>
+    <h2 class="auth-title" id="bookingTitle">${full ? "Join the waitlist" : "Join this class"}</h2>
+    ${head}
+    <form class="auth-form" id="classForm">
+      ${full ? `<p class="pay-note">This class is full. Join the waitlist: when someone signs out, you're in automatically and get a notification.</p>`
+        : c.price > 0 ? `
+      <fieldset class="pay-picker">
+        <legend>Payment</legend>
+        ${online ? `
+          <label class="pay-option"><input type="radio" name="pay" value="online" checked>
+            <span><strong>Pay online now</strong> <em class="pay-tag">Recommended</em><small>Bancontact, card or Payconiq · refunded automatically if the class doesn't go ahead</small></span></label>` : ""}
+        <label class="pay-option"><input type="radio" name="pay" value="in_person" ${online ? "" : "checked"}>
+          <span><strong>Pay at the class</strong><small>Cash or Payconiq to ${esc(t?.short || "your trainer")} when you arrive</small></span></label>
+      </fieldset>` : ""}
+      <p class="form-error" role="alert">${esc(message)}</p>
+      <button type="submit" class="btn btn-primary btn-block" id="classSubmit">${full ? "Join the waitlist ▶" : online ? `Pay ${euro(c.price)} & sign up ▶` : "Sign up ▶"}</button>
+    </form>
+    <p class="auth-note"><span>${c.price > 0 ? `Free sign-out up to ${LevelUp.getPricing().classCancelHours} hours before.` : "Free class: sign out any time before the start."}</span> <span>You get a reminder before it starts, and the class chat opens for everyone who signed up.</span></p>`;
+  const form = document.getElementById("classForm");
+  form.addEventListener("change", () => {
+    const pay = form.elements.pay ? form.querySelector("[name=pay]:checked")?.value : "in_person";
+    document.getElementById("classSubmit").textContent = full ? "Join the waitlist ▶" : pay === "online" ? `Pay ${euro(c.price)} & sign up ▶` : "Sign up ▶";
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById("classSubmit");
+    submit.disabled = true;
+    submit.textContent = "Signing up…";
+    const pay = full ? "in_person" : form.querySelector("[name=pay]:checked")?.value || "in_person";
+    try {
+      const done = await LevelUp.signupClass(c.id, pay);
+      if (done.mine?.status === "awaiting_payment") {
+        submit.textContent = "To the payment page…";
+        try { await LevelUp.startPayment("class", done.mine.id); }
+        catch (err) { renderClassDialog(`${err.message} Your place is held for a few minutes: try again or choose to pay at the class.`); }
+        return;
+      }
+      showClassSignedUp(done);
+    } catch (err) {
+      renderClassDialog(err.message);
+    }
+  });
+}
+
+function showClassSignedUp(c) {
+  const waiting = c.mine?.status === "waitlist";
+  bookingContent.innerHTML = `
+    <p class="section-kicker">Group class</p>
+    <h2 class="auth-title" id="bookingTitle">${waiting ? "You're on the waitlist" : "You're in! 🎉"}</h2>
+    <p class="booking-when">${esc(c.title)} · ${c.day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} · ${c.time}</p>
+    <p>${waiting
+      ? `<span>Waitlist number <strong>${c.mine.waitPos}</strong>.</span> <span>When a place opens up you're in automatically and get a notification.</span>`
+      : `<span>${c.taken} of ${c.capacity} places taken.</span> ${c.price > 0 && c.mine?.payStatus !== "paid" ? `<span>Pay <strong>${LevelUp.euro(c.price)}</strong> at the class.</span>` : ""} <span>You get a reminder before it starts.</span>`}</p>
+    ${LevelUp.pushCalloutHtml("Get the reminder and the class chat on this phone.")}
+    <div class="btn-row">
+      ${!waiting && c.chatId ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Class chat</a>` : ""}
+      ${!waiting ? `<a class="btn btn-small" href="${classCalendarLink(c)}" target="_blank" rel="noopener">Add to Google Calendar</a>` : ""}
+      <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
+    </div>`;
+  pendingClass = null;
+}
+
 // When a guest logs in from the booking dialog, reopen the slot they picked
 let reopenAfterLogin = false;
 
@@ -796,10 +1076,12 @@ function renderAll() {
 document.addEventListener("levelup:change", () => {
   renderFilter();
   renderAll();
-  if (reopenAfterLogin && LevelUp.getPlayer() && pendingSlot) {
+  if (reopenAfterLogin && LevelUp.getPlayer() && (pendingSlot || pendingClass)) {
     reopenAfterLogin = false;
-    renderBookingDialog();
+    if (pendingClass) renderClassDialog(); else renderBookingDialog();
     bookingDialog.showModal();
+  } else if (bookingDialog.open && pendingClass && !bookingDialog.querySelector("form :focus")) {
+    renderClassDialog(); // live counts while the dialog is open
   }
 });
 

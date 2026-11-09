@@ -28,6 +28,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `supabase/schema.sql`: database tables, security rules and server functions
 - `schedule.js`: weekly booking board and the "Up next" card on the home page
 - `admin.js`: admin dashboard
+- `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
 - `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
 - `privacy.html`: privacy policy (NL + EN)
@@ -85,6 +86,36 @@ Trainers sign up as "Personal trainer" (or apply later from their profile). The 
 and approves the application in the admin dashboard: either linked to an existing trainer card (Filip, Maxim) or as a
 new trainer card, which then appears in the team, the schedule filter and the booking board automatically. Coaching
 XP goes to the trainer's own account, so the level on the team card and in the profile is the same.
+
+## Group classes
+One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every
+`class_*` function is in `supabase/schema.sql` ("Group classes"). Settings in `app_config`: `class_price` (12),
+`class_trainer_fee` (35, a fixed fee per class held), `class_xp` (50), `class_capacity` (12), `class_cancel_hours` (4),
+`class_reminder_minutes` (90) and `class_chat_hours` (24).
+- **Planning:** a trainer plans their own classes in the profile's Coach tab, the admin plans any trainer's under
+  admin.html → Group classes (`class_create`, once or every week for 4/8/12 weeks). Only the admin can change the price
+  and the trainer fee. A class can't overlap the trainer's other classes or 1:1 sessions, and while it runs the
+  trainer's 1:1 hours are blocked on the schedule (`slot_status`, `book_session`).
+- **Signing up:** classes show on the schedule (`schedule.js`: the week board, the phone day list and the "Up next"
+  board) with the places taken, e.g. 6/10. Everyone sees the numbers; the trainer and the admin see the names
+  (`class_roster`). A player signs up (`class_signup`, health check first) and pays online (Mollie, type `class`) or at
+  the class. Full: the waitlist; a place that opens up goes to the first on the list automatically, with a push.
+  Free sign-out up to `class_cancel_hours` before (paid online = refunded automatically, paid at the desk = the
+  admin gives it back and presses "Done"); later = charged.
+- **During the class:** from 30 minutes before the start the trainer ticks off who is there (`class_mark`): the player
+  gets `class_xp` right away (unticking takes it back) and a push. "Paid ✓" notes money taken at the class
+  (`class_mark_paid`). "Finish class" (`class_finish`) makes everyone not ticked a no-show (charged, no XP), gives the
+  trainer 100 XP + 10 per player present, and the trainer fee counts as earned: it shows in the trainer's earnings,
+  their monthly statement and the admin's finances, and "Mark paid" pays it out with the 1:1 sessions.
+- **Notifications:** the trainer gets a push for every sign-up, sign-out and waitlist move. `class_reminder_minutes`
+  before the start (`_push_class_reminders`, run by the push Edge Function and its cron) the trainer gets the numbers
+  (signed up, to pay at the class, first-timers, waitlist) and every player a LEVEL-UP line to get going plus the
+  address and what to pay. Cancelling a class (one, or the rest of a weekly series) tells everyone, with the reason.
+- **Class chat:** every class has its own chat (`chat_threads.class_id`) for everyone signed up and the trainer, in
+  the normal chat page with the sender's name on each message. Read positions per member are in `chat_reads`. It
+  closes `class_chat_hours` after the class and is deleted a week later.
+- **Online payment for classes** needs the updated `payments` Edge Function (it accepts `type: "class"`): redeploy
+  `supabase/functions/payments/index.ts` when you switch online payments on.
 
 ## Booking flow (anti-cheat)
 1. A player sends a booking request: status **pending**, the hour is reserved, no XP yet.

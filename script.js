@@ -235,6 +235,8 @@ function renderFaq() {
       `Your first session is ${euro(pr.introPrice)}. After that a 1:1 hour is ${euro(pr.price)}, and a duo session is ${euro(pr.duoPrice)} for the two of you.${packs ? ` With a session pack it's cheaper: ${packs}.` : ""}`],
     ["I've never trained before. Is this for me?",
       "Yes. Sessions are one-on-one (or with one friend), so your trainer works at your level. Before your first session you fill in a short health check, so your trainer knows what to take into account."],
+    ["How do group classes work?",
+      `Group classes (HIIT, CrossFit WOD, bootcamp …) are on the <a href="#schedule" class="text-link">schedule</a> with the number of places left. Sign up for ${euro(pr.classPrice)} and pay online or at the class. Full? Join the waitlist: when a place opens up you're in automatically. Free sign-out up to ${pr.classCancelHours} hours before. You get a reminder before it starts, a class chat with everyone who signed up, and +${pr.classXp} XP when your trainer ticks you off as present.`],
     ["Can I cancel?",
       `Yes, for free up to ${LevelUp.FREE_CANCEL_HOURS} hours before the session, and a request that isn't confirmed yet can always be withdrawn. A confirmed session cancelled later is charged in full.`],
     ["How do I pay?",

@@ -49,7 +49,14 @@ insert into public.app_config (key, value) values
   ('loyalty_sessions', '20'),     -- every this many completed (paid) sessions earn a free 1:1 session
   ('reward_valid_months', '3'),   -- a free session voucher must be booked within this many months
   ('storage_host', 'zdwlihbsmqiggpyensxc.supabase.co'), -- profile photos must come from this project's Storage
-  ('payment_hold_minutes', '20')  -- how long an unpaid online booking holds the hour
+  ('payment_hold_minutes', '20'), -- how long an unpaid online booking holds the hour
+  ('class_price', '12'),          -- group class: what a player pays per class (euro)
+  ('class_trainer_fee', '35'),    -- group class: the trainer's fixed fee per class held
+  ('class_xp', '50'),             -- group class: XP for being ticked off as present
+  ('class_capacity', '12'),       -- group class: default number of places
+  ('class_cancel_hours', '4'),    -- group class: free sign-out up to this many hours before; later = charged
+  ('class_reminder_minutes', '90'), -- group class: the "starts soon" push goes out this long before
+  ('class_chat_hours', '24')      -- group class: the class chat stays open this long after the class
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -413,6 +420,53 @@ create table if not exists public.calendar_cache (
   fetched_at timestamptz
 );
 
+-- Group classes: one trainer, several players (CrossFit WOD, HIIT, bootcamp …), booked per class.
+-- class_signups holds every player's place: booked, on the waitlist, present (attended) or not.
+create table if not exists public.class_sessions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(title) between 2 and 40),
+  trainer_id text not null references public.trainers (id),
+  starts_at timestamptz not null,
+  minutes integer not null default 60 check (minutes between 15 and 240),
+  capacity integer not null check (capacity between 2 and 60),
+  price numeric(8, 2) not null check (price >= 0),
+  trainer_fee numeric(8, 2) not null default 0 check (trainer_fee >= 0),
+  xp integer not null default 50 check (xp between 0 and 500),
+  location text not null default 'Hoogstraat 40, Aalst',
+  note text not null default '',
+  status text not null default 'scheduled' check (status in ('scheduled', 'done', 'cancelled')),
+  cancel_reason text not null default '',
+  series_id uuid,                     -- classes made together with "repeat weekly"
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  reminder_pushed_at timestamptz,
+  finished_at timestamptz,
+  payout_at timestamptz               -- the trainer's fee for this class was paid out
+);
+create index if not exists class_sessions_start_idx on public.class_sessions (starts_at);
+create index if not exists class_sessions_trainer_idx on public.class_sessions (trainer_id, starts_at);
+
+create table if not exists public.class_signups (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.class_sessions (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  status text not null default 'booked'
+    check (status in ('awaiting_payment', 'booked', 'waitlist', 'attended', 'no_show', 'cancelled', 'late_cancel')),
+  price numeric(8, 2) not null default 0,
+  pay_method text not null default 'in_person' check (pay_method in ('online', 'in_person')),
+  pay_status text not null default 'unpaid' check (pay_status in ('unpaid', 'paid', 'refunded')),
+  paid_at timestamptz,
+  mollie_id text,
+  refund_status text,                 -- due / processing / done (online) or manual (paid at the desk)
+  refund_id text,
+  xp integer not null default 0,      -- XP given for being present (taken back when unticked)
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),   -- last sign-up / change (the payment hold counts from here)
+  unique (class_id, user_id)
+);
+create index if not exists class_signups_user_idx on public.class_signups (user_id);
+create index if not exists class_signups_class_idx on public.class_signups (class_id, status, updated_at);
+
 -- ---------------------------------------------------------
 -- Row level security: read your own rows, admins read all
 -- ---------------------------------------------------------
@@ -436,6 +490,9 @@ alter table public.body_stats enable row level security;
 alter table public.bookings enable row level security;
 alter table public.orders enable row level security;
 alter table public.calendar_cache enable row level security;
+alter table public.class_sessions enable row level security;
+alter table public.class_signups enable row level security;
+revoke all on public.class_sessions, public.class_signups from anon, authenticated; -- only through the class_* functions
 alter table public.trainer_applications enable row level security;
 alter table public.session_packs enable row level security;
 alter table public.trainer_pricing enable row level security;
@@ -688,11 +745,18 @@ create or replace function public._streak(p_user uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
   with w as (select date_trunc('week', (now() at time zone 'Europe/Brussels')::date)::date as w0),
   done as (select distinct date_trunc('week', k.day)::date as wk from public.bookings k
-           where k.user_id = p_user and k.status = 'completed'),
+           where k.user_id = p_user and k.status = 'completed'
+           union
+           select distinct date_trunc('week', (c.starts_at at time zone 'Europe/Brussels')::date)::date
+           from public.class_signups g join public.class_sessions c on c.id = g.class_id
+           where g.user_id = p_user and g.status = 'attended'),
   this_week as (select exists (select 1 from done, w where done.wk = w.w0) as done,
                        exists (select 1 from public.bookings k, w where k.user_id = p_user
                                and k.status in ('pending', 'confirmed', 'awaiting_payment')
-                               and k.day between w.w0 and w.w0 + 6 and public._slot_start(k.day, k.hour) > now()) as planned),
+                               and k.day between w.w0 and w.w0 + 6 and public._slot_start(k.day, k.hour) > now())
+                       or exists (select 1 from public.class_signups g join public.class_sessions c on c.id = g.class_id, w
+                                  where g.user_id = p_user and g.status = 'booked' and c.status = 'scheduled'
+                                    and c.starts_at > now() and (c.starts_at at time zone 'Europe/Brussels')::date between w.w0 and w.w0 + 6) as planned),
   start as (select case when (select done from this_week) then w0 else w0 - 7 end as s from w),
   run as (select coalesce(min(g), 105) as weeks from generate_series(0, 105) g, start
           where not exists (select 1 from done where done.wk = start.s - 7 * g))
@@ -703,6 +767,15 @@ returns jsonb language sql stable security definer set search_path = public as $
     'atRisk', run.weeks >= 1 and not tw.done and not tw.planned)
   from run, this_week tw;
 $$;
+
+-- Your group classes (for the profile), recent and upcoming (the helpers it uses are in "Group classes" below)
+create or replace function public._class_mine_json(p_user uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(public._class_json(c, p_user) order by c.starts_at)
+    from public.class_sessions c join public.class_signups g on g.class_id = c.id and g.user_id = p_user
+    where g.status <> 'cancelled' or g.updated_at > now() - interval '30 days'), '[]'::jsonb);
+end $$;
 
 create or replace function public._player_json(p_user uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
@@ -737,6 +810,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb),
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
+    'classes', public._class_mine_json(p.id),
     'healthForm', public._health_brief(p.id),
     'streak', public._streak(p.id),
     'potm', (select jsonb_build_object('month', a.month, 'xp', a.xp) from public.monthly_awards a
@@ -919,6 +993,11 @@ begin
              and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
     raise exception 'Someone just booked this slot. Pick another hour.';
   end if;
+  if exists (select 1 from public.class_sessions c where c.trainer_id = p_trainer and c.status = 'scheduled'
+             and tstzrange(c.starts_at, c.starts_at + make_interval(mins => c.minutes))
+                 && tstzrange(public._slot_start(p_day, p_hour), public._slot_start(p_day, p_hour) + interval '1 hour')) then
+    raise exception 'This trainer leads a group class at that time. Join the class or pick another hour.';
+  end if;
   if exists (select 1 from public.bookings where user_id = uid and day = p_day and hour = p_hour
              and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
     raise exception 'You already have a session at this time.';
@@ -1096,38 +1175,75 @@ begin
 end $$;
 
 -- Earnings of the logged-in trainer: earned = rewarded sessions + no-shows + late
--- cancellations, expected = confirmed ones
+-- cancellations, expected = confirmed ones. Group classes add their fixed fee once finished
+-- (expected: planned classes with someone signed up). The owner keeps what the players pay.
 create or replace function public.coach_earnings()
-returns jsonb language sql stable security definer set search_path = public as $$
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  t public.trainers;
+  owner boolean;
+  out jsonb;
+  cls record;
+begin
+  select * into t from public.trainers where email is not null and lower(email) = lower(auth.jwt() ->> 'email') limit 1;
+  if not found then return null; end if;
+  owner := t.id = public._config('owner_trainer_id');
+  select
+    count(*) filter (where c.status = 'done') as done,
+    coalesce(sum(case when owner then (public._class_money(c.id) ->> 'charged')::numeric else c.trainer_fee end) filter (where c.status = 'done'), 0) as earned,
+    coalesce(sum(c.trainer_fee) filter (where c.status = 'done' and c.payout_at is not null and not owner), 0) as paid,
+    coalesce(sum(c.trainer_fee) filter (where c.status = 'done' and c.payout_at is null and not owner), 0) as owed,
+    coalesce(sum(case when owner then c.price * public._class_taken(c.id) else c.trainer_fee end)
+             filter (where c.status = 'scheduled' and public._class_taken(c.id) > 0), 0) as expected,
+    max(c.payout_at) as last_payout
+  into cls
+  from public.class_sessions c where c.trainer_id = t.id;
   select jsonb_build_object(
     'trainerId', t.id,
-    'isOwner', t.id = public._config('owner_trainer_id'),
+    'isOwner', owner,
     'price', coalesce((select tp.price from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('session_price')::numeric),
-    'fee', case when t.id = public._config('owner_trainer_id')
+    'fee', case when owner
                 then coalesce((select tp.price from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('session_price')::numeric)
                 else coalesce((select tp.fee from public.trainer_pricing tp where tp.trainer_id = t.id), public._config('trainer_fee')::numeric) end,
+    'classFee', public._config('class_trainer_fee')::numeric,
     'sessions', count(b.id) filter (where public._billable(b.status)),
+    'classes', cls.done,
     'charged', count(b.id) filter (where b.status in ('no_show', 'late_cancel')),
-    'earned', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status)), 0),
-    'paid', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status) and b.payout_at is not null), 0),
-    'owed', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status) and b.payout_at is null), 0),
-    'expected', coalesce(sum(b.trainer_fee) filter (where b.status = 'confirmed'), 0),
-    'lastPayout', max(b.payout_at)
-  )
-  from public.trainers t left join public.bookings b on b.trainer_id = t.id
-  where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
-  group by t.id;
-$$;
+    'earned', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status)), 0) + cls.earned,
+    'paid', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status) and b.payout_at is not null), 0) + cls.paid,
+    'owed', coalesce(sum(b.trainer_fee) filter (where public._billable(b.status) and b.payout_at is null), 0) + cls.owed,
+    'expected', coalesce(sum(b.trainer_fee) filter (where b.status = 'confirmed'), 0) + cls.expected,
+    'lastPayout', greatest(max(b.payout_at), cls.last_payout)
+  ) into out
+  from public.bookings b where b.trainer_id = t.id;
+  return out;
+end $$;
 
 -- A trainer's charged sessions in a period, for their monthly statement (basis for their invoice)
 create or replace function public.coach_statement(p_from date, p_to date)
-returns jsonb language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(public._booking_json(b) order by b.day, b.hour), '[]'::jsonb)
-  from public.bookings b
-  join public.trainers t on t.id = b.trainer_id
-  where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
-    and public._billable(b.status) and b.day between p_from and least(p_to, p_from + 62);
-$$;
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  return (select coalesce(jsonb_agg(x.j order by x.day, x.hour), '[]'::jsonb) from (
+    select public._booking_json(b) as j, b.day, b.hour
+    from public.bookings b
+    join public.trainers t on t.id = b.trainer_id
+    where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+      and public._billable(b.status) and b.day between p_from and least(p_to, p_from + 62)
+    union all
+    -- finished group classes: one line each, with the class fee
+    select jsonb_build_object('id', c.id, 'kind', 'class', 'trainerId', c.trainer_id,
+             'date', (c.starts_at at time zone 'Europe/Brussels')::date,
+             'hour', extract(hour from c.starts_at at time zone 'Europe/Brussels')::int,
+             'name', c.title, 'partner', (public._class_money(c.id) ->> 'present') || ' present',
+             'status', 'completed', 'price', (public._class_money(c.id) ->> 'charged')::numeric,
+             'trainerFee', c.trainer_fee, 'payoutAt', c.payout_at, 'payMethod', 'class', 'payStatus', 'paid', 'priceType', 'class'),
+           (c.starts_at at time zone 'Europe/Brussels')::date, extract(hour from c.starts_at at time zone 'Europe/Brussels')::int
+    from public.class_sessions c
+    join public.trainers t on t.id = c.trainer_id
+    where t.email is not null and lower(t.email) = lower(auth.jwt() ->> 'email')
+      and c.status = 'done' and (c.starts_at at time zone 'Europe/Brussels')::date between p_from and least(p_to, p_from + 62)
+  ) x);
+end $$;
 
 -- Admin: record that a trainer's open earnings have been paid out
 create or replace function public.mark_payout(p_trainer text)
@@ -1138,10 +1254,14 @@ declare
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   select count(*), coalesce(sum(trainer_fee), 0) into n, total
-    from public.bookings where trainer_id = p_trainer and public._billable(status) and payout_at is null;
+    from (select trainer_fee from public.bookings where trainer_id = p_trainer and public._billable(status) and payout_at is null
+          union all
+          select trainer_fee from public.class_sessions where trainer_id = p_trainer and status = 'done' and payout_at is null) x;
   if n = 0 then raise exception 'Nothing to pay out for this trainer.'; end if;
   update public.bookings set payout_at = now()
     where trainer_id = p_trainer and public._billable(status) and payout_at is null;
+  update public.class_sessions set payout_at = now()
+    where trainer_id = p_trainer and status = 'done' and payout_at is null;
   return jsonb_build_object('trainerId', p_trainer, 'sessions', n, 'amount', total);
 end $$;
 
@@ -1158,7 +1278,16 @@ language sql stable security definer set search_path = public as $$
     and (b.status in ('confirmed', 'completed')
          or (b.status = 'pending' and public._confirm_deadline(coalesce(b.request_at, b.created_at), b.day, b.hour) > now())
          or (b.status = 'awaiting_payment'
-             and b.created_at + make_interval(mins => public._config('payment_hold_minutes')::int) > now()));
+             and b.created_at + make_interval(mins => public._config('payment_hold_minutes')::int) > now()))
+  union all
+  -- every hour a trainer leads a group class (the class itself shows on the schedule)
+  select c.trainer_id, h.day, h.hour::smallint, null::uuid, 'class'
+  from public.class_sessions c
+  cross join lateral (
+    select (t at time zone 'Europe/Brussels')::date as day, extract(hour from t at time zone 'Europe/Brussels')::int as hour
+    from generate_series(date_trunc('hour', c.starts_at), c.starts_at + make_interval(mins => c.minutes) - interval '1 minute', interval '1 hour') t
+  ) h
+  where c.status = 'scheduled' and h.day between p_from and least(p_to, p_from + 70);
 $$;
 
 -- Trainer levels count completed sessions only
@@ -1434,6 +1563,11 @@ returns jsonb language sql stable security definer set search_path = public as $
     'duoPrice', public._config('duo_price')::numeric,
     'packs', public._config('packs')::jsonb,
     'onlinePayments', public._config('online_payments') = 'on',
+    'classPrice', public._config('class_price')::numeric,
+    'classXp', public._config('class_xp')::int,
+    'classCapacity', public._config('class_capacity')::int,
+    'classCancelHours', public._config('class_cancel_hours')::int,
+    'classTrainerFee', public._config('class_trainer_fee')::numeric,
     'hq', 'Hoogstraat 40, 9308 Aalst',
     'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
   );
@@ -1636,6 +1770,8 @@ declare
   b public.bookings;
   sp public.session_packs;
   t public.trainers;
+  g public.class_signups;
+  c public.class_sessions;
 begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
   if public._config('online_payments') <> 'on' then raise exception 'Online payment is not available yet.'; end if;
@@ -1656,6 +1792,17 @@ begin
     if sp.status <> 'requested' then raise exception 'This pack doesn''t need a payment.'; end if;
     return jsonb_build_object('type', 'pack', 'id', sp.id, 'amount', sp.price,
       'description', 'LEVEL-UP ' || sp.size || '-session pack');
+  elsif p_type = 'class' then
+    perform public._expire_class_payments();
+    select * into g from public.class_signups where id = p_id and user_id = auth.uid();
+    if not found then raise exception 'Sign-up not found.'; end if;
+    if g.pay_status <> 'unpaid' or g.price <= 0 then raise exception 'This class doesn''t need a payment.'; end if;
+    if g.status not in ('awaiting_payment', 'booked', 'attended', 'no_show', 'late_cancel') then
+      raise exception 'This sign-up can''t be paid anymore.';
+    end if;
+    select * into c from public.class_sessions where id = g.class_id;
+    return jsonb_build_object('type', 'class', 'id', g.id, 'amount', g.price,
+      'description', 'LEVEL-UP group class ' || c.title || ' ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'DD-MM-YYYY HH24:MI'));
   end if;
   raise exception 'Unknown payment type.';
 end $$;
@@ -1666,6 +1813,8 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   if p_type = 'booking' then
     update public.bookings set mollie_id = p_mollie, pay_method = 'online' where id = p_id and pay_status = 'unpaid';
+  elsif p_type = 'class' then
+    update public.class_signups set mollie_id = p_mollie, pay_method = 'online' where id = p_id and pay_status = 'unpaid';
   else
     update public.session_packs set mollie_id = p_mollie, pay_method = 'online' where id = p_id and status = 'requested';
   end if;
@@ -1678,6 +1827,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   b public.bookings;
   sp public.session_packs;
+  g public.class_signups;
+  c public.class_sessions;
 begin
   if p_type = 'booking' then
     select * into b from public.bookings where id = p_id for update;
@@ -1715,6 +1866,34 @@ begin
         return jsonb_build_object('action', 'refund');
       end if;
     end if;
+  elsif p_type = 'class' then
+    select * into g from public.class_signups where id = p_id for update;
+    if not found then
+      return jsonb_build_object('action', case when p_status = 'paid' then 'refund' else 'none' end);
+    end if;
+    if g.mollie_id is distinct from p_mollie and g.pay_status = 'paid' then
+      return jsonb_build_object('action', case when p_status = 'paid' then 'refund' else 'none' end);
+    end if;
+    if p_status = 'paid' then
+      if g.pay_status = 'paid' then return jsonb_build_object('action', 'none'); end if;
+      if g.status = 'cancelled' then
+        update public.class_signups set mollie_id = p_mollie, pay_method = 'online', pay_status = 'paid', paid_at = now(),
+               refund_status = 'due' where id = p_id;
+        return jsonb_build_object('action', 'none'); -- the refund runs from refund_status
+      end if;
+      update public.class_signups set mollie_id = p_mollie, pay_method = 'online', pay_status = 'paid', paid_at = now(),
+             status = case when status = 'awaiting_payment' then 'booked' else status end
+        where id = p_id;
+      if g.status = 'awaiting_payment' then
+        select * into c from public.class_sessions where id = g.class_id;
+        perform public._push(public._trainer_user(c.trainer_id), 'New sign-up: ' || c.title,
+          (select name from public.profiles where id = g.user_id) || ' · ' || public._class_label(c) || ' · '
+            || public._class_taken(c.id) || '/' || c.capacity, 'profile.html#coach', 'class-' || c.id || '-roster');
+      end if;
+    elsif p_status in ('failed', 'canceled', 'expired') and g.status = 'awaiting_payment' and g.mollie_id = p_mollie then
+      update public.class_signups set status = 'cancelled', updated_at = now() where id = p_id;
+      perform public._class_promote(g.class_id);
+    end if;
   end if;
   return jsonb_build_object('action', 'none');
 end $$;
@@ -1726,14 +1905,24 @@ returns jsonb language sql security definer set search_path = public as $$
     update public.bookings set refund_status = 'processing'
     where refund_status = 'due' and pay_method = 'online' and mollie_id is not null
     returning id, mollie_id, price
+  ), claimed_classes as (
+    update public.class_signups set refund_status = 'processing'
+    where refund_status = 'due' and pay_method = 'online' and mollie_id is not null
+    returning id, mollie_id, price
   )
-  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'mollieId', mollie_id, 'amount', price)), '[]'::jsonb) from claimed;
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'mollieId', mollie_id, 'amount', price)), '[]'::jsonb)
+  from (select * from claimed union all select * from claimed_classes) x;
 $$;
 
 -- Edge Function only: the result of a refund
 create or replace function public.refund_done(p_id uuid, p_refund text, p_ok boolean)
 returns void language sql security definer set search_path = public as $$
   update public.bookings
+     set refund_status = case when p_ok then 'done' else 'due' end,
+         refund_id = coalesce(p_refund, refund_id),
+         pay_status = case when p_ok then 'refunded' else pay_status end
+   where id = p_id;
+  update public.class_signups
      set refund_status = case when p_ok then 'done' else 'due' end,
          refund_id = coalesce(p_refund, refund_id),
          pay_status = case when p_ok then 'refunded' else pay_status end
@@ -1782,6 +1971,18 @@ begin
     where id = p_id and refund_status = 'manual' returning * into b;
   if not found then raise exception 'No manual refund open for this booking.'; end if;
   return public._booking_json(b);
+end $$;
+
+-- Admin: a group class place paid at the desk was refunded by hand
+create or replace function public.class_mark_refunded(p_signup uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare g public.class_signups;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.class_signups set refund_status = 'done', pay_status = 'refunded'
+    where id = p_signup and refund_status = 'manual' returning * into g;
+  if not found then raise exception 'No manual refund open for this sign-up.'; end if;
+  return jsonb_build_object('id', g.id, 'refundStatus', g.refund_status);
 end $$;
 
 -- Admin: the Legend hoodie was handed out at the desk
@@ -2148,6 +2349,62 @@ begin
   return n;
 end $$;
 
+-- "Starts soon" for group classes, class_reminder_minutes before the start (sent once):
+-- the trainer gets the numbers they need, every player signed up a LEVEL-UP line to get going
+create or replace function public._push_class_reminders()
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  c record;
+  g record;
+  quotes text[] := array[
+    'Every rep is XP. Go collect it.',
+    'Show up, sweat, level up.',
+    'The boss fight is in your head. You''ve got this.',
+    'One more workout, one more level.',
+    'Your future self is watching. Make it proud.',
+    'Strong squad, stronger you. See you on the floor.',
+    'No checkpoints skipped. Today you level up.',
+    'Respawn complete. Time to train.'];
+  n integer := 0;
+  booked integer;
+  unpaid integer;
+  waiting integer;
+  fresh integer;
+begin
+  for c in
+    select * from public.class_sessions
+    where status = 'scheduled' and reminder_pushed_at is null
+      and starts_at > now() and starts_at <= now() + make_interval(mins => public._config('class_reminder_minutes')::int)
+    for update skip locked
+  loop
+    select count(*) filter (where status in ('booked', 'attended')),
+           count(*) filter (where status in ('booked', 'attended') and pay_status = 'unpaid' and price > 0),
+           count(*) filter (where status = 'waitlist'),
+           count(*) filter (where status in ('booked', 'attended')
+                            and not exists (select 1 from public.class_signups o where o.user_id = s.user_id and o.status = 'attended' and o.id <> s.id))
+      into booked, unpaid, waiting, fresh
+    from public.class_signups s where s.class_id = c.id;
+    perform public._push(public._trainer_user(c.trainer_id),
+      c.title || ' starts at ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
+      booked || '/' || c.capacity || ' signed up'
+        || case when unpaid > 0 then ' · ' || unpaid || ' to pay at the class' else '' end
+        || case when fresh > 0 then ' · ' || fresh || ' first-timer' || case when fresh > 1 then 's' else '' end else '' end
+        || case when waiting > 0 then ' · ' || waiting || ' on the waitlist' else '' end
+        || ' · Tick off who''s there in the app',
+      'profile.html#coach', 'class-' || c.id || '-start');
+    for g in select * from public.class_signups where class_id = c.id and status = 'booked' loop
+      perform public._push(g.user_id,
+        c.title || ' starts at ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI') || ' 🔥',
+        quotes[1 + floor(random() * array_length(quotes, 1))::int] || ' · ' || c.location
+          || case when g.pay_status = 'unpaid' and g.price > 0 then ' · Pay ' || to_char(g.price, 'FM990.00') || ' euro at the class' else '' end,
+        'profile.html#classes', 'class-' || c.id || '-start');
+    end loop;
+    update public.class_sessions set reminder_pushed_at = now() where id = c.id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
 create or replace function public.push_due_reminders()
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -2167,8 +2424,12 @@ begin
     update public.bookings set reminder_pushed_at = now() where id = b.id;
     n := n + 1;
   end loop;
+  n := n + public._push_class_reminders();
   perform public._settle_player_of_month();
   n := n + public._push_streak_reminders();
+  -- class chats are temporary: a week after the class they are deleted with their messages
+  delete from public.chat_threads th using public.class_sessions c
+  where th.class_id = c.id and c.starts_at < now() - interval '7 days';
   return n;
 end $$;
 
@@ -2282,6 +2543,24 @@ create unique index if not exists chat_threads_pair_idx on public.chat_threads
   (least(client_id, member_id), greatest(client_id, member_id)) where member_id is not null;
 create index if not exists chat_threads_member_idx on public.chat_threads (member_id, last_at desc) where member_id is not null;
 
+-- Group class chats: one per class (class_id), for everyone signed up and the trainer; no client/trainer/member.
+-- Each member's read position is kept in chat_reads. The chat closes class_chat_hours after the class.
+alter table public.chat_threads add column if not exists class_id uuid references public.class_sessions (id) on delete cascade;
+alter table public.chat_threads alter column client_id drop not null;
+alter table public.chat_threads drop constraint if exists chat_threads_kind_check;
+alter table public.chat_threads add constraint chat_threads_kind_check check (
+  (class_id is not null and client_id is null and trainer_id is null and member_id is null)
+  or (class_id is null and client_id is not null and (trainer_id is null) <> (member_id is null)));
+create unique index if not exists chat_threads_class_idx on public.chat_threads (class_id) where class_id is not null;
+create table if not exists public.chat_reads (
+  thread_id uuid not null references public.chat_threads (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  read_id bigint not null default 0,
+  primary key (thread_id, user_id)
+);
+alter table public.chat_reads enable row level security;
+revoke all on public.chat_reads from anon, authenticated;
+
 alter table public.chat_threads enable row level security;
 alter table public.chat_messages enable row level security;
 revoke all on public.chat_threads, public.chat_messages from anon, authenticated;
@@ -2300,10 +2579,24 @@ returns text language sql stable security definer set search_path = public as $$
   where p.id = p_user and t.email is not null limit 1;
 $$;
 
--- 'client', 'trainer' or null (not your conversation)
+-- In a class chat: signed up (booked or present) or the class's trainer, until class_chat_hours after the class
+create or replace function public._class_chat_member(p_class uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  return exists (
+    select 1 from public.class_sessions c
+    where c.id = p_class and c.status <> 'cancelled'
+      and now() < c.starts_at + make_interval(mins => c.minutes) + make_interval(hours => public._config('class_chat_hours')::int)
+      and (c.trainer_id = public._my_trainer()
+           or exists (select 1 from public.class_signups g where g.class_id = c.id and g.user_id = auth.uid()
+                      and g.status in ('booked', 'attended'))));
+end $$;
+
+-- 'client', 'trainer', 'group' or null (not your conversation)
 create or replace function public._chat_side(p_thread public.chat_threads)
 returns text language sql stable security definer set search_path = public as $$
-  select case when p_thread.client_id = auth.uid() then 'client'
+  select case when p_thread.class_id is not null then case when public._class_chat_member(p_thread.class_id) then 'group' end
+              when p_thread.client_id = auth.uid() then 'client'
               when p_thread.member_id is not null and p_thread.member_id = auth.uid() then 'trainer'
               when p_thread.member_id is null and p_thread.trainer_id = public._my_trainer() then 'trainer' end;
 $$;
@@ -2322,6 +2615,13 @@ $$;
 create or replace function public._chat_peer(p_thread public.chat_threads, p_side text)
 returns jsonb language sql stable security definer set search_path = public as $$
   select case
+    when p_thread.class_id is not null then
+      (select jsonb_build_object('name', c.title || ' · ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI'),
+              'role', 'Group chat', 'group', true, 'classId', c.id, 'trainerId', null, 'avatarUrl', null,
+              'title', c.title, 'startsAt', c.starts_at,
+              'members', 1 + (select count(*) from public.class_signups g where g.class_id = c.id and g.status in ('booked', 'attended')),
+              'closesAt', c.starts_at + make_interval(mins => c.minutes) + make_interval(hours => public._config('class_chat_hours')::int))
+       from public.class_sessions c where c.id = p_thread.class_id)
     when p_thread.member_id is not null then
       public._chat_person(case when p_side = 'client' then p_thread.member_id else p_thread.client_id end)
     when p_side = 'client' then
@@ -2345,18 +2645,28 @@ begin
   select coalesce(jsonb_agg(row order by (row ->> 'lastAt') desc), '[]'::jsonb) into out from (
     select public._chat_peer(th, s.side) || jsonb_build_object(
       'id', th.id, 'side', s.side, 'direct', th.member_id is not null, 'lastAt', th.last_at,
-      'lastBody', m.body, 'lastMine', m.from_trainer = (s.side = 'trainer'),
-      'unread', (select count(*) from public.chat_messages u
-                 where u.thread_id = th.id and u.from_trainer = (s.side = 'client')
-                   and u.id > case when s.side = 'client' then th.client_read_id else th.trainer_read_id end)
+      'lastBody', case when s.side = 'group' and m.body is not null and m.sender_id is distinct from auth.uid()
+                       then coalesce(split_part(m.sender_name, ' ', 1) || ': ', '') || m.body else m.body end,
+      'lastMine', case when s.side = 'group' then m.sender_id = auth.uid() else m.from_trainer = (s.side = 'trainer') end,
+      'unread', case when s.side = 'group' then
+                  (select count(*) from public.chat_messages u
+                   where u.thread_id = th.id and u.sender_id is distinct from auth.uid()
+                     and u.id > coalesce((select r.read_id from public.chat_reads r where r.thread_id = th.id and r.user_id = auth.uid()), 0))
+                else
+                  (select count(*) from public.chat_messages u
+                   where u.thread_id = th.id and u.from_trainer = (s.side = 'client')
+                     and u.id > case when s.side = 'client' then th.client_read_id else th.trainer_read_id end) end
     ) as row
     from public.chat_threads th
-    cross join lateral (select case when th.client_id = auth.uid() then 'client' else 'trainer' end as side) s
-    left join lateral (select body, from_trainer from public.chat_messages
-                       where thread_id = th.id order by id desc limit 1) m on true
+    cross join lateral (select case when th.class_id is not null then 'group'
+                                    when th.client_id = auth.uid() then 'client' else 'trainer' end as side) s
+    left join lateral (select x.body, x.from_trainer, x.sender_id, p.name as sender_name from public.chat_messages x
+                       left join public.profiles p on p.id = x.sender_id
+                       where x.thread_id = th.id order by x.id desc limit 1) m on true
     where (th.client_id = auth.uid() or th.member_id = auth.uid()
-           or (me_trainer is not null and th.member_id is null and th.trainer_id = me_trainer))
-      and (s.side = 'client' or m.body is not null)   -- the other side only sees it once there is a message
+           or (me_trainer is not null and th.member_id is null and th.class_id is null and th.trainer_id = me_trainer)
+           or (th.class_id is not null and public._class_chat_member(th.class_id)))
+      and (s.side in ('client', 'group') or m.body is not null)   -- the other side only sees it once there is a message
   ) q;
   return out;
 end $$;
@@ -2447,19 +2757,28 @@ begin
   select * into th from public.chat_threads where id = p_thread;
   side := case when found then public._chat_side(th) end;
   if side is null then raise exception 'Conversation not found.'; end if;
-  select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'mine', x.from_trainer = (side = 'trainer'),
+  select coalesce(jsonb_agg(jsonb_build_object('id', x.id,
+                                               'mine', case when side = 'group' then x.sender_id = auth.uid() else x.from_trainer = (side = 'trainer') end,
+                                               'name', case when side = 'group' then coalesce(
+                                                 (select split_part(tr.name, ' ', 1) from public.trainers tr
+                                                  where x.from_trainer and tr.id = (select c.trainer_id from public.class_sessions c where c.id = th.class_id)),
+                                                 (select p.name from public.profiles p where p.id = x.sender_id), 'Member') end,
+                                               'coach', side = 'group' and x.from_trainer,
                                                'body', x.body, 'at', x.created_at) order by x.id), '[]'::jsonb),
          max(x.id)
     into msgs, top
   from (select * from public.chat_messages where thread_id = th.id and id > coalesce(p_after, 0)
         order by id desc limit 200) x;
   if top is not null then
-    if side = 'client' then update public.chat_threads set client_read_id = greatest(client_read_id, top) where id = th.id;
+    if side = 'group' then
+      insert into public.chat_reads (thread_id, user_id, read_id) values (th.id, auth.uid(), top)
+      on conflict (thread_id, user_id) do update set read_id = greatest(public.chat_reads.read_id, excluded.read_id);
+    elsif side = 'client' then update public.chat_threads set client_read_id = greatest(client_read_id, top) where id = th.id;
     else update public.chat_threads set trainer_read_id = greatest(trainer_read_id, top) where id = th.id; end if;
   end if;
   return public._chat_peer(th, side) || jsonb_build_object(
     'id', th.id, 'side', side, 'direct', th.member_id is not null, 'messages', msgs,
-    'peerReadId', case when side = 'client' then th.trainer_read_id else th.client_read_id end);
+    'peerReadId', case when side = 'group' then null when side = 'client' then th.trainer_read_id else th.client_read_id end);
 end $$;
 
 -- Send a message; the other person gets a push notification
@@ -2481,6 +2800,22 @@ begin
   if char_length(msg) > 2000 then raise exception 'That message is too long (2000 characters max).'; end if;
   if (select count(*) from public.chat_messages where sender_id = auth.uid() and created_at > now() - interval '1 minute') >= 20 then
     raise exception 'Slow down a little: try again in a minute.';
+  end if;
+  if side = 'group' then
+    insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
+    values (th.id, auth.uid(), coalesce((select c.trainer_id = public._my_trainer() from public.class_sessions c where c.id = th.class_id), false), msg)
+    returning id, created_at into new_id, at;
+    update public.chat_threads set last_at = at where id = th.id;
+    insert into public.chat_reads (thread_id, user_id, read_id) values (th.id, auth.uid(), new_id)
+    on conflict (thread_id, user_id) do update set read_id = greatest(public.chat_reads.read_id, excluded.read_id);
+    select name into sender from public.profiles where id = auth.uid();
+    perform public._push(u.id, '💬 ' || c.title, coalesce(split_part(sender, ' ', 1), 'Member') || ': ' || left(msg, 120),
+                         'chat.html?t=' || th.id, 'chat-' || th.id)
+    from public.class_sessions c,
+         lateral (select g.user_id as id from public.class_signups g where g.class_id = c.id and g.status in ('booked', 'attended')
+                  union select public._trainer_user(c.trainer_id)) u
+    where c.id = th.class_id and u.id is not null and u.id <> auth.uid();
+    return jsonb_build_object('id', new_id, 'mine', true, 'body', msg, 'at', at);
   end if;
   insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
   values (th.id, auth.uid(), side = 'trainer', msg) returning id, created_at into new_id, at;
@@ -2518,10 +2853,20 @@ begin
                            (select split_part(tr.name, ' ', 1) from public.trainers tr where tr.id = t.trainer_id))
                 else (select p.name from public.profiles p where p.id = t.client_id) end as name
     from public.chat_threads t join public.chat_messages m on m.thread_id = t.id
-    where (t.client_id = auth.uid() or t.member_id = auth.uid()
+    where t.class_id is null
+      and (t.client_id = auth.uid() or t.member_id = auth.uid()
            or (me_trainer is not null and t.member_id is null and t.trainer_id = me_trainer))
       and m.from_trainer = (t.client_id = auth.uid())
       and m.id > case when t.client_id = auth.uid() then t.client_read_id else t.trainer_read_id end
+    union all
+    select m.id, m.thread_id, m.body, c.title || ' · ' || coalesce(split_part(p.name, ' ', 1), 'Member')
+    from public.chat_threads t
+    join public.class_sessions c on c.id = t.class_id
+    join public.chat_messages m on m.thread_id = t.id
+    left join public.profiles p on p.id = m.sender_id
+    where t.class_id is not null and public._class_chat_member(t.class_id)
+      and m.sender_id is distinct from auth.uid()
+      and m.id > coalesce((select r.read_id from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid()), 0)
   )
   select (select count(*) from u), x.id, x.thread_id, left(x.body, 140), x.name
     into total, last_id, last_thread, last_body, last_name
@@ -2574,6 +2919,426 @@ end $$;
 
 revoke execute on function public.admin_grant_xp(uuid, integer, text) from public, anon;
 grant execute on function public.admin_grant_xp(uuid, integer, text) to authenticated;
+
+-- ---------------------------------------------------------
+-- Group classes: a trainer (or an admin) plans a class with a number of places; players sign up
+-- (or join the waitlist), pay online or at the class, and the trainer ticks off who is there,
+-- which gives them their XP. Every class has its own chat for the people signed up.
+-- ---------------------------------------------------------
+
+-- "Wed 11 Nov 19:00" in Brussels time (pushes and payment descriptions)
+create or replace function public._class_label(c public.class_sessions)
+returns text language sql stable as $$
+  select to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI');
+$$;
+
+-- Places taken: booked, present, no-show, and (for a few minutes) waiting for an online payment
+create or replace function public._class_taken(p_class uuid)
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.class_signups
+  where class_id = p_class and status in ('booked', 'attended', 'no_show', 'awaiting_payment');
+$$;
+
+-- The trainer of the class (their linked account) or an admin
+create or replace function public._can_lead(p_class uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce((select public._can_coach(c.trainer_id) from public.class_sessions c where c.id = p_class), false);
+end $$;
+
+-- A class as the website shows it, with the counts and (for p_user) their own place
+create or replace function public._class_json(c public.class_sessions, p_user uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  me public.class_signups;
+  ends timestamptz := c.starts_at + make_interval(mins => c.minutes);
+begin
+  if p_user is not null then
+    select * into me from public.class_signups where class_id = c.id and user_id = p_user;
+  end if;
+  return jsonb_build_object(
+    'id', c.id, 'title', c.title, 'trainerId', c.trainer_id,
+    'startsAt', c.starts_at, 'endsAt', ends, 'minutes', c.minutes,
+    'date', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD'),
+    'time', to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
+    'capacity', c.capacity, 'taken', public._class_taken(c.id),
+    'waitlist', (select count(*) from public.class_signups w where w.class_id = c.id and w.status = 'waitlist'),
+    'price', c.price, 'xp', c.xp, 'location', c.location, 'note', c.note,
+    'status', c.status, 'cancelReason', c.cancel_reason, 'seriesId', c.series_id,
+    'freeCancelUntil', c.starts_at - make_interval(hours => public._config('class_cancel_hours')::int),
+    'chatId', (select th.id from public.chat_threads th where th.class_id = c.id),
+    'chatOpen', c.status <> 'cancelled' and now() < ends + make_interval(hours => public._config('class_chat_hours')::int),
+    'mine', case when me.id is null then null else jsonb_build_object(
+      'id', me.id, 'status', me.status, 'price', me.price, 'payMethod', me.pay_method, 'payStatus', me.pay_status,
+      'refundStatus', me.refund_status, 'xp', me.xp, 'updatedAt', me.updated_at,
+      'waitPos', case when me.status = 'waitlist' then
+        (select count(*) from public.class_signups w where w.class_id = c.id and w.status = 'waitlist'
+           and (w.updated_at, w.id) <= (me.updated_at, me.id)) end) end
+  );
+end $$;
+
+-- One person on a class list (for the trainer and the admin)
+create or replace function public._class_person_json(g public.class_signups)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', g.id, 'userId', g.user_id, 'name', p.name, 'avatar', p.avatar_url, 'email', p.email,
+    'status', g.status, 'price', g.price, 'payMethod', g.pay_method, 'payStatus', g.pay_status, 'refundStatus', g.refund_status,
+    'xp', g.xp, 'signedUpAt', g.updated_at,
+    'firstClass', not exists (select 1 from public.class_signups o where o.user_id = g.user_id and o.status = 'attended' and o.id <> g.id),
+    'health', public._health_brief(g.user_id))
+  from public.profiles p where p.id = g.user_id;
+$$;
+
+-- Money of a class: what was paid, what is still to be paid (charged places only) and the places paid for
+create or replace function public._class_money(p_class uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'present', count(*) filter (where status = 'attended'),
+    'charged', coalesce(sum(price) filter (where status in ('attended', 'no_show', 'late_cancel')), 0),
+    'paid', coalesce(sum(price) filter (where pay_status = 'paid' and status not in ('cancelled')), 0),
+    'unpaid', count(*) filter (where pay_status = 'unpaid' and price > 0 and status in ('booked', 'attended', 'no_show', 'late_cancel')),
+    'unpaidTotal', coalesce(sum(price) filter (where pay_status = 'unpaid' and price > 0 and status in ('booked', 'attended', 'no_show', 'late_cancel')), 0))
+  from public.class_signups where class_id = p_class;
+$$;
+
+-- Fill free places from the waitlist (oldest first); each promoted player gets a push
+create or replace function public._class_promote(p_class uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  c public.class_sessions;
+  g public.class_signups;
+begin
+  select * into c from public.class_sessions where id = p_class for update;
+  if not found or c.status <> 'scheduled' or c.starts_at <= now() then return; end if;
+  loop
+    exit when public._class_taken(c.id) >= c.capacity;
+    select * into g from public.class_signups where class_id = c.id and status = 'waitlist'
+      order by updated_at, id limit 1 for update;
+    exit when not found;
+    update public.class_signups set status = 'booked', pay_method = 'in_person', updated_at = now() where id = g.id;
+    perform public._push(g.user_id, 'You''re in! 🎉',
+      c.title || ' · ' || public._class_label(c) || ' · A spot opened up for you', 'profile.html#classes', 'class-' || c.id);
+    perform public._push(public._trainer_user(c.trainer_id), 'From the waitlist: ' || c.title,
+      (select name from public.profiles where id = g.user_id) || ' · ' || public._class_label(c) || ' · '
+        || public._class_taken(c.id) || '/' || c.capacity, 'profile.html#coach', 'class-' || c.id || '-roster');
+  end loop;
+end $$;
+
+-- Unpaid online sign-ups give their place back after payment_hold_minutes
+create or replace function public._expire_class_payments()
+returns void language plpgsql security definer set search_path = public as $$
+declare cid uuid;
+begin
+  for cid in
+    update public.class_signups set status = 'cancelled', updated_at = now()
+    where status = 'awaiting_payment'
+      and updated_at + make_interval(mins => public._config('payment_hold_minutes')::int) <= now()
+    returning class_id
+  loop
+    perform public._class_promote(cid);
+  end loop;
+end $$;
+
+-- Classes in a period (anyone): times, places taken, price; logged in: your own place too
+create or replace function public.class_list(p_from date, p_to date)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public._expire_class_payments();
+  return coalesce((select jsonb_agg(public._class_json(c, auth.uid()) order by c.starts_at)
+    from public.class_sessions c
+    where (c.starts_at at time zone 'Europe/Brussels')::date between p_from and least(p_to, p_from + 70)
+      and (c.status <> 'cancelled'
+           or exists (select 1 from public.class_signups g where g.class_id = c.id and g.user_id = auth.uid()))), '[]'::jsonb);
+end $$;
+
+-- Sign up: a free place (pay online now or at the class) or, when it's full, the waitlist
+create or replace function public.class_signup(p_class uuid, p_pay text default 'in_person')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  c public.class_sessions;
+  g public.class_signups;
+  st text;
+begin
+  if uid is null then raise exception 'Log in to sign up for a group class.'; end if;
+  perform public._expire_class_payments();
+  select * into c from public.class_sessions where id = p_class for update;
+  if not found then raise exception 'Group class not found.'; end if;
+  if c.status = 'cancelled' then raise exception 'This group class was cancelled.'; end if;
+  if c.status <> 'scheduled' or c.starts_at <= now() then raise exception 'This group class has already started.'; end if;
+  if public._trainer_of(uid) = c.trainer_id then raise exception 'You lead this class.'; end if;
+  if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
+  if p_pay = 'online' and public._config('online_payments') <> 'on' then
+    raise exception 'Online payment is not available yet. Choose to pay at the class.';
+  end if;
+  if not public._health_valid(uid) then raise exception 'Fill in the health questionnaire before you book a session.'; end if;
+  select * into g from public.class_signups where class_id = c.id and user_id = uid for update;
+  if found then
+    if g.status in ('booked', 'awaiting_payment', 'waitlist', 'attended') then raise exception 'You''re already signed up for this class.'; end if;
+    if g.status in ('late_cancel', 'no_show') then raise exception 'You signed out of this class too late to sign up again.'; end if;
+    if g.refund_status in ('due', 'processing', 'manual') then raise exception 'Your refund for this class is still open. Ask us at the gym.'; end if;
+  end if;
+  st := case when public._class_taken(c.id) >= c.capacity then 'waitlist'
+             when p_pay = 'online' and c.price > 0 then 'awaiting_payment' else 'booked' end;
+  insert into public.class_signups (class_id, user_id, status, price, pay_method, pay_status, updated_at)
+  values (c.id, uid, st, c.price, case when st = 'awaiting_payment' then 'online' else 'in_person' end,
+          case when c.price = 0 then 'paid' else 'unpaid' end, now())
+  on conflict (class_id, user_id) do update set status = excluded.status, price = excluded.price, pay_method = excluded.pay_method,
+    pay_status = excluded.pay_status, paid_at = null, mollie_id = null, refund_status = null, refund_id = null, xp = 0, updated_at = now()
+  returning * into g;
+  if st <> 'awaiting_payment' then
+    perform public._push(public._trainer_user(c.trainer_id),
+      case when st = 'waitlist' then 'Waitlist: ' else 'New sign-up: ' end || c.title,
+      (select name from public.profiles where id = uid) || ' · ' || public._class_label(c) || ' · '
+        || public._class_taken(c.id) || '/' || c.capacity, 'profile.html#coach', 'class-' || c.id || '-roster');
+  end if;
+  return public._class_json(c, uid);
+end $$;
+
+-- Sign out (or leave the waitlist). Up to class_cancel_hours before: free (paid = refunded);
+-- later: a late cancellation, charged in full. An admin can always cancel for free.
+create or replace function public.class_cancel(p_signup uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  g public.class_signups;
+  c public.class_sessions;
+  by_admin boolean := public.is_admin();
+  late boolean;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into g from public.class_signups where id = p_signup for update;
+  if not found or (g.user_id <> auth.uid() and not by_admin) then raise exception 'Sign-up not found.'; end if;
+  select * into c from public.class_sessions where id = g.class_id for update;
+  if g.status not in ('booked', 'awaiting_payment', 'waitlist') then raise exception 'This sign-up can no longer be cancelled.'; end if;
+  if c.starts_at <= now() then raise exception 'This class has already started.'; end if;
+  late := g.status = 'booked' and not by_admin and g.price > 0
+          and c.starts_at - make_interval(hours => public._config('class_cancel_hours')::int) < now();
+  if late then
+    update public.class_signups set status = 'late_cancel', updated_at = now() where id = g.id;
+  else
+    update public.class_signups set status = 'cancelled', updated_at = now(),
+      refund_status = case when pay_status = 'paid' and price > 0 then case when pay_method = 'online' then 'due' else 'manual' end end
+    where id = g.id;
+  end if;
+  if g.status = 'booked' then
+    perform public._push(public._trainer_user(c.trainer_id), 'Signed out: ' || c.title,
+      (select name from public.profiles where id = g.user_id) || ' · ' || public._class_label(c) || ' · '
+        || public._class_taken(c.id) || '/' || c.capacity, 'profile.html#coach', 'class-' || c.id || '-roster');
+  end if;
+  perform public._class_promote(c.id);
+  return public._class_json(c, g.user_id) || jsonb_build_object('late', late);
+end $$;
+
+-- Plan a class (the trainer for themselves, an admin for anyone), optionally every week for up to 12 weeks.
+-- Price and trainer fee come from the settings; only an admin can change them.
+create or replace function public.class_create(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  admin boolean := public.is_admin();
+  trainer text := coalesce(nullif(p ->> 'trainerId', ''), public._my_trainer());
+  ttl text := btrim(coalesce(p ->> 'title', ''));
+  d date := nullif(p ->> 'date', '')::date;
+  tm time := nullif(p ->> 'time', '')::time;
+  mins integer := coalesce(nullif(p ->> 'minutes', '')::int, 60);
+  cap integer := coalesce(nullif(p ->> 'capacity', '')::int, public._config('class_capacity')::int);
+  cost numeric := case when admin and nullif(p ->> 'price', '') is not null then (p ->> 'price')::numeric
+                       else public._config('class_price')::numeric end;
+  fee numeric := case when admin and nullif(p ->> 'trainerFee', '') is not null then (p ->> 'trainerFee')::numeric
+                      else public._config('class_trainer_fee')::numeric end;
+  weeks integer := least(greatest(coalesce(nullif(p ->> 'repeatWeeks', '')::int, 1), 1), 12);
+  loc text := left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80);
+  remark text := left(btrim(coalesce(p ->> 'note', '')), 300);
+  series uuid := case when weeks > 1 then gen_random_uuid() end;
+  start timestamptz;
+  c public.class_sessions;
+  made jsonb := '[]'::jsonb;
+  skipped integer := 0;
+begin
+  if uid is null then raise exception 'Log in first.'; end if;
+  if trainer is null or not public._can_coach(trainer) then raise exception 'Only the trainer or an admin can plan a group class.'; end if;
+  if not exists (select 1 from public.trainers where id = trainer and active) then raise exception 'Unknown trainer.'; end if;
+  if char_length(ttl) < 2 or char_length(ttl) > 40 then raise exception 'Give the class a name (2 to 40 characters).'; end if;
+  if d is null or tm is null then raise exception 'Pick a date and a start time.'; end if;
+  if mins < 15 or mins > 240 then raise exception 'A class lasts between 15 and 240 minutes.'; end if;
+  if cap < 2 or cap > 60 then raise exception 'A class has between 2 and 60 places.'; end if;
+  if cost < 0 or cost > 500 or fee < 0 or fee > 1000 then raise exception 'Check the price and the trainer fee.'; end if;
+  for i in 0 .. weeks - 1 loop
+    start := ((d + 7 * i) + tm) at time zone 'Europe/Brussels';
+    if start <= now() + interval '1 hour' then
+      if i = 0 then raise exception 'Plan a group class at least 1 hour ahead.'; end if;
+      skipped := skipped + 1; continue;
+    end if;
+    if exists (select 1 from public.class_sessions o where o.trainer_id = trainer and o.status = 'scheduled'
+               and tstzrange(o.starts_at, o.starts_at + make_interval(mins => o.minutes)) && tstzrange(start, start + make_interval(mins => mins))) then
+      if i = 0 then raise exception 'This trainer already has a group class at that time.'; end if;
+      skipped := skipped + 1; continue;
+    end if;
+    if exists (select 1 from public.bookings k where k.trainer_id = trainer and k.status in ('awaiting_payment', 'pending', 'confirmed')
+               and tstzrange(public._slot_start(k.day, k.hour), public._slot_start(k.day, k.hour) + interval '1 hour')
+                   && tstzrange(start, start + make_interval(mins => mins))) then
+      if i = 0 then raise exception 'This trainer has a 1:1 session at that time.'; end if;
+      skipped := skipped + 1; continue;
+    end if;
+    insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by)
+    values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid)
+    returning * into c;
+    insert into public.chat_threads (class_id) values (c.id) on conflict do nothing;
+    made := made || jsonb_build_array(public._class_json(c, uid));
+  end loop;
+  return jsonb_build_object('created', made, 'skipped', skipped);
+end $$;
+
+-- Cancel a class (or it and the rest of its weekly series): everyone signed up is told, paid places are refunded
+create or replace function public.class_cancel_class(p_class uuid, p_reason text default '', p_series boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  first public.class_sessions;
+  c public.class_sessions;
+  g public.class_signups;
+  why text := left(btrim(coalesce(p_reason, '')), 200);
+  n integer := 0;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into first from public.class_sessions where id = p_class;
+  if not found or not public._can_lead(p_class) then raise exception 'Group class not found.'; end if;
+  for c in
+    select * from public.class_sessions
+    where status = 'scheduled' and starts_at > now()
+      and (id = p_class or (p_series and first.series_id is not null and series_id = first.series_id and starts_at >= first.starts_at))
+    order by starts_at for update
+  loop
+    update public.class_sessions set status = 'cancelled', cancel_reason = why where id = c.id;
+    for g in select * from public.class_signups where class_id = c.id and status in ('booked', 'awaiting_payment', 'waitlist', 'late_cancel') for update loop
+      update public.class_signups set status = 'cancelled', updated_at = now(),
+        refund_status = case when pay_status = 'paid' and price > 0 then case when pay_method = 'online' then 'due' else 'manual' end end
+      where id = g.id;
+      perform public._push(g.user_id, 'Class cancelled', c.title || ' · ' || public._class_label(c)
+        || case when why <> '' then ' · ' || why else '' end
+        || ' · ' || case when g.pay_status = 'paid' and g.price > 0 then 'Your payment is refunded' else 'No costs' end,
+        'profile.html#classes', 'class-' || c.id);
+    end loop;
+    n := n + 1;
+  end loop;
+  if n = 0 then raise exception 'This class can no longer be cancelled.'; end if;
+  return jsonb_build_object('cancelled', n);
+end $$;
+
+-- The class list for the trainer or an admin: everyone signed up and on the waitlist, with payment and health flags
+create or replace function public.class_roster(p_class uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c public.class_sessions;
+  class_day date;
+begin
+  if auth.uid() is null or not public._can_lead(p_class) then raise exception 'Group class not found.'; end if;
+  perform public._expire_class_payments();
+  select * into c from public.class_sessions where id = p_class;
+  class_day := (c.starts_at at time zone 'Europe/Brussels')::date;
+  return public._class_json(c, auth.uid()) || public._class_money(c.id) || jsonb_build_object(
+    'people', coalesce((select jsonb_agg(public._class_person_json(g)
+                          order by case g.status when 'waitlist' then 2 when 'late_cancel' then 3 else 1 end, g.updated_at, g.id)
+                        from public.class_signups g where g.class_id = c.id and g.status <> 'cancelled'), '[]'::jsonb),
+    'canCheck', c.status <> 'cancelled' and now() >= c.starts_at - interval '30 minutes'
+                and (public.is_admin() or (now() at time zone 'Europe/Brussels')::date <= class_day + public._config('reward_window_days')::int),
+    'trainerFee', c.trainer_fee, 'finishedAt', c.finished_at, 'payoutAt', c.payout_at);
+end $$;
+
+-- Tick someone off as present (they get the class XP right away) or untick a mistake (the XP goes back)
+create or replace function public.class_mark(p_signup uuid, p_present boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  g public.class_signups;
+  c public.class_sessions;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into g from public.class_signups where id = p_signup for update;
+  if not found or not public._can_lead(g.class_id) then raise exception 'Sign-up not found.'; end if;
+  select * into c from public.class_sessions where id = g.class_id;
+  if c.status = 'cancelled' then raise exception 'This class was cancelled.'; end if;
+  if now() < c.starts_at - interval '30 minutes' then raise exception 'You can tick people off from 30 minutes before the start.'; end if;
+  if not public.is_admin()
+     and (now() at time zone 'Europe/Brussels')::date > (c.starts_at at time zone 'Europe/Brussels')::date + public._config('reward_window_days')::int then
+    raise exception 'The % day window has passed. Ask the admin.', public._config('reward_window_days');
+  end if;
+  if p_present and g.status <> 'attended' then
+    if g.status not in ('booked', 'no_show', 'waitlist', 'late_cancel', 'awaiting_payment') then
+      raise exception 'This person isn''t signed up anymore.';
+    end if;
+    update public.class_signups set status = 'attended', xp = c.xp, updated_at = now() where id = g.id;
+    perform public._grant_xp(g.user_id, c.xp, 'Group class: ' || c.title);
+    perform public._check_achievements(g.user_id);
+    perform public._push(g.user_id, '+' || c.xp || ' XP earned!', 'Group class: ' || c.title || ' · Keep levelling up.',
+                         'profile.html', 'class-' || c.id || '-xp');
+  elsif not p_present and g.status = 'attended' then
+    update public.class_signups set status = case when c.status = 'done' then 'no_show' else 'booked' end, xp = 0, updated_at = now()
+      where id = g.id;
+    if g.xp > 0 then perform public._grant_xp(g.user_id, -g.xp, 'Correction: group class ' || c.title); end if;
+  end if;
+  return public.class_roster(c.id);
+end $$;
+
+-- Paid at the class (cash, Payconiq …): the trainer or an admin notes it; untick undoes it
+create or replace function public.class_mark_paid(p_signup uuid, p_paid boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare g public.class_signups;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into g from public.class_signups where id = p_signup for update;
+  if not found or not public._can_lead(g.class_id) then raise exception 'Sign-up not found.'; end if;
+  if p_paid and g.pay_status = 'unpaid' then
+    update public.class_signups set pay_status = 'paid', pay_method = 'in_person', paid_at = now(),
+      status = case when status = 'awaiting_payment' then 'booked' else status end where id = g.id;
+  elsif not p_paid and g.pay_status = 'paid' and g.pay_method = 'in_person' and g.price > 0 and g.refund_status is null then
+    update public.class_signups set pay_status = 'unpaid', paid_at = null where id = g.id;
+  end if;
+  return public.class_roster(g.class_id);
+end $$;
+
+-- After the class: whoever wasn't ticked off is a no-show (charged, no XP), the waitlist closes,
+-- the trainer gets coaching XP and their fee counts as earned
+create or replace function public.class_finish(p_class uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c public.class_sessions;
+  present integer;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into c from public.class_sessions where id = p_class for update;
+  if not found or not public._can_lead(p_class) then raise exception 'Group class not found.'; end if;
+  if c.status = 'cancelled' then raise exception 'This class was cancelled.'; end if;
+  if c.status = 'done' then raise exception 'This class is already finished.'; end if;
+  if now() < c.starts_at then raise exception 'The class hasn''t started yet.'; end if;
+  update public.class_signups set status = 'no_show', updated_at = now() where class_id = c.id and status in ('booked', 'awaiting_payment');
+  update public.class_signups set status = 'cancelled', updated_at = now() where class_id = c.id and status = 'waitlist';
+  update public.class_sessions set status = 'done', finished_at = now() where id = c.id;
+  select count(*) into present from public.class_signups where class_id = c.id and status = 'attended';
+  if present > 0 then
+    perform public._grant_xp(public._trainer_user(c.trainer_id), 100 + 10 * present,
+                             'Led group class: ' || c.title || ' (' || present || ')');
+  end if;
+  return public.class_roster(c.id);
+end $$;
+
+-- Classes the caller leads (an admin: all of them), from p_days ago on, with the counts and money
+create or replace function public.class_manage_list(p_days integer default 35)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  admin boolean := public.is_admin();
+  mine text := public._my_trainer();
+begin
+  if auth.uid() is null or (not admin and mine is null) then return '[]'::jsonb; end if;
+  perform public._expire_class_payments();
+  return coalesce((select jsonb_agg(public._class_json(c, auth.uid()) || public._class_money(c.id) || jsonb_build_object(
+      'trainerFee', c.trainer_fee, 'finishedAt', c.finished_at, 'payoutAt', c.payout_at,
+      'canFinish', c.status = 'scheduled' and now() >= c.starts_at,
+      -- places paid at the class that must be given back by hand (cancelled class or free sign-out)
+      'refunds', case when admin then coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', p.name, 'price', g.price))
+                   from public.class_signups g join public.profiles p on p.id = g.user_id
+                   where g.class_id = c.id and g.refund_status = 'manual'), '[]'::jsonb) else '[]'::jsonb end) order by c.starts_at)
+    from public.class_sessions c
+    where (admin or c.trainer_id = mine)
+      and c.starts_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 35), 1), 800))), '[]'::jsonb);
+end $$;
 
 -- ---------------------------------------------------------
 -- Permissions: helpers are private, the website calls only these
@@ -2735,6 +3500,40 @@ grant execute on function public.slot_status(date, date) to anon, authenticated;
 grant execute on function public.trainer_stats() to anon, authenticated;
 grant execute on function public.record_order(text, jsonb) to anon, authenticated;
 grant execute on function public.calendar_feed() to anon, authenticated;
+
+-- Group classes: helpers private; the class list is public, the rest needs an account
+revoke execute on function public._class_label(public.class_sessions) from public, anon, authenticated;
+revoke execute on function public._class_taken(uuid) from public, anon, authenticated;
+revoke execute on function public._can_lead(uuid) from public, anon, authenticated;
+revoke execute on function public._class_json(public.class_sessions, uuid) from public, anon, authenticated;
+revoke execute on function public._class_person_json(public.class_signups) from public, anon, authenticated;
+revoke execute on function public._class_money(uuid) from public, anon, authenticated;
+revoke execute on function public._class_promote(uuid) from public, anon, authenticated;
+revoke execute on function public._expire_class_payments() from public, anon, authenticated;
+revoke execute on function public._class_mine_json(uuid) from public, anon, authenticated;
+revoke execute on function public._class_chat_member(uuid) from public, anon, authenticated;
+revoke execute on function public._push_class_reminders() from public, anon, authenticated;
+revoke execute on function public.class_signup(uuid, text) from public, anon;
+revoke execute on function public.class_cancel(uuid) from public, anon;
+revoke execute on function public.class_create(jsonb) from public, anon;
+revoke execute on function public.class_cancel_class(uuid, text, boolean) from public, anon;
+revoke execute on function public.class_roster(uuid) from public, anon;
+revoke execute on function public.class_mark(uuid, boolean) from public, anon;
+revoke execute on function public.class_mark_paid(uuid, boolean) from public, anon;
+revoke execute on function public.class_finish(uuid) from public, anon;
+revoke execute on function public.class_manage_list(integer) from public, anon;
+revoke execute on function public.class_mark_refunded(uuid) from public, anon;
+grant execute on function public.class_list(date, date) to anon, authenticated;
+grant execute on function public.class_signup(uuid, text) to authenticated;
+grant execute on function public.class_cancel(uuid) to authenticated;
+grant execute on function public.class_create(jsonb) to authenticated;
+grant execute on function public.class_cancel_class(uuid, text, boolean) to authenticated;
+grant execute on function public.class_roster(uuid) to authenticated;
+grant execute on function public.class_mark(uuid, boolean) to authenticated;
+grant execute on function public.class_mark_paid(uuid, boolean) to authenticated;
+grant execute on function public.class_finish(uuid) to authenticated;
+grant execute on function public.class_manage_list(integer) to authenticated;
+grant execute on function public.class_mark_refunded(uuid) to authenticated;
 
 -- Hand out the free session vouchers members already earned before rewards existed
 do $$ begin perform public._check_rewards(id) from public.profiles; end $$;

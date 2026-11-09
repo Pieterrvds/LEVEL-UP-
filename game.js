@@ -298,7 +298,8 @@ const LevelUp = (() => {
   // Public price list (the server's app_config decides; these are the fallbacks)
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
-    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false
+    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false,
+    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
@@ -314,7 +315,8 @@ const LevelUp = (() => {
 
   // Changes that can queue a push notification: send it right away
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
-    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp"]);
+    "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp",
+    "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -336,6 +338,7 @@ const LevelUp = (() => {
         trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
       })),
       packs: (data.packs || []).map(normalisePack),
+      classes: (data.classes || []).map(normaliseClass),
       rewards: normaliseRewards(data.rewards),
       introEligible: Boolean(data.introEligible),
       streak: { weeks: Number(data.streak?.weeks) || 0, thisWeek: Boolean(data.streak?.thisWeek),
@@ -422,6 +425,81 @@ const LevelUp = (() => {
     }
   }
 
+  // ---------- Group classes ----------
+  // class_list rows for the bookable weeks (the schedule); a player's own classes come with their data
+  let classes = [];
+  function normaliseClass(c) {
+    return {
+      ...c, price: Number(c.price), capacity: Number(c.capacity), taken: Number(c.taken), waitlist: Number(c.waitlist),
+      xp: Number(c.xp), minutes: Number(c.minutes), start: new Date(c.startsAt), end: new Date(c.endsAt),
+      hour: Number(String(c.time).slice(0, 2)),
+      // shown in Brussels time whatever the phone's time zone: the day at noon, the end as HH:MM
+      day: new Date(`${c.date}T12:00:00`),
+      endTime: (() => { const [h, m] = String(c.time).split(":").map(Number); const t = h * 60 + m + Number(c.minutes); return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; })(),
+      mine: c.mine ? { ...c.mine, price: Number(c.mine.price), xp: Number(c.mine.xp), waitPos: c.mine.waitPos == null ? null : Number(c.mine.waitPos) } : null
+    };
+  }
+  async function loadClasses() {
+    try {
+      const rows = await call("class_list", { p_from: dateKey(startOfWeek(0)), p_to: dateKey(startOfWeek(BOOKING_WEEKS_AHEAD)) });
+      classes = (rows || []).map(normaliseClass);
+    } catch (err) {
+      console.error("Loading group classes failed:", err);
+    }
+  }
+  const classesOn = (key) => classes.filter((c) => c.date === key && (c.status !== "cancelled" || c.mine));
+  const classById = (id) => classes.find((c) => c.id === id) || (player?.classes || []).find((c) => c.id === id) || null;
+  const classStarted = (c) => c.start <= new Date();
+  const classFull = (c) => c.taken >= c.capacity;
+  // Your place counts as "in" (booked, waiting for the payment, present) or on the waitlist
+  const classIn = (c) => ["booked", "awaiting_payment", "attended"].includes(c?.mine?.status);
+  const CLASS_PAYABLE = ["awaiting_payment", "booked", "attended", "no_show", "late_cancel"];
+  const canPayClassOnline = (c) => pricing.onlinePayments && c?.mine && c.mine.payStatus === "unpaid" && c.mine.price > 0 && CLASS_PAYABLE.includes(c.mine.status);
+  const isClassLateCancel = (c) => c?.mine?.status === "booked" && c.mine.price > 0 && new Date(c.freeCancelUntil) <= new Date();
+  function classPayLabel(m) {
+    if (!m) return "";
+    if (m.price <= 0) return "Free";
+    if (m.refundStatus === "manual") return "Refund at the HQ";
+    if (m.refundStatus === "due" || m.refundStatus === "processing") return "Refund on its way";
+    if (m.payStatus === "refunded") return "Refunded";
+    if (m.payStatus === "paid") return m.payMethod === "online" ? "Paid online ✓" : "Paid ✓";
+    if (m.status === "awaiting_payment") return "Payment not finished";
+    if (["cancelled", "waitlist"].includes(m.status)) return "";
+    return "Pay at the class";
+  }
+  async function afterClassChange() {
+    await Promise.all([refreshPlayer({ announce: true }), document.getElementById("weekBoard") ? loadClasses() : null, loadSlots()]);
+    emit();
+  }
+  async function signupClass(id, pay = "in_person") {
+    const c = normaliseClass(await call("class_signup", { p_class: id, p_pay: pay }));
+    await afterClassChange();
+    return c;
+  }
+  async function cancelClassSignup(signupId) {
+    const r = await call("class_cancel", { p_signup: signupId });
+    processRefunds();
+    await afterClassChange();
+    return r;
+  }
+  const classRoster = (id) => call("class_roster", { p_class: id });
+  const classMark = (signupId, present) => call("class_mark", { p_signup: signupId, p_present: present });
+  const classMarkPaid = (signupId, paid) => call("class_mark_paid", { p_signup: signupId, p_paid: paid });
+  const classFinish = (id) => call("class_finish", { p_class: id });
+  const classManageList = (days = 35) => call("class_manage_list", { p_days: days }).then((rows) => (rows || []).map(normaliseClass));
+  const classMarkRefunded = (signupId) => call("class_mark_refunded", { p_signup: signupId });
+  async function classCreate(p) {
+    const r = await call("class_create", { p });
+    await afterClassChange();
+    return r;
+  }
+  async function classCancel(id, reason, series = false) {
+    const r = await call("class_cancel_class", { p_class: id, p_reason: reason || "", p_series: series });
+    processRefunds();
+    await afterClassChange();
+    return r;
+  }
+
   async function loadTrainerStats() {
     try {
       const rows = await call("trainer_stats");
@@ -444,6 +522,9 @@ const LevelUp = (() => {
         price: Number(p.price), fee: Number(p.fee), introPrice: Number(p.introPrice), duoPrice: Number(p.duoPrice),
         packs: (p.packs || []).map((o) => ({ size: Number(o.size), price: Number(o.price) })),
         onlinePayments: Boolean(p.onlinePayments),
+        classPrice: Number(p.classPrice ?? pricing.classPrice), classXp: Number(p.classXp ?? pricing.classXp),
+        classCapacity: Number(p.classCapacity ?? pricing.classCapacity), classCancelHours: Number(p.classCancelHours ?? pricing.classCancelHours),
+        classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee),
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
     } catch (err) {
@@ -1109,18 +1190,23 @@ const LevelUp = (() => {
     params.delete("payment");
     history.replaceState(null, "", `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`);
     const [type, id] = ref.split(":");
+    const myClass = () => (player.classes || []).find((c) => c.mine?.id === id);
     const isPaid = () => type === "pack"
       ? player.packs.find((pk) => pk.id === id)?.status === "paid"
+      : type === "class" ? myClass()?.mine.payStatus === "paid"
       : ["paid"].includes(player.bookings.find((b) => b.id === id)?.payStatus);
     toast({ title: "Checking your payment…", text: "One moment", icon: "€" });
-    const gaveUp = () => type === "booking" && player.bookings.find((b) => b.id === id)?.status === "expired";
+    const gaveUp = () => (type === "booking" && player.bookings.find((b) => b.id === id)?.status === "expired")
+      || (type === "class" && myClass()?.mine.status === "cancelled");
     for (let i = 0; i < 10 && !isPaid() && !gaveUp(); i++) {
       await new Promise((r) => setTimeout(r, 2000));
       await refreshPlayer();
     }
     emit();
     if (isPaid()) {
-      if (type === "pack") {
+      if (type === "class") {
+        toast({ title: "Payment received", text: `You're in: ${myClass()?.title || "group class"}`, icon: "✓", tone: "green" });
+      } else if (type === "pack") {
         const pk = player.packs.find((x) => x.id === id);
         notifyPack({ ...pk, name: player.name, email: player.email }, "paid");
         toast({ title: "Payment received", text: `${pk.size} session credits are active`, icon: "★", tone: "green" });
@@ -1499,12 +1585,13 @@ const LevelUp = (() => {
       if (event === "INITIAL_SESSION") return; // startup already loaded everything for a visitor
       player = null;
       welcomed = false;
-      await Promise.all([loadSlots(), onHome ? loadLeaderboard() : null]);
+      await Promise.all([loadSlots(), onHome ? loadLeaderboard() : null, document.getElementById("weekBoard") ? loadClasses() : null]);
       emit();
       return;
     }
     if ((event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") && player) return;
-    await Promise.all([refreshPlayer(), loadSlots(), onHome ? loadLeaderboard() : null, loadTrainerStats(), loadOpeningHours()]);
+    await Promise.all([refreshPlayer(), loadSlots(), onHome ? loadLeaderboard() : null, loadTrainerStats(), loadOpeningHours(),
+      document.getElementById("weekBoard") ? loadClasses() : null]);
     if (!wasLoggedIn && player && !welcomed) {
       welcomed = true;
       call("touch_login").catch(() => {});
@@ -1727,6 +1814,7 @@ const LevelUp = (() => {
   // ---------- Startup ----------
   // High scores and reviews only show on the home page; other pages skip loading them.
   const onHome = Boolean(document.getElementById("scores"));
+  const onSchedule = Boolean(document.getElementById("weekBoard"));
   // Everything loads at once; only the calendar and the player wait for the trainer list
   // (so new trainers' hours and names are known). The loading screen shows the real progress.
   const ready = (async () => {
@@ -1744,6 +1832,7 @@ const LevelUp = (() => {
           bootTask(loadPricing(), "Loading prices…"),
           bootTask(loadOpeningHours(), "Loading opening hours…"),
           bootTask(loadSlots(), "Loading open sessions…"),
+          onSchedule ? bootTask(loadClasses(), "Loading group classes…") : null,
           bootTask(loadTrainerStats(), "Loading trainer levels…"),
           onHome ? bootTask(loadLeaderboard(), "Loading high scores…") : null,
           onHome ? bootTask(loadReviews(), "Loading reviews…") : null
@@ -2808,6 +2897,9 @@ const LevelUp = (() => {
     applyAsTrainer, reviewApplication, loadTrainerList,
     chatList, chatThread, chatSend, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
-    openAuth, toast
+    openAuth, toast,
+    getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
+    signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classCancel, loadClasses,
+    refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); }
   };
 })();

@@ -49,16 +49,23 @@ function listTime(at) {
 
 // The other person's photo: a coach's team photo, else their profile photo or first letter
 function peerAvatar(peer, size = "") {
+  if (peer.group) return `<span class="avatar group-avatar ${size}" aria-hidden="true">👥</span>`;
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   const photo = coach && !coach.dynamic ? coach.img : peer.avatarUrl;
   if (photo) return `<span class="avatar has-photo ${size}" aria-hidden="true"><img src="${esc(photo)}" alt="" loading="lazy" decoding="async"${coach && size === "head" ? ` data-coach="${esc(coach.id)}"` : ""}></span>`;
   return LevelUp.avatarHtml({ name: peer.name, xp: 0 }, size);
 }
 function peerRole(peer) {
+  if (peer.group) {
+    const closes = peer.closesAt ? new Date(peer.closesAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "";
+    return `Group chat · ${peer.members} member${peer.members === 1 ? "" : "s"}${closes ? ` · open until ${closes}` : ""}`;
+  }
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   return coach?.role || peer.role || "";
 }
-const peerName = (peer) => (peer.trainerId ? LevelUp.trainerById(peer.trainerId)?.name : null) || peer.name || "";
+const peerName = (peer) => peer.group && peer.startsAt
+  ? `${peer.title} · ${new Date(peer.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+  : (peer.trainerId ? LevelUp.trainerById(peer.trainerId)?.name : null) || peer.name || "";
 
 // ---------- Rendering ----------
 function renderLoggedOut() {
@@ -205,6 +212,7 @@ function renderThread() {
           <span>${esc(peerRole(t))}</span>
         </div>
         ${coach && t.side === "client" ? `<a href="index.html#schedule" class="btn btn-small btn-primary chat-book" data-book-link="${esc(coach.id)}">Book</a>` : ""}
+        ${t.group ? `<a href="profile.html#classes" class="btn btn-small btn-ghost chat-book">My classes</a>` : ""}
       </header>
       <div class="chat-messages" id="chatMessages" data-no-i18n></div>
       <form class="chat-compose" id="chatCompose">
@@ -238,6 +246,10 @@ function renderMessages() {
   const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
   const all = [...state.messages, ...state.pending];
   if (!all.length) {
+    if (state.active.group) {
+      list.innerHTML = `<p class="chat-hello">${esc(LevelUp_t("Say hi to the class 👋"))}<br><small>${esc(LevelUp_t("Only the people signed up for this class and the trainer can read this chat. It closes a day after the class."))}</small></p>`;
+      return;
+    }
     const first = peerName(state.active).split(" ")[0];
     list.innerHTML = `<p class="chat-hello">${esc(LevelUp_t(`Say hi to ${first} 👋`))}<br><small>${esc(LevelUp_t("Only the two of you can read this chat."))}</small></p>`;
     return;
@@ -249,9 +261,12 @@ function renderMessages() {
     const at = new Date(m.at);
     if (!prev || !sameDay(new Date(prev.at), at)) html += `<p class="chat-day"><span>${esc(LevelUp_t(dayLabel(m.at)))}</span></p>`;
     const next = all[i + 1];
-    const groupEnd = !next || next.mine !== m.mine || new Date(next.at) - at > 5 * 60e3;
+    const groupEnd = !next || next.mine !== m.mine || next.name !== m.name || new Date(next.at) - at > 5 * 60e3;
+    // class chat: the sender's name above the first of their messages
+    const showName = state.active.group && !m.mine && (!prev || prev.mine || prev.name !== m.name || at - new Date(prev.at) > 5 * 60e3);
     html += `
-      <div class="chat-msg ${m.mine ? "mine" : "theirs"} ${groupEnd ? "end" : ""} ${m.pending ? "pending" : ""} ${m.failed ? "failed" : ""}">
+      <div class="chat-msg ${m.mine ? "mine" : "theirs"} ${groupEnd ? "end" : ""} ${m.coach ? "coach" : ""} ${m.pending ? "pending" : ""} ${m.failed ? "failed" : ""}">
+        ${showName ? `<span class="chat-from">${esc(m.name)}${m.coach ? ` · ${esc(LevelUp_t("Coach"))}` : ""}</span>` : ""}
         <p>${esc(m.body)}</p>
         ${groupEnd ? `<span class="chat-meta">${timeLabel(m.at)}${m.failed ? ` · ${esc(LevelUp_t("Not sent"))}` : ""}${lastMineRead && m.id === lastMineRead.id ? ` · ${esc(LevelUp_t("Seen"))}` : ""}</span>` : ""}
       </div>`;

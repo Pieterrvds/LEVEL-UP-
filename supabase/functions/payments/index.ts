@@ -3,7 +3,7 @@
 // (Mollie's webhook has no Supabase login; /create checks the player itself).
 // Secrets: MOLLIE_API_KEY (test_… first, live_… when ready), optional SITE_URL.
 //
-//   POST /payments/create   { type: "booking" | "pack", id }  (player's Authorization header)
+//   POST /payments/create   { type: "booking" | "pack" | "class", id }  (player's Authorization header; class = a group class sign-up)
 //        -> { checkoutUrl }  the page sends the player to Mollie
 //   POST /payments/webhook  Mollie posts "id=tr_…" whenever a payment changes
 //   POST /payments/refunds  runs the refunds the database marked as due
@@ -46,7 +46,7 @@ async function create(req: Request) {
   const auth = req.headers.get("Authorization") ?? "";
   if (!auth.startsWith("Bearer ")) return json({ error: "Log in first." }, 401);
   const { type, id } = await req.json().catch(() => ({}));
-  if (!["booking", "pack"].includes(type) || !id) return json({ error: "Invalid payment." }, 400);
+  if (!["booking", "pack", "class"].includes(type) || !id) return json({ error: "Invalid payment." }, 400);
 
   // Runs as the player: the database checks it's theirs and still payable
   const asPlayer = createClient(SUPABASE_URL, ANON_KEY, {
@@ -78,7 +78,7 @@ async function refund(mollieId: string, amount: number | string, description: st
   });
 }
 
-// Refunds the database marked as due (declined, expired or freely cancelled after paying)
+// Refunds the database marked as due (declined, expired or freely cancelled after paying; group class places too)
 async function processRefunds() {
   const { data: due, error } = await admin.rpc("claim_refunds");
   if (error) throw new Error(error.message);

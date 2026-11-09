@@ -3,7 +3,7 @@
 const root = document.getElementById("profileRoot");
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, statsEdit: null, statsLogOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -172,6 +172,63 @@ function renderSessions() {
     </section>`;
 }
 
+// Group classes you signed up for: what's coming (pay, chat, sign out) and what you did
+const CLASS_STATUS = {
+  booked: ["Signed up", "confirmed"], awaiting_payment: ["Not paid yet", "pending"], waitlist: ["Waitlist", "pending"],
+  attended: ["Present", "completed"], no_show: ["No-show · charged", "declined"], late_cancel: ["Late sign-out · charged", "declined"],
+  cancelled: ["Cancelled", "declined"]
+};
+function renderMyClasses(player) {
+  const now = new Date();
+  const list = player.classes || [];
+  const upcoming = list.filter((c) => c.status !== "cancelled" && c.end > now && ["booked", "awaiting_payment", "waitlist", "attended"].includes(c.mine?.status));
+  const past = list.filter((c) => !upcoming.includes(c)).sort((a, b) => b.start - a.start);
+  const row = (c) => {
+    const t = LevelUp.trainerById(c.trainerId);
+    const m = c.mine;
+    const status = c.status === "cancelled" ? "cancelled" : m.status;
+    const [label, cls] = CLASS_STATUS[status] || [status, ""];
+    const started = LevelUp.classStarted(c);
+    const pay = LevelUp.classPayLabel(m);
+    const notes = [
+      `${c.day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${c.time}`,
+      m.status === "waitlist" ? `#${m.waitPos} on the waitlist` : `${c.taken}/${c.capacity} places`,
+      c.status === "cancelled" && c.cancelReason ? `“${esc(c.cancelReason)}”` : "",
+      ["booked"].includes(m.status) && !started ? (LevelUp.isClassLateCancel(c) ? "Signing out now is charged" : `Free sign-out until ${fmtDeadline(c.freeCancelUntil)}`) : "",
+      pay ? esc(pay) : ""
+    ].filter(Boolean).join(" · ");
+    const actions = [
+      LevelUp.classIn(c) && c.chatId && c.chatOpen ? `<a class="btn btn-small btn-ghost" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Chat</a>` : "",
+      LevelUp.canPayClassOnline(c) ? `<button type="button" class="btn btn-small btn-primary" data-class-pay="${m.id}">Pay online</button>` : "",
+      !started && ["booked", "awaiting_payment", "waitlist"].includes(m.status) && c.status === "scheduled"
+        ? `<button type="button" class="btn btn-small btn-ghost" data-class-leave="${m.id}" data-late="${LevelUp.isClassLateCancel(c)}">${m.status === "waitlist" ? "Leave waitlist" : "Sign out"}</button>` : "",
+      m.status === "attended" ? `<span class="log-xp">+${m.xp} XP</span>` : ""
+    ].join("");
+    return `
+      <li class="session-row" style="--c:${t?.color || "#7cff6b"}">
+        ${t?.img ? `<img src="${t.img}" alt="" data-coach="${t.id}">` : `<span class="avatar" aria-hidden="true">👥</span>`}
+        <div>
+          <p class="session-trainer">👥 ${esc(c.title)} <span class="status-chip ${cls}">${label}</span></p>
+          <p class="muted">${esc(t?.short || "")} · ${notes}</p>
+        </div>
+        <div class="session-actions">${actions}</div>
+      </li>`;
+  };
+  return `
+    <section class="panel panel-wide" id="classes">
+      <div class="panel-head">
+        <h2>My group classes</h2>
+        <a href="index.html#schedule" class="btn btn-small">See classes</a>
+      </div>
+      ${upcoming.length ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
+        : `<p class="muted">Train together: sign up for a group class on the schedule (+${LevelUp.getPricing().classXp} XP each time you're there).</p>`}
+      ${past.length ? `
+        <button type="button" class="btn btn-ghost btn-small history-btn" id="classHistoryBtn" aria-expanded="${Boolean(state.classHistoryOpen)}">
+          ${state.classHistoryOpen ? "Hide history ▲" : `History · ${past.length} class${past.length === 1 ? "" : "es"} ▼`}</button>
+        <ul class="session-list" ${state.classHistoryOpen ? "" : "hidden"}>${past.map(row).join("")}</ul>` : ""}
+    </section>`;
+}
+
 // Trainer application: status, or a form to apply
 function renderApplication(player) {
   if (player.trainerId) return "";
@@ -313,13 +370,13 @@ function renderEarnings() {
   if (e.isOwner) {
     return `
       <div class="earnings">
-        <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} · you keep the full ${eur(e.price)}</span></div>
+        <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"}${e.classes ? ` · ${e.classes} group class${e.classes === 1 ? "" : "es"}` : ""} · you keep it all</span></div>
         <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed, not yet held</span></div>
       </div>`;
   }
   return `
     <div class="earnings">
-      <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} × ${eur(e.fee)}${e.charged ? ` · incl. ${e.charged} no-show/late cancel` : ""}</span></div>
+      <div class="tile"><span class="tile-label">Earned</span><span class="tile-value">${eur(e.earned)}</span><span class="tile-note">${e.sessions} session${e.sessions === 1 ? "" : "s"} × ${eur(e.fee)}${e.classes ? ` · ${e.classes} group class${e.classes === 1 ? "" : "es"}` : ""}${e.charged ? ` · incl. ${e.charged} no-show/late cancel` : ""}</span></div>
       <div class="tile highlight"><span class="tile-label">To receive</span><span class="tile-value">${eur(e.owed)}</span><span class="tile-note">From LEVEL-UP</span></div>
       <div class="tile"><span class="tile-label">Paid out</span><span class="tile-value">${eur(e.paid)}</span><span class="tile-note">${e.lastPayout ? `Last on ${formatDate(e.lastPayout)}` : "No payouts yet"}</span></div>
       <div class="tile"><span class="tile-label">Expected</span><span class="tile-value">${eur(e.expected)}</span><span class="tile-note">Confirmed sessions</span></div>
@@ -369,6 +426,7 @@ function renderCoachPanel() {
       </div>
       ${renderEarnings()}
       ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}
+      <div class="gc-wrap" id="coachClasses"></div>
       <h3 class="panel-sub">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
       ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
           <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
@@ -742,6 +800,7 @@ function render() {
     ${inTab("overview", renderSummary(player))}
     <div class="panel-grid">
       ${inTab("overview", renderSessions())}
+      ${inTab("overview", renderMyClasses(player))}
       ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}
       ${inTab("rewards", renderRewards(player))}
@@ -789,6 +848,7 @@ function profileTabs(player) {
 
 function bindEvents(player) {
   if (LevelUp.isTrainer()) {
+    LevelUpClasses.mount(document.getElementById("coachClasses"));
     renderMyHours();
     document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
   }
@@ -916,6 +976,21 @@ function bindEvents(player) {
   }));
   document.getElementById("statsCancel")?.addEventListener("click", () => { state.statsEdit = null; render(); });
   document.getElementById("statsLogMore")?.addEventListener("click", () => { state.statsLogOpen = !state.statsLogOpen; render(); });
+
+  document.getElementById("classHistoryBtn")?.addEventListener("click", () => { state.classHistoryOpen = !state.classHistoryOpen; render(); });
+  root.querySelectorAll("[data-class-pay]").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "To the payment page…";
+    try { await LevelUp.startPayment("class", btn.dataset.classPay); } catch (err) { alert(err.message); btn.disabled = false; btn.textContent = "Pay online"; }
+  }));
+  root.querySelectorAll("[data-class-leave]").forEach((btn) => btn.addEventListener("click", async () => {
+    if (btn.dataset.late === "true" && !confirm("Signing out now is charged in full. Sign out anyway?")) return;
+    btn.disabled = true;
+    try {
+      const r = await LevelUp.cancelClassSignup(btn.dataset.classLeave);
+      LevelUp.toast({ title: r.late ? "Signed out (charged)" : "Signed out", text: r.title, icon: "✓" });
+    } catch (err) { alert(err.message); btn.disabled = false; }
+  }));
 
   const statsFormEl = document.getElementById("statsForm");
   statsFormEl?.addEventListener("submit", async (event) => {

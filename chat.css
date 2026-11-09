@@ -156,3 +156,9 @@
 .chat-search input { width: 100%; height: 42px; padding: 0 14px 0 40px; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; }
 .chat-search input:focus { border-color: var(--green-bright); outline: none; }
 .chat-row-main { overflow: hidden; } .chat-row-plus { flex-shrink: 0; }
+
+/* Group class chats: a group icon, the sender's name above their messages, the coach highlighted */
+.avatar.group-avatar { display: grid; place-items: center; font-size: 1.4rem; background: color-mix(in srgb, var(--green-bright) 20%, #000); border: 1px solid var(--green-dark); }
+.chat-from { margin: 6px 0 3px 4px; font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.chat-msg.coach .chat-from { color: var(--green-bright); }
+.chat-msg.theirs.coach p { border-color: var(--green-dark); }

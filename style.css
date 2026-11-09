@@ -2676,3 +2676,98 @@ dialog[open] { touch-action: pan-y; }
   .contact-form { display: none; }
   .contact-form.open { display: grid; }
 }
+
+/* =====================================================================
+   Group classes: on the schedule (with a fill bar of the places taken),
+   the sign-up dialog, the "Up next" board and the trainer/admin manager.
+   ===================================================================== */
+.slot.class-slot, .class-chip { position: relative; overflow: hidden; }
+.class-slot .class-fill { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--fill); background: var(--c); opacity: 0.9; }
+.slot.class-slot { background: color-mix(in srgb, var(--c) 22%, #000); border-style: solid; }
+.slot.class-slot .slot-name { white-space: normal; line-height: 1.25; }
+.slot.class-open:hover, .slot.class-full:hover { background: var(--c); color: #000; transform: translateY(-2px); }
+.slot.class-open:hover .slot-state, .slot.class-full:hover .slot-state { color: #000; }
+.slot.class-mine { background: var(--green-bright); color: #000; border-color: var(--green-bright); }
+.slot.class-mine .slot-state, .slot.class-wait .slot-state { color: #000; }
+.slot.class-wait { background: var(--gold); color: #000; border-color: var(--gold); }
+.slot.class-full .slot-state { color: var(--gold); }
+.slot.past.class-slot, .slot.class-done, .slot.cancelled { opacity: 0.55; }
+.slot.cancelled .slot-name { text-decoration: line-through; }
+
+/* Phones: one wide button per class in the day list */
+.class-chip {
+  width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 10px 12px 12px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
+  background: color-mix(in srgb, var(--c) 18%, #000); border: 2px solid var(--c); border-radius: 12px;
+}
+.class-chip .slot-time { display: block; font-size: 0.85rem; }
+.class-chip .slot-name { font-size: 0.95rem; font-weight: 700; white-space: normal; }
+.class-chip .slot-state { font-size: 0.6rem; color: var(--c); }
+.class-chip.class-mine { border-color: var(--green-bright); }
+.class-chip.class-mine .slot-state { color: var(--green-bright); }
+.class-chip.class-wait .slot-state, .class-chip.class-full .slot-state { color: var(--gold); }
+.list-class { padding-top: 8px; }
+
+/* Sign-up dialog */
+.class-where { margin: -4px 0 10px; color: var(--muted); font-size: 0.92rem; }
+.class-meter { display: grid; gap: 6px; margin: 4px 0 12px; }
+.class-meter-bar, .gc-bar { display: block; height: 8px; border-radius: 4px; background: #232323; overflow: hidden; }
+.class-meter-bar i, .gc-bar i { display: block; height: 100%; width: var(--fill); background: var(--green-bright); border-radius: 4px; }
+.class-meter-text { font-size: 0.9rem; color: var(--muted); }
+.class-meter-text b, .class-meter-text strong { color: var(--text); }
+
+/* "Up next" board: a group class first */
+.quest-class-ico { width: 44px; height: 44px; display: grid; place-items: center; font-size: 1.3rem; border-radius: 12px; background: color-mix(in srgb, var(--c) 25%, #000); border: 2px solid var(--c); }
+
+/* Manager (Coach tab and admin) */
+.gc-wrap { margin: 18px 0 8px; }
+.gc-head { margin-bottom: 8px; }
+.gc-sub { margin: 14px 0 8px; font-family: var(--display); font-size: 0.55rem; text-transform: uppercase; color: var(--muted); font-style: italic; font-weight: 800; line-height: 1.9; }
+.gc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gc-card { border: 1px solid var(--line); border-left: 5px solid var(--c); border-radius: 14px; background: var(--panel); overflow: hidden; }
+.gc-card.open { border-color: var(--c); }
+.gc-card.cancelled, .gc-card.done { opacity: 0.8; }
+.gc-top { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; }
+.gc-when { display: grid; justify-items: center; text-align: center; }
+.gc-when b { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
+.gc-when span { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gc-title { margin: 0 0 2px; font-weight: 800; }
+.gc-meter { display: grid; gap: 4px; margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
+.gc-meter b { color: var(--text); }
+.gc-warn { color: var(--gold); }
+.gc-refunds { margin: 8px 0 0; font-size: 0.85rem; color: var(--gold); }
+.gc-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.gc-roster { padding: 4px 14px 14px; border-top: 1px dashed var(--line); }
+.gc-people { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.gc-person { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: #000; border: 1px solid var(--line); }
+.gc-person.present { border-color: var(--green-bright); }
+.gc-person .avatar { width: 40px; height: 40px; }
+.gc-person-main p { margin: 0; }
+.gc-new { padding: 2px 7px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; color: #000; background: var(--gold); }
+.gc-pay { min-height: 40px; padding: 6px 10px; border-radius: 10px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+  color: var(--gold); background: transparent; border: 1px dashed var(--gold); white-space: nowrap; }
+.gc-pay.paid { color: var(--green-bright); border: 1px solid var(--green-dark); }
+.gc-pay:disabled { cursor: default; }
+.gc-check { width: 48px; height: 48px; border-radius: 12px; font-size: 1.4rem; font-weight: 900; cursor: pointer;
+  color: #000; background: transparent; border: 2px solid var(--line); }
+.gc-check.on { background: var(--green-bright); border-color: var(--green-bright); }
+.gc-check:not(:disabled):hover { border-color: var(--green-bright); }
+.gc-check:disabled { opacity: 0.35; cursor: default; }
+.gc-people.waiting .gc-check { color: var(--muted); }
+.gc-roster-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.gc-form { display: grid; gap: 12px; padding: 14px; margin-bottom: 10px; border-radius: 14px; background: #000; border: 1px solid var(--line); }
+.gc-form .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
+.gc-form .field-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.gc-form label { min-width: 0; }
+.gc-form input, .gc-form select { width: 100%; min-width: 0; }
+@media (max-width: 640px) {
+  .gc-form .field-row, .gc-form .field-row.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gc-form .field-row > label:only-child { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .gc-top { grid-template-columns: 52px 1fr; }
+  .gc-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .gc-person { grid-template-columns: 36px 1fr auto; }
+  .gc-person .gc-pay { grid-column: 2; justify-self: start; min-height: 34px; }
+  .gc-person .gc-check { grid-column: 3; grid-row: 1 / span 2; }
+}

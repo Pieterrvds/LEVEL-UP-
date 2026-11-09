@@ -41,11 +41,18 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes] = await Promise.all([
     LevelUp.adminData(),
     LevelUp.pushServerReady(),
-    LevelUp.adminReviews().catch(() => [])
+    LevelUp.adminReviews().catch(() => []),
+    LevelUp.classManageList(800).catch(() => [])
   ]);
+  // Finished group classes count in the finances as one line each: what the players were charged and the trainer's fee
+  const classLines = classes.filter((c) => c.status === "done").map((c) => ({
+    id: c.id, kind: "class", trainerId: c.trainerId, date: c.date, hour: c.hour, name: c.title, partner: `${Number(c.present)} present`,
+    status: "completed", price: Number(c.charged), trainerFee: Number(c.trainerFee), payoutAt: c.payoutAt,
+    priceType: "class", payMethod: "class", payStatus: "paid"
+  }));
   const rows = players.map((p) => {
     const own = bookings.filter((b) => b.email === p.email);
     return {
@@ -67,6 +74,8 @@ async function loadData() {
     reviews,
     hours,
     rawBookings: bookings,
+    classes,
+    finLines: [...bookings, ...classLines],
     players: rows,
     members: rows.filter((p) => !p.admin),
     active: bookings.filter((b) => ["pending", "confirmed", "completed"].includes(b.status)),
@@ -183,6 +192,8 @@ async function render() {
     </section>
     </div>
 
+    <section class="panel admin-panel gc-wrap" data-pane="classes" id="adminClasses"></section>
+
     <section class="panel admin-panel" data-pane="bookings">
       <div class="panel-head">
         <h2>Bookings</h2>
@@ -241,12 +252,14 @@ async function render() {
   renderHours();
   renderBookings();
   renderMembers();
+  LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
 }
 
 // ---------- Page tabs ----------
 const ADMIN_TABS = [
   { id: "overview", label: "Overview" },
   { id: "bookings", label: "Bookings" },
+  { id: "classes", label: "Group classes" },
   { id: "finances", label: "Finances" },
   { id: "team", label: "Team" },
   { id: "members", label: "Members" }
@@ -258,6 +271,7 @@ function adminTabs() {
   const badge = {
     overview: data.applications.filter((a) => a.status === "pending").length + data.reviews.filter((r) => r.status === "pending").length,
     bookings: data.rawBookings.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length,
+    classes: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0),
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
       + data.rawBookings.filter((b) => b.refundStatus === "manual").length
@@ -360,7 +374,7 @@ const packDay = (pk) => pk.paidAt ? LevelUp.dateKey(new Date(pk.paidAt)) : "";
 // Money in a period: charged sessions by session date, packs by payment date
 function periodTotals(r) {
   const owner = data.pricing.ownerTrainerId;
-  const done = data.rawBookings.filter((b) => BILLABLE.includes(b.status) && inRange(b.date, r));
+  const done = data.finLines.filter((b) => BILLABLE.includes(b.status) && inRange(b.date, r));
   const revenue = done.reduce((s, b) => s + b.price, 0);
   const fees = done.filter((b) => b.trainerId !== owner).reduce((s, b) => s + b.trainerFee, 0);
   const packs = data.packs.filter((pk) => pk.status === "paid" && inRange(packDay(pk), r)).reduce((s, pk) => s + pk.price, 0);
@@ -370,7 +384,8 @@ function periodTotals(r) {
 
 // Per trainer: the period's sessions, plus what is owed right now (all time)
 function financeRows(r) {
-  const { pricing, rawBookings } = data;
+  const { pricing } = data;
+  const rawBookings = data.finLines;
   const trainerIds = [...new Set([...TRAINERS.map((t) => t.id), ...rawBookings.map((b) => b.trainerId)])];
   return trainerIds.map((id) => {
     const own = rawBookings.filter((b) => b.trainerId === id);
@@ -400,7 +415,7 @@ function financeRows(r) {
 // Rows of the overview table: the 12 weeks/months up to the selected one (all time: every month)
 function overviewRows() {
   const { mode, offset } = state.fin;
-  const first = [...data.rawBookings.map((b) => b.date), ...data.packs.map(packDay)].filter(Boolean).sort()[0] || LevelUp.dateKey();
+  const first = [...data.finLines.map((b) => b.date), ...data.packs.map(packDay)].filter(Boolean).sort()[0] || LevelUp.dateKey();
   // no rows before LEVEL-UP's first booking (the selected period always shows)
   const keep = (rows) => rows.filter((o, i) => i === 0 || o.to >= first);
   if (mode === "week") return keep(Array.from({ length: 12 }, (_, i) => periodTotals(periodRange("week", offset - i))));
@@ -524,7 +539,7 @@ function renderFinances() {
     </div>
     <p class="muted small">A list of every charged session and the total fee, as the basis for the trainer's invoice to you. Trainers can download their own statement in their profile too.</p>
     <ul class="statement-list">${rows.filter((r) => !r.isOwner).map((r) => {
-      const st = LevelUpStatements.build(r.id, statementMonth, data.rawBookings);
+      const st = LevelUpStatements.build(r.id, statementMonth, data.finLines);
       return `<li>
         <span><span class="dot" style="--c:${r.trainer?.chartColor || "#888"}" aria-hidden="true"></span><strong>${esc(r.trainer?.name || r.id)}</strong>
           <span class="muted small">${plural(st.rows.length, "session")} · ${money(st.total)}${st.open ? ` · ${money(st.open)} still to pay` : st.rows.length ? " · all paid out" : ""}</span></span>
@@ -1294,7 +1309,7 @@ root.addEventListener("click", (event) => {
   const statementBtn = event.target.closest("[data-statement]");
   if (statementBtn) {
     const month = document.getElementById("statementMonth").value;
-    const st = LevelUpStatements.build(statementBtn.dataset.trainer, month, data.rawBookings);
+    const st = LevelUpStatements.build(statementBtn.dataset.trainer, month, data.finLines);
     if (statementBtn.dataset.statement === "pdf") LevelUpStatements.statementPdf(st);
     else LevelUpStatements.statementCsv(st);
     return;
