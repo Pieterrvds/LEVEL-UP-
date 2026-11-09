@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202611101200"></script>
-  <script src="i18n.js?v=202611101200"></script>
+  <script src="i18n-nl.js?v=202611101500"></script>
+  <script src="i18n.js?v=202611101500"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611101200">
+  <link rel="stylesheet" href="style.css?v=202611101500">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -97,7 +97,6 @@
             <a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>
             <a href="#team" class="btn btn-ghost">Meet the team</a>
           </div>
-          <p class="hero-proof" id="heroProof" hidden></p>
           <button type="button" class="replay-open" data-replays>▶ Watch highlights <span>logo &amp; exercises</span></button>
           <ul class="hero-stats">
             <li><strong id="trainerCount">3</strong><span>Trainers</span></li>
@@ -106,11 +105,7 @@
           </ul>
         </div>
 
-        <aside class="quest-board pixel-frame phone-mock" aria-labelledby="questTitle">
-          <div class="mock-bar" aria-hidden="true">
-            <span class="mock-logo"><img src="img/logo.JPG" alt="" width="22" height="22">LEVEL-UP</span>
-            <span class="mock-xp"><b>LVL 3</b><i><u style="width:62%"></u></i></span>
-          </div>
+        <aside class="quest-board pixel-frame" aria-labelledby="questTitle">
           <div class="player-top">
             <span class="tag live">● Live</span>
             <span class="player-title">Up next</span>
@@ -137,7 +132,8 @@
         <div class="about-grid">
           <div>
             <p class="section-kicker">Level 1 · How it works</p>
-            <h2 class="section-title">Four steps to your first level</h2>
+            <h2 class="section-title">Hey there!</h2>
+            <p class="text-lg">Create your profile, pick a coach and book a one-hour session straight from their schedule.</p>
             <div class="btn-row" id="aboutCta">
               <button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your profile</button>
             </div>
@@ -351,8 +347,7 @@
             <button type="button" role="tab" data-hs-period="month" aria-selected="false">This month</button>
           </div>
           <div class="hs-podium" id="hsPodium"></div>
-          <button type="button" class="btn btn-ghost btn-block hs-more" id="hsMore" aria-controls="hsBoard" aria-expanded="false" hidden>Full ranking ▼</button>
-          <div class="hs-board" id="hsBoard">
+          <div class="hs-board">
             <div class="hs-board-head" aria-hidden="true"><span>Rank</span><span>Player</span><span>LVL</span><span>Score</span></div>
             <ol class="hs-list" id="hsList"><li class="hs-empty">Loading high scores…</li></ol>
           </div>
@@ -495,7 +490,6 @@
           <p class="section-intro">The quick answers. Something else? <a href="#contact" class="text-link">Ask us</a> or send a WhatsApp.</p>
         </div>
         <div class="faq-list" id="faqList"></div>
-        <button type="button" class="btn btn-ghost btn-block faq-more" id="faqMore" aria-controls="faqList" aria-expanded="false" hidden></button>
       </div>
     </section>
   </main>
@@ -536,8 +530,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202611101200"></script>
-  <script src="script.js?v=202611101200"></script>
-  <script src="schedule.js?v=202611101200"></script>
+  <script src="game.js?v=202611101500"></script>
+  <script src="script.js?v=202611101500"></script>
+  <script src="schedule.js?v=202611101500"></script>
 </body>
 </html>

@@ -771,18 +771,7 @@ function renderHighScores() {
     msg = `You're <b>#${me.place}</b>${ahead ? ` · <b>${(ahead.xp - me.xp + 1).toLocaleString("en-US")} XP</b> to pass ${esc(ahead.name)}` : " · You're the champion! 👑"}`;
   }
   foot.innerHTML = `<span class="hs-next">${msg}</span><a href="#schedule" class="hs-coin">Book a session ▸ +${LevelUp.SESSION_XP} XP</a>`;
-  const more = document.getElementById("hsMore");
-  const rest = list.querySelectorAll(".hs-row").length;
-  if (more) {
-    more.hidden = !rest;
-    more.textContent = hsOpen ? "Hide ranking ▲" : `Full ranking · ${rest + Math.min(top.length, 3)} players ▼`;
-    more.setAttribute("aria-expanded", String(hsOpen));
-    // the podium shows the top 3; the board only holds the rest (or the "no scores yet" note)
-    document.getElementById("hsBoard").hidden = rest ? !hsOpen : top.length > 0;
-  }
 }
-let hsOpen = false;
-document.getElementById("hsMore")?.addEventListener("click", () => { hsOpen = !hsOpen; renderHighScores(); });
 
 document.addEventListener("click", async (event) => {
   const tab = event.target.closest("[data-hs-period]");

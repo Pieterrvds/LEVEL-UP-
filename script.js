@@ -115,7 +115,7 @@ renderAboutCta();
 (function loopRows() {
   const SPEED = 26; // pixels per second
   const phone = window.matchMedia("(max-width: 640px)");
-  const rows = ["#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
+  const rows = [".quest-steps", "#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
 
   rows.forEach((row) => {
     let originals = [];
@@ -221,22 +221,6 @@ function renderReviews() {
 document.addEventListener("levelup:change", renderReviews);
 LevelUp.ready.then(renderReviews);
 
-// ---------- Hero: price of a first session, plus the rating and player count once there are enough ----------
-function renderHeroProof() {
-  const el = document.getElementById("heroProof");
-  if (!el || !LevelUp.isReady()) return;
-  const reviews = LevelUp.getReviews();
-  const players = (LevelUp.getLeaderboard("all") || []).length;
-  const avg = reviews.length ? reviews.reduce((sum, r) => sum + Number(r.rating), 0) / reviews.length : 0;
-  const parts = [`<span>First session <b>${LevelUp.euro(LevelUp.getPricing().introPrice).replace(/[.,]00$/, "")}</b></span>`];
-  if (reviews.length >= 3) parts.push(`<a href="#reviews"><b class="hero-stars">★ ${avg.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b> from ${reviews.length} players</a>`);
-  if (players >= 5) parts.push(`<a href="#scores"><b>${players}</b> players on the board</a>`);
-  el.innerHTML = parts.join("");
-  el.hidden = false;
-}
-document.addEventListener("levelup:change", renderHeroProof);
-LevelUp.ready.then(renderHeroProof);
-
 // ---------- Q&A: answers use the live prices and rules ----------
 function renderFaq() {
   const box = document.getElementById("faqList");
@@ -264,24 +248,12 @@ function renderFaq() {
     ["Who sees my health answers and body stats?",
       "Only you, your trainer and LEVEL-UP. They are used to train you safely and to show your progress."]
   ];
-  box.innerHTML = qa.map(([q, a]) => `
-    <details class="faq-item">
+  box.innerHTML = qa.map(([q, a], i) => `
+    <details class="faq-item"${i === 0 ? " open" : ""}>
       <summary>${q}</summary>
       <p>${a}</p>
     </details>`).join("");
-  // phones: the first questions, the rest on request
-  const more = document.getElementById("faqMore");
-  if (more) {
-    more.hidden = qa.length <= FAQ_SHOWN;
-    more.textContent = box.classList.contains("all") ? "Fewer questions ▲" : `All ${qa.length} questions ▼`;
-  }
 }
-const FAQ_SHOWN = 5;
-document.getElementById("faqMore")?.addEventListener("click", () => {
-  const all = document.getElementById("faqList").classList.toggle("all");
-  document.getElementById("faqMore").setAttribute("aria-expanded", String(all));
-  renderFaq();
-});
 document.addEventListener("levelup:change", renderFaq);
 LevelUp.ready.then(renderFaq);
 

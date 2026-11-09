@@ -2617,42 +2617,10 @@ dialog { max-width: calc(100vw - 16px); overflow-x: hidden; overscroll-behavior:
 dialog[open] { touch-action: pan-y; }
 
 /* =====================================================================
-   Shorter, clearer home page (November 2026): trust line in the hero, the
-   "Up next" board as a phone on big screens, coach cards with free spots and
-   specialties, a folded ranking, a compact contact block and a day strip in
-   the phone schedule.
+   Coaches, schedule and contact (November 2026): coach cards with free spots
+   and specialties, a day strip in the phone schedule with the prices as one
+   swipe row, and a compact contact block.
    ===================================================================== */
-.hero-proof { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 14px 0 0; font-size: 0.92rem; color: var(--muted); }
-.hero-proof b { color: var(--text); }
-.hero-proof a { color: inherit; text-decoration: none; }
-.hero-proof a:hover b { color: var(--green-bright); }
-.hero-proof .hero-stars { color: var(--gold); }
-
-/* The "Up next" board inside a phone frame (only next to the text on big screens) */
-.mock-bar { display: none; }
-@media (min-width: 961px) {
-  .quest-board.phone-mock {
-    position: relative; max-width: 380px; padding: 46px 18px 22px; border: 10px solid #1b1b1b; border-radius: 44px;
-    background: linear-gradient(180deg, #0f1310, var(--panel) 40%); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px #2c2c2c, var(--shadow);
-  }
-  .quest-board.phone-mock::before { content: ""; position: absolute; top: 10px; left: 50%; width: 92px; height: 22px; margin-left: -46px; border-radius: 12px; background: #000; }
-  .quest-board.phone-mock .mock-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-  .mock-logo { display: flex; align-items: center; gap: 7px; font-family: var(--display); font-size: 0.8rem; font-style: italic; font-weight: 800; line-height: 1; }
-  .mock-logo img { width: 22px; height: 22px; border-radius: 6px; }
-  .mock-xp { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: var(--muted); }
-  .mock-xp b { font-family: var(--display); font-style: italic; color: var(--gold); }
-  .mock-xp i { display: block; width: 64px; height: 6px; border-radius: 3px; background: #2a2a2a; overflow: hidden; }
-  .mock-xp u { display: block; height: 100%; background: var(--green-bright); text-decoration: none; }
-}
-
-/* Level 1: the four steps in one row, no swiping */
-@media (max-width: 640px) {
-  .quest-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; overflow: visible; }
-  .quest-steps > li { flex-direction: column; align-items: center; gap: 8px; padding: 12px 6px; text-align: center; }
-  .quest-steps > li:hover { transform: none; }
-  .quest-steps h3 { margin: 0; font-size: 0.5rem; line-height: 1.5; }
-}
-
 /* Coach cards: bigger photo, free spots on it, specialties as chips */
 .team-photo-wrap { position: relative; }
 .team-photo-wrap .team-photo { display: block; aspect-ratio: 4 / 4.4; }
@@ -2665,10 +2633,6 @@ dialog[open] { touch-action: pan-y; }
 .team-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .team-chips li { padding: 3px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--text); background: #000; border: 1px solid var(--line); }
 @media (max-width: 640px) { .team-photo-wrap .team-photo { aspect-ratio: 4 / 3.2; } }
-
-/* High scores: podium first, the full list on request */
-.hs-more { margin-top: 12px; }
-.hs-board[hidden] { display: none; }
 
 /* Contact: address and email on one line, social media as three small buttons */
 .ct-address { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); font-size: 0.95rem; }
@@ -2705,12 +2669,10 @@ dialog[open] { touch-action: pan-y; }
 .day-pill:disabled { opacity: 0.35; cursor: default; }
 .day-pill:disabled i { color: var(--muted); }
 
-/* Contact form and Q&A: on phones the form opens on request and the first questions show */
-.form-toggle, .faq-more { display: none; }
+/* Contact form: on phones it opens on request (call and WhatsApp sit right above it) */
+.form-toggle { display: none; }
 @media (max-width: 640px) {
   .form-toggle { display: flex; justify-content: center; margin-bottom: 12px; }
   .contact-form { display: none; }
   .contact-form.open { display: grid; }
-  .faq-more:not([hidden]) { display: flex; justify-content: center; margin-top: 12px; }
-  .faq-list:not(.all) > .faq-item:nth-child(n + 6) { display: none; }
 }
