@@ -2692,7 +2692,13 @@ const LevelUp = (() => {
     celebrateLib ||= new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = CELEBRATE_FILE;
-      script.onload = () => window.LevelUpCelebrate ? resolve(window.LevelUpCelebrate) : reject(new Error("Celebration didn't load."));
+      script.onload = () => {
+        if (!window.LevelUpCelebrate) { reject(new Error("Celebration didn't load.")); return; }
+        // everywhere the calm, full version: a bit slower and never the short cut (set once, right after loading)
+        window.LevelUpCelebrate.defaults.speed = 0.8;
+        window.LevelUpCelebrate.defaults.short = false;
+        resolve(window.LevelUpCelebrate);
+      };
       script.onerror = () => { celebrateLib = null; reject(new Error("Celebration didn't load.")); };
       document.head.appendChild(script);
     });

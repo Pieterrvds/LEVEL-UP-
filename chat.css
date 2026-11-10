@@ -1,5 +1,11 @@
 /* LEVEL-UP chat page: conversation list + conversation, like a messaging app */
-.chat-page { padding: calc(var(--hud-h) + 24px) 0 24px; }
+.chat-page { position: relative; padding: calc(var(--hud-h) + 24px) 0 24px; }
+/* Like the home page and the shop: a photo that hangs still behind the page (people training together) and the
+   chat as a see-through layer over it. How dark: --photo-o and --layer-o in style.css. */
+.chat-page .page-photo { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
+.chat-page .page-photo::before { content: ""; position: absolute; inset: 0; background: url(img/chat-bg.jpg) center / cover no-repeat; opacity: calc(var(--photo-o) + 0.05); }
+.chat-page .chat-app { background: rgba(var(--bg-rgb), var(--layer-o)); }
+@media (max-width: 700px) { .chat-page .page-photo::before { background-image: url(img/chat-bg-small.jpg); opacity: var(--photo-o); } }
 .chat-page .container { max-width: 1100px; }
 
 .chat-app {
