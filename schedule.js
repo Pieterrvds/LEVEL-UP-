@@ -640,7 +640,7 @@ function showBooked(booked) {
     ${LevelUp.pushCalloutHtml(`Get a notification as soon as ${trainer.short} confirms.`)}
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
-      <a href="profile.html" class="btn btn-small">My sessions</a>
+      <a href="profile.html#overview" class="btn btn-small">My sessions</a>
       <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
     </div>`;
   pendingSlot = null;

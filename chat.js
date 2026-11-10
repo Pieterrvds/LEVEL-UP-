@@ -51,7 +51,7 @@ function listTime(at) {
 function peerAvatar(peer, size = "") {
   if (peer.group) return `<span class="avatar group-avatar ${size}" aria-hidden="true">👥</span>`;
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
-  const photo = coach && !coach.dynamic ? coach.img : peer.avatarUrl;
+  const photo = peer.avatarUrl || (coach && !coach.dynamic ? coach.img : null); // a coach: the photo of their page, else their card
   if (photo) return `<span class="avatar has-photo ${size}" aria-hidden="true"><img src="${esc(photo)}" alt="" loading="lazy" decoding="async"${coach && size === "head" ? ` data-coach="${esc(coach.id)}"` : ""}></span>`;
   return LevelUp.avatarHtml({ name: peer.name, xp: 0 }, size);
 }

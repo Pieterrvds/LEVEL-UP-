@@ -1,100 +1,22 @@
-// LEVEL-UP player profile page.
+// LEVEL-UP: your account, as tabs on your own page (profile.html).
+// member.js draws the top block (photo, name, level) and the "My page" tab: what other members see.
+// This file adds the tabs only you see (Overview, Coach, Rewards, Packs & shop, Body stats, Me) and what is
+// in them. On someone else's page it draws nothing.
 
+(() => {
 const root = document.getElementById("profileRoot");
+const tabBar = document.getElementById("profileTabs");
+const pagePane = document.getElementById("mpPage"); // the "My page" tab (member.js)
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: "overview", tabFromLink: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: "page", tabFromLink: false }; // open/closed blocks stay that way between renders
+// back from a payment (profile.html?payment=pack:… or booking:…): open where the result shows
+const paidFor = new URLSearchParams(location.search).get("payment");
+if (paidFor) state.tab = paidFor.startsWith("pack") ? "shop" : "overview";
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
 
-function renderLoggedOut() {
-  root.innerHTML = `
-    <section class="no-save pixel-frame">
-      <span class="pixel-heart" aria-hidden="true"></span>
-      <p class="section-kicker">Not logged in</p>
-      <h1 class="section-title">Player profile</h1>
-      <p>Log in to see your level, XP, sessions, body stats, achievements and gear. New here? Create your profile and start at LVL 1.</p>
-      <div class="btn-row">
-        <button type="button" class="btn btn-primary" data-auth-open="signup">Create your profile</button>
-        <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button>
-      </div>
-    </section>`;
-}
-
-function renderHeader(player, p) {
-  const since = formatDate(player.createdAt);
-  return `
-    <section class="player-header pixel-frame">
-      <div class="avatar-edit">
-        ${LevelUp.avatarHtml(player, "xl")}
-        ${LevelUp.likeHtml({ ...player, isMe: true }, "xl at-left")}
-        <label class="avatar-edit-btn" title="${player.avatarUrl ? "Change your photo" : "Add your photo"}">
-          <span aria-hidden="true">📷</span><span class="sr-only">${player.avatarUrl ? "Change your profile photo" : "Add a profile photo"}</span>
-          <input type="file" accept="image/*" data-avatar-input hidden>
-        </label>
-      </div>
-      <div class="player-header-info">
-        <p class="section-kicker">Player · since ${since}</p>
-        <h1 class="player-header-name">${esc(player.name)}</h1>
-        <p class="player-header-rank"><span class="rank-badge" data-tier="${RANKS.indexOf(p.rank)}">${p.rank.title}</span> LVL ${p.level}</p>
-        ${headerBadges(player)}
-        <div class="xp-bar big" role="progressbar" aria-valuemin="0" aria-valuemax="${p.needed}" aria-valuenow="${p.into}" aria-label="XP to next level">
-          <i style="width:${p.pct.toFixed(1)}%"></i>
-        </div>
-        <p class="xp-caption"><span>${p.into} / ${p.needed} XP</span><span>${p.toNext} XP to LVL ${p.level + 1}${p.nextRank ? ` · ${p.nextRank.title} at LVL ${p.nextRank.level}` : ""}</span></p>
-      </div>
-      <div class="player-header-level" aria-hidden="true">
-        <span>LVL</span>
-        <strong>${p.level}</strong>
-      </div>
-      <button type="button" class="btn btn-small btn-ghost share-card-btn" data-share-card>Share my card</button>
-    </section>`;
-}
-
-const LevelUp_t = (text) => (window.t ? window.t(text) : text); // Dutch/English for confirm() and prompt()
-
-// Your page for other members: a line about yourself, photos, and who may see it
-function renderMyPage(player) {
-  const coach = Boolean(player.trainerId);
-  return `
-    <section class="panel panel-wide my-page" id="mypage">
-      <div class="panel-head">
-        <h2>My page</h2>
-        <button type="button" class="btn btn-small btn-ghost" ${coach ? `data-profile-trainer="${esc(player.trainerId)}"` : `data-profile="${esc(player.id)}"`}>👁 See my page</button>
-      </div>
-      <p class="muted">${coach
-        ? "Your page opens from your coach card, also for visitors: your photos, the group classes you give and your level."
-        : "Other members open your page from the high scores or a chat: your level, likes, photos and the group classes you join. Never your email, body stats, sessions or payments."}</p>
-      <form class="mypage-bio" id="bioForm">
-        <label for="bioInput">About me <small class="muted">(optional, 160 characters)</small></label>
-        <div class="mypage-bio-row">
-          <input id="bioInput" name="bio" maxlength="160" value="${esc(player.bio)}" placeholder="e.g. Training for my first Hyrox 💪">
-          <button type="submit" class="btn btn-small btn-primary">Save</button>
-        </div>
-      </form>
-      <h3 class="panel-sub">My photos <small class="muted">${player.photos.length}/12</small></h3>
-      <div class="mypage-photos">
-        ${player.photos.map((ph) => `
-          <figure>
-            <img src="${esc(ph.url)}" alt="" loading="lazy">
-            ${ph.caption ? `<figcaption data-no-i18n>${esc(ph.caption)}</figcaption>` : ""}
-            <button type="button" class="photo-remove" data-my-photo-remove="${esc(ph.id)}" aria-label="Remove this photo">✕</button>
-          </figure>`).join("")}
-        ${player.photos.length < 12 ? `
-          <label class="photo-add" title="Add a photo">
-            <span aria-hidden="true">＋</span><span>Add a photo</span>
-            <input type="file" accept="image/*" data-photo-input hidden>
-          </label>` : ""}
-      </div>
-      <p class="muted small">Post photos you'd show at the gym: a PR, a run, the squad after class. Only photos of yourself, or with the OK of who's in it. LEVEL-UP can remove a photo that doesn't fit.</p>
-      <p class="form-error" role="alert" id="myPageError"></p>
-      ${coach ? "" : `<label class="news-setting">
-        <input type="checkbox" data-page-visible ${player.profileVisible ? "checked" : ""}>
-        <span><b>Other members can see my page</b> <small class="muted">Off: they only see your name and photo. You can still chat and get likes on the high scores.</small></span>
-      </label>`}
-    </section>`;
-}
 
 // Hearts from other players (given on the high scores, once per player per week)
 function renderLikes(player) {
@@ -141,7 +63,7 @@ function renderReviewPanel(player) {
     </section>`;
 }
 
-// Player of the Month crown and the training streak, under the rank on the player card
+// Player of the Month crown and the training streak, at the top of the overview
 function headerBadges(player) {
   const s = player.streak;
   const month = player.potm ? new Date(player.potm.month + "T12:00:00").toLocaleDateString("en-GB", { month: "long" }) : "";
@@ -157,6 +79,7 @@ function renderSummary(player) {
   const unlocked = ACHIEVEMENTS.filter((a) => player.achievements[a.id]).length;
   return `
     <section class="summary-tiles">
+      ${headerBadges(player) ? `<div class="summary-badges">${headerBadges(player)}</div>` : ""}
       <div class="tile"><span class="tile-label">Total XP</span><span class="tile-value">${player.xp.toLocaleString("en-US")}</span></div>
       <div class="tile"><span class="tile-label">Rank</span><span class="tile-value">${esc(LevelUp.progress(player.xp).rank.title)}</span><span class="tile-note">LVL ${LevelUp.progress(player.xp).level}</span></div>
       <div class="tile"><span class="tile-label">Sessions</span><span class="tile-value">${LevelUp.playerBookings().filter((b) => b.status === "completed").length}</span><span class="tile-note">completed</span></div>
@@ -844,10 +767,11 @@ function renderSettings() {
         <h2>Account</h2>
         <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}</p>
         <div class="photo-setting">
-          ${LevelUp.avatarHtml(LevelUp.getPlayer())}
           <span>Profile photo</span>
-          <label class="btn btn-small btn-ghost">${LevelUp.getPlayer().avatarUrl ? "Change" : "Upload photo"}<input type="file" accept="image/*" data-avatar-input hidden></label>
-          ${LevelUp.getPlayer().avatarUrl ? `<button type="button" class="btn btn-small btn-ghost" data-avatar-remove>Remove</button>` : ""}
+          <small class="muted">${LevelUp.getPlayer().trainerId
+            ? "Tap 📷 on your photo at the top to change it. It's the same photo everywhere, also on your coach card."
+            : "Tap 📷 on your photo at the top to change it. It's the same photo everywhere."}</small>
+          ${LevelUp.getPlayer().avatarUrl ? `<button type="button" class="btn btn-small btn-ghost" data-avatar-remove>Remove my photo</button>` : ""}
         </div>
         ${LevelUp.getPlayer().trainerId ? "" : `
         <label class="toggle">
@@ -868,27 +792,37 @@ function renderSettings() {
 
 function render() {
   const player = LevelUp.getPlayer();
-  if (!LevelUp.isReady()) {
-    root.innerHTML = `<p class="board-message">Loading your profile…</p>`;
-    return;
-  }
-  if (!player) {
-    renderLoggedOut();
+  const own = Boolean(player) && LevelUp.isReady() && (window.LevelUpMember ? window.LevelUpMember.own() : true);
+  if (!own) { // loading, logged out, or someone else's page: member.js shows it, without tabs
+    root.hidden = tabBar.hidden = true;
+    root.innerHTML = tabBar.innerHTML = "";
+    tabBar.dataset.html = "";
+    if (pagePane) pagePane.hidden = false;
     return;
   }
   const p = LevelUp.progress(player.xp);
   const tabs = profileTabs(player);
-  if (!tabs.some((t) => t.id === state.tab)) state.tab = "overview";
+  if (!tabs.some((t) => t.id === state.tab)) state.tab = "page";
   const { inTab } = LevelUp;
+  const tabsHtml = LevelUp.pageTabsHtml(tabs, state.tab);
+  if (tabBar.dataset.html !== tabsHtml) { // only when a tab or a counter changed: the bar keeps its place while you swipe it
+    tabBar.dataset.html = tabsHtml;
+    tabBar.innerHTML = tabsHtml;
+    tabBar.querySelectorAll("[data-page-tab]").forEach((btn) => btn.addEventListener("click", () => {
+      showTab(btn.dataset.pageTab);
+      history.replaceState(null, "", `${location.pathname}${location.search}#${state.tab}`);
+      // scrolled past the tabs: back to the top of the new tab
+      const y = tabBar.offsetTop - (document.getElementById("hud")?.offsetHeight || 0) - 4;
+      if (window.scrollY > y) window.scrollTo({ top: y });
+    }));
+  }
+  root.hidden = tabBar.hidden = false;
   root.innerHTML = `
-    ${renderHeader(player, p)}
-    ${LevelUp.pageTabsHtml(tabs, state.tab)}
     ${inTab("overview", renderSummary(player))}
     <div class="panel-grid">
       ${inTab("overview", renderSessions())}
-      ${inTab("overview", renderLikes(player))}
-      ${inTab("overview", renderMyPage(player))}
       ${inTab("overview", renderMyClasses(player))}
+      ${inTab("overview", renderLikes(player))}
       ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}
       ${inTab("rewards", renderRewards(player))}
@@ -902,19 +836,29 @@ function render() {
       ${inTab("me", renderAppPanel())}
       ${inTab("me", renderSettings())}
     </div>`;
-  // first render: open the tab the link points to (profile.html#packs, #rewards …)
+  // first render: open the tab the link points to (profile.html#packs, #rewards, #photo-… on your own page)
   if (!state.tabFromLink) {
     state.tabFromLink = true;
-    const fromLink = LevelUp.tabFromHash(root, tabs.map((t) => t.id));
+    const hash = decodeURIComponent(location.hash.slice(1));
+    const fromLink = /^(mypage|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, tabs.map((t) => t.id));
     if (fromLink) {
       state.tab = fromLink;
-      const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
-      LevelUp.showPageTab(root, state.tab);
-      if (target && !target.matches("[data-page-tab]")) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+      const target = fromLink === "page" ? null : document.getElementById(hash);
+      showTab(state.tab);
+      if (target && !target.matches("[data-pane]")) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
     }
   }
-  LevelUp.showPageTab(root, state.tab);
+  showTab(state.tab);
   bindEvents(player);
+}
+
+// "My page" is what member.js drew under the tabs; the other tabs are the panels in here
+function showTab(id) {
+  state.tab = id;
+  LevelUp.showPageTab(root, id);
+  LevelUp.showPageTab(tabBar, id);
+  root.hidden = id === "page";
+  if (pagePane) pagePane.hidden = id !== "page";
 }
 
 // Page tabs; the counters show what needs attention
@@ -925,6 +869,7 @@ function profileTabs(player) {
   const toSettle = coach.filter((b) => LevelUp.canSettle(b)).length;
   const needsSetup = !LevelUp.healthValid() ? 1 : 0;
   return [
+    { id: "page", label: "My page" },
     { id: "overview", label: "Overview" },
     LevelUp.isTrainer() && { id: "coach", label: "Coach", badge: requests + toSettle },
     { id: "rewards", label: "Rewards", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
@@ -975,42 +920,11 @@ function bindEvents(player) {
     try { await LevelUp.deleteMyReview(); } catch (err) { alert(err.message); }
   });
 
-  root.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    try {
-      await LevelUp.shareCard();
-    } catch (err) {
-      alert(err.message);
-    }
-    button.disabled = false;
-  });
-
-  root.querySelectorAll("[data-avatar-input]").forEach((input) => input.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    const label = input.closest("label");
-    label?.classList.add("busy");
-    try {
-      await LevelUp.uploadAvatar(file);
-      LevelUp.toast({ title: "Photo saved", text: "Your face is on the high scores now", icon: "📷", tone: "green" });
-    } catch (err) {
-      label?.classList.remove("busy");
-      LevelUp.toast({ title: "Photo not saved", text: err.message, icon: "!" });
-    }
-  }));
   root.querySelector("[data-avatar-remove]")?.addEventListener("click", async (event) => {
     if (!confirm("Remove your profile photo?")) return;
     event.target.disabled = true;
     try { await LevelUp.removeAvatar(); } catch (err) { event.target.disabled = false; alert(err.message); }
   });
-
-  root.querySelectorAll("[data-page-tab]").forEach((btn) => btn.addEventListener("click", () => {
-    state.tab = btn.dataset.pageTab;
-    LevelUp.showPageTab(root, state.tab);
-    history.replaceState(null, "", `#${state.tab}`);
-    LevelUp.scrollToTabs(root);
-  }));
 
   document.getElementById("historyBtn")?.addEventListener("click", () => {
     state.historyOpen = !state.historyOpen;
@@ -1107,62 +1021,6 @@ function bindEvents(player) {
     }
   });
 
-  // My page: the line about yourself, photos and who may see it
-  const pageError = () => root.querySelector("#myPageError");
-  root.querySelector("#bioForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const btn = event.target.querySelector("[type=submit]");
-    btn.disabled = true;
-    try {
-      await LevelUp.setProfile({ bio: event.target.elements.bio.value });
-      LevelUp.toast({ title: "Saved", text: "Your page is up to date.", icon: "✓", tone: "green" });
-    } catch (err) {
-      btn.disabled = false;
-      pageError().textContent = err.message;
-    }
-  });
-  root.querySelector("[data-photo-input]")?.addEventListener("change", async (event) => {
-    const input = event.target;
-    const file = input.files?.[0];
-    if (!file) return;
-    const caption = prompt(LevelUp_t("Add a short caption (optional, 140 characters):"), "");
-    if (caption === null) { input.value = ""; return; }
-    const tile = input.closest(".photo-add");
-    tile.classList.add("busy");
-    pageError().textContent = "";
-    try {
-      await LevelUp.addPhoto(file, caption.slice(0, 140));
-      LevelUp.toast({ title: "Photo added", text: "It shows on your page now.", icon: "📸", tone: "green" });
-    } catch (err) {
-      tile.classList.remove("busy");
-      input.value = "";
-      pageError().textContent = err.message;
-    }
-  });
-  root.querySelectorAll("[data-my-photo-remove]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!confirm(LevelUp_t("Remove this photo from your page?"))) return;
-      button.disabled = true;
-      try {
-        await LevelUp.deletePhoto(button.dataset.myPhotoRemove);
-      } catch (err) {
-        button.disabled = false;
-        pageError().textContent = err.message;
-      }
-    });
-  });
-  root.querySelector("[data-page-visible]")?.addEventListener("change", async (event) => {
-    const box = event.target;
-    box.disabled = true;
-    try {
-      await LevelUp.setProfile({ visible: box.checked });
-      LevelUp.toast({ title: box.checked ? "Your page is visible" : "Your page is private", text: box.checked ? "Other members can open your page." : "Others only see your name and photo.", icon: box.checked ? "👁" : "🔒", tone: "green" });
-    } catch (err) {
-      box.checked = !box.checked;
-      box.disabled = false;
-      alert(err.message);
-    }
-  });
 
   // News notifications on / off (new classes, shop news)
   root.querySelector("[data-push-news]")?.addEventListener("change", async (event) => {
@@ -1295,5 +1153,15 @@ function bindEvents(player) {
   });
 }
 
+// A link to another tab while you are already here (a notification, the menu): profile.html#coach, #rewards …
+window.addEventListener("hashchange", () => {
+  if (root.hidden && tabBar.hidden) return;
+  const hash = decodeURIComponent(location.hash.slice(1));
+  const tab = /^(mypage|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, [...tabBar.querySelectorAll("[data-page-tab]")].map((b) => b.dataset.pageTab));
+  if (!tab) return;
+  showTab(tab);
+  if (tab !== "page" && tab !== hash) document.getElementById(hash)?.scrollIntoView({ block: "start" });
+});
 document.addEventListener("levelup:change", render);
 render();
+})();

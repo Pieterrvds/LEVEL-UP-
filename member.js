@@ -1,5 +1,8 @@
-// LEVEL-UP member page: what you see of another member or a coach.
-// member.html?u=<user id> or member.html?trainer=<trainer id>; without either it shows your own page.
+// LEVEL-UP member page: what you see of a member or a coach, and (on your own page) where you change it.
+// profile.html?u=<user id> or profile.html?trainer=<trainer id>; without either it is your own page.
+// On your own page profile.js adds the tabs of your account under the top block; this file draws the top
+// block (photo, name, level) and the "My page" tab: exactly what other members see, with the buttons to
+// change your photo, your text and your photos right where they show.
 // A coach's page also has their calendar: the board and booking window come from schedule.js.
 
 (() => {
@@ -7,13 +10,35 @@
   const hero = document.getElementById("mpHero");
   const body = document.getElementById("mpBody");
   const book = document.getElementById("book");
+  const ownBar = document.getElementById("mpOwnBar");
   const params = new URLSearchParams(location.search);
   const tr = (text) => (window.t ? window.t(text) : text); // Dutch/English for confirm()
 
-  let who = params.get("trainer") ? { trainerId: params.get("trainer") } : params.get("u") ? { userId: params.get("u") } : null;
+  const who = params.get("trainer") ? { trainerId: params.get("trainer") } : params.get("u") ? { userId: params.get("u") } : null;
   let page = null;       // the page as the server gave it
   let loadedFor = null;  // who was logged in when it loaded (log in or out = load again)
   let failed = "";
+  let lastSig = "";      // your own page: what it showed of you (photo, text, photos …), to load again after a change
+  let loadSeq = 0;
+
+  // Is this your own page? (no name in the address, or your own)
+  function own() {
+    const me = LevelUp.getPlayer();
+    if (!me) return false;
+    if (!who) return true;
+    return who.userId ? who.userId === me.id : who.trainerId === me.trainerId;
+  }
+  window.LevelUpMember = { own };
+  const signature = (me) => [me.id, me.xp, me.avatarUrl, me.bio, me.photos.length, me.profileVisible, me.likes, me.trainerId].join("|");
+  // Your own page before the server answered (or when it doesn't): what your account already knows
+  function fromPlayer(me) {
+    const coach = me.trainerId ? LevelUp.trainerById(me.trainerId) : null;
+    return {
+      partial: true, isMe: true, linked: true, userId: me.id, trainerId: me.trainerId || null, name: coach?.name || me.name, role: coach?.role,
+      avatarUrl: me.avatarUrl, xp: me.xp, since: me.createdAt, bio: me.bio, likes: me.likes, streak: me.streak?.weeks || 0,
+      achievements: Object.keys(me.achievements || {}), photos: []
+    };
+  }
   const openAll = new Set(); // photos whose comments are all shown
 
   const when = (value) => new Date(value).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -32,19 +57,31 @@
   // ---------- Loading ----------
   async function load() {
     const player = LevelUp.getPlayer();
+    const mine = own();
+    const first = loadedFor === null || (player?.id || "") !== loadedFor;
     loadedFor = player?.id || "";
     failed = "";
     let target = who;
-    if (!target && player) target = player.trainerId ? { trainerId: player.trainerId } : { userId: player.id };
-    if (!target || (!target.trainerId && !player)) { page = null; failed = "login"; render(); return; }
-    try {
-      page = await LevelUp.publicProfile(target);
-    } catch (err) {
+    if (mine) {
+      target = player.trainerId ? { trainerId: player.trainerId } : { userId: player.id };
+      lastSig = signature(player);
+      if (!page?.isMe) page = fromPlayer(player);
+      render(); // your own page shows at once; the photos and numbers follow
+    } else if (first) {
       page = null;
-      failed = err.message;
+    }
+    if (!target || (!target.trainerId && !player)) { page = null; failed = who ? "login" : "account"; render(); return; }
+    const seq = ++loadSeq;
+    try {
+      const fresh = await LevelUp.publicProfile(target);
+      if (seq !== loadSeq) return;
+      page = fresh;
+    } catch (err) {
+      if (seq !== loadSeq) return;
+      if (mine && page) { page.partial = false; page.loadError = err.message; } else { page = null; failed = err.message; }
     }
     render();
-    if (page && location.hash.startsWith("#photo-")) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "center" });
+    if (first && page && location.hash.startsWith("#photo-")) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "center" });
   }
 
   // ---------- Rendering ----------
@@ -52,8 +89,15 @@
     if (!LevelUp.isReady()) return;
     if (!page) {
       book.hidden = true;
-      body.innerHTML = "";
-      hero.innerHTML = failed === "login" ? `
+      body.innerHTML = ownBar.innerHTML = "";
+      hero.innerHTML = failed === "account" ? `
+        <section class="no-save pixel-frame mp-gate">
+          <p class="section-kicker">Not logged in</p>
+          <h1 class="section-title">Player profile</h1>
+          <p>Log in to see your level, XP, sessions, body stats, achievements and gear. New here? Create your profile and start at LVL 1.</p>
+          <div class="btn-row"><button type="button" class="btn btn-primary" data-auth-open="signup">Create your profile</button>
+            <button type="button" class="btn btn-ghost" data-auth-open="login">Log in</button></div>
+        </section>` : failed === "login" ? `
         <section class="no-save pixel-frame mp-gate">
           <p class="section-kicker">Players</p>
           <h1 class="section-title">Log in to see this player</h1>
@@ -76,43 +120,77 @@
 
   function renderHero() {
     const d = page;
+    const me = d.isMe ? LevelUp.getPlayer() : null; // your own page: always your newest level and photo
     const coach = d.trainerId ? LevelUp.trainerById(d.trainerId) : null;
-    const photo = coach && !coach.dynamic ? coach.img : d.avatarUrl;
-    const prog = d.xp != null ? LevelUp.progress(d.xp) : null;
+    const photo = (me ? me.avatarUrl : d.avatarUrl) || (coach && !coach.dynamic ? coach.defaultImg || coach.img : null);
+    const xp = me ? me.xp : d.xp;
+    const prog = xp != null ? LevelUp.progress(xp) : null;
     const first = String(d.name || "").split(" ")[0];
-    const likes = Number(d.likes) || 0;
+    const likes = Number(me ? me.likes : d.likes) || 0;
     const tier = prog ? RANKS.indexOf(prog.rank) : 0;
     document.title = `${d.name} | LEVEL-UP`;
     const chips = [
       d.place ? `<span>🏆 #${d.place} on the high scores</span>` : "",
       d.streak ? `<span>🔥 ${d.streak}-week streak</span>` : "",
       d.potmWins ? `<span>👑 Player of the Month${d.potmWins > 1 ? ` ×${d.potmWins}` : ""}</span>` : "",
+      me && likes ? `<span>♥ ${likes} ${likes === 1 ? "like" : "likes"}</span>` : "",
       d.since ? `<span>${d.trainerId ? "Coach" : "Player"} since ${monthYear(d.since)}</span>` : ""
     ].filter(Boolean).join("");
     hero.innerHTML = `
       <section class="mp-hero" data-tier="${tier}">
         <div class="mp-cover" aria-hidden="true"></div>
         <div class="container mp-hero-in">
-          <span class="mp-avatar ${photo ? "has-photo" : ""}">${photo ? `<img src="${esc(photo)}" alt="">` : esc(first.charAt(0).toUpperCase())}</span>
+          <div class="mp-avatar-wrap">
+            <span class="mp-avatar ${photo ? "has-photo" : ""}">${photo ? `<img src="${esc(photo)}" alt="">` : esc(first.charAt(0).toUpperCase())}</span>
+            ${me ? `<label class="avatar-edit-btn" title="${me.avatarUrl ? "Change your photo" : "Add your photo"}">
+              <span aria-hidden="true">📷</span><span class="sr-only">${me.avatarUrl ? "Change your profile photo" : "Add a profile photo"}</span>
+              <input type="file" accept="image/*" data-avatar-input hidden>
+            </label>` : ""}
+          </div>
           <div class="mp-id">
             <p class="mp-kicker">${d.trainerId ? `Coach · ${esc(d.role || "Personal trainer")}` : "Player"}</p>
             <h1 class="mp-name" data-no-i18n>${esc(d.name)}</h1>
             ${prog ? `<p class="mp-rank"><span class="rank-badge" data-tier="${tier}">${prog.rank.title}</span> <b>LVL ${prog.level}</b></p>
               <div class="xp-bar mp-xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${prog.needed}" aria-valuenow="${prog.into}" aria-label="XP to next level"><i style="width:${prog.pct.toFixed(1)}%"></i></div>
-              <p class="mp-xp">${prog.into} / ${prog.needed} XP · ${prog.toNext} XP to LVL ${prog.level + 1}</p>` : ""}
+              <p class="mp-xp">${prog.into} / ${prog.needed} XP · ${prog.toNext} XP to LVL ${prog.level + 1}${me && prog.nextRank ? ` · ${prog.nextRank.title} at LVL ${prog.nextRank.level}` : ""}</p>` : ""}
             ${chips ? `<p class="mp-chips">${chips}</p>` : ""}
           </div>
           <div class="mp-actions">
-            ${d.isMe ? `<a class="btn btn-primary" href="profile.html#mypage">✎ Edit my page</a>` : `
+            ${me ? `<button type="button" class="btn btn-ghost" data-share-card>Share my card</button>` : `
               ${d.trainerId ? `<a class="btn btn-primary" href="#book">Book ${esc(first)} ▸</a>` : ""}
               ${d.linked === false ? "" : `<button type="button" class="btn ${d.trainerId ? "btn-ghost" : "btn-primary"}" data-mp-chat>💬 Chat</button>`}
               ${d.canLike || (!LevelUp.getPlayer() && d.trainerId) ? `<button type="button" class="btn btn-ghost mp-like ${d.liked ? "liked" : ""}" data-mp-like aria-pressed="${Boolean(d.liked)}"><span aria-hidden="true">♥</span> ${d.liked ? "Liked" : "Like"}${likes ? ` · ${likes}` : ""}</button>` : ""}`}
           </div>
         </div>
       </section>
-      ${d.isMe ? `<p class="container mp-note">This is how other members see your page.</p>` : ""}
       ${d.private ? `<p class="container mp-note">🔒 ${esc(first)} keeps their page private.</p>` : ""}
       <p class="container form-error" role="alert" id="mpError"></p>`;
+    if (me) bindHero();
+  }
+
+  // Your own photo and card. Bound on the elements themselves: a photo you are still picking is not lost
+  // when the page draws again in the meantime.
+  function bindHero() {
+    const input = hero.querySelector("[data-avatar-input]");
+    input?.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const label = input.closest("label");
+      label.classList.add("busy");
+      try {
+        await LevelUp.uploadAvatar(file);
+        LevelUp.toast({ title: "Photo saved", text: LevelUp.getPlayer()?.trainerId ? "It's on your coach card too." : "Your face is on the high scores now", icon: "📷", tone: "green" });
+      } catch (err) {
+        label.classList.remove("busy");
+        LevelUp.toast({ title: "Photo not saved", text: err.message, icon: "!" });
+      }
+    });
+    hero.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try { await LevelUp.shareCard(); } catch (err) { LevelUp.toast({ title: "Card not made", text: err.message, icon: "!" }); }
+      button.disabled = false;
+    });
   }
 
   function classRow(c, coachList) {
@@ -146,12 +224,13 @@
             <button type="button" class="mp-heart ${ph.liked ? "liked" : ""}" data-mp-photo-like aria-pressed="${Boolean(ph.liked)}" aria-label="${ph.liked ? "Unlike this photo" : "Like this photo"}"><span aria-hidden="true">♥</span> ${ph.likes || ""}</button>
             <span class="mp-count">💬 ${ph.commentCount}</span>
             <small>${day(ph.date)}</small>
-            ${page.canModerate && !page.isMe ? `<button type="button" class="mp-mod" data-mp-photo-remove title="Remove this photo (admin)">Remove</button>` : ""}
+            ${page.isMe ? `<button type="button" class="mp-mod" data-mp-photo-remove>Remove</button>`
+              : page.canModerate ? `<button type="button" class="mp-mod" data-mp-photo-remove title="Remove this photo (admin)">Remove</button>` : ""}
           </div>
           ${hidden > 0 ? `<button type="button" class="link-btn mp-more" data-mp-all>Show all ${ph.commentCount} comments</button>` : ""}
           ${comments.length ? `<ul class="mp-comments">${comments.map((c) => `
             <li data-comment="${esc(c.id)}">
-              <span class="mp-c-av" ${person(c)}>${LevelUp.avatarHtml({ name: c.name, avatarUrl: c.avatarUrl })}</span>
+              <span class="mp-c-av" ${person(c)}>${LevelUp.avatarHtml({ name: c.name, avatarUrl: c.avatarUrl, trainerId: c.trainerId })}</span>
               <div class="mp-c-main">
                 <p><b ${person(c)} data-no-i18n>${esc(c.name)}</b> <span data-no-i18n>${esc(c.body)}</span></p>
                 <p class="mp-c-meta"><small>${ago(c.date)}</small>
@@ -170,21 +249,43 @@
 
   function renderBody() {
     const d = page;
-    if (d.private) { body.innerHTML = ""; return; }
+    if (d.private) { body.innerHTML = ownBar.innerHTML = ""; return; }
     const coach = d.trainerId ? LevelUp.trainerById(d.trainerId) : null;
     const first = String(d.name || "").split(" ")[0];
-    const about = d.bio || d.trainerBio || coach?.bio || "";
+    const me = d.isMe ? LevelUp.getPlayer() : null;
+    const cardText = d.trainerBio || coach?.bio || "";
+    const about = (me ? me.bio : d.bio) || cardText || "";
     const tags = String(d.specialties || coach?.specialties || "").split(/[,·]/).map((x) => x.trim()).filter(Boolean).slice(0, 6);
     const unlocked = ACHIEVEMENTS.filter((a) => (d.achievements || []).includes(a.id));
     const activity = (d.activity || []).map(activityRow).filter(Boolean).join("");
     const price = d.trainerId ? LevelUp.priceFor(d.trainerId) : null;
     const photos = d.photos || [];
+    ownBar.innerHTML = me ? `<div class="mp-own-bar">
+        <p><b>👁 This is what other members see of you.</b> ${d.trainerId
+          ? "Your page opens from your coach card, also for visitors: your photos, the group classes you give and your calendar."
+          : "Never your email, body stats, sessions or payments: those are in the other tabs, for you only."}</p>
+        ${d.trainerId ? "" : `<label class="news-setting">
+          <input type="checkbox" data-page-visible ${me.profileVisible ? "checked" : ""}>
+          <span><b>Other members can see my page</b> <small class="muted">Off: they only see your name and photo. You can still chat and get likes on the high scores.</small></span>
+        </label>`}
+        ${d.loadError ? `<p class="form-error" role="alert">${esc(d.loadError)}</p>` : ""}
+      </div>` : "";
     body.innerHTML = `
       <div class="container mp-grid">
         <div class="mp-side">
-          ${about || tags.length || d.trainerId ? `<section class="panel mp-card">
+          ${me || about || tags.length || d.trainerId ? `<section class="panel mp-card">
             <h2>About ${esc(first)}</h2>
-            ${about ? `<p class="mp-bio" data-no-i18n>${esc(about)}</p>` : ""}
+            ${me ? `<form class="mypage-bio" data-mp-bio>
+              <label class="sr-only" for="bioInput">About me</label>
+              <textarea id="bioInput" name="bio" rows="3" maxlength="160" placeholder="e.g. Training for my first Hyrox 💪">${esc(me.bio || "")}</textarea>
+              <div class="mypage-bio-row">
+                <small class="muted">A line about yourself (optional, 160 characters)</small>
+                <button type="submit" class="btn btn-small btn-primary">Save</button>
+              </div>
+              <p class="form-error" role="alert"></p>
+            </form>
+            ${!me.bio && cardText ? `<p class="mp-bio muted" data-no-i18n>${esc(cardText)}</p>` : ""}`
+              : about ? `<p class="mp-bio" data-no-i18n>${esc(about)}</p>` : ""}
             ${tags.length ? `<ul class="team-chips">${tags.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
             ${d.trainerId ? `<div class="trainer-stats" data-trainer-stats="${esc(d.trainerId)}"></div>
               ${price ? `<p class="mp-price"><b>${LevelUp.euro(price)}</b> per session · ${LevelUp.euro(LevelUp.getPricing().introPrice)} for your first one</p>` : ""}` : ""}
@@ -224,13 +325,41 @@
         </div>
 
         <div class="mp-feed">
-          <h2 class="mp-feed-title">Photos <small class="muted">${photos.length}</small></h2>
-          ${photos.length ? photos.map(photoCard).join("") : `<p class="mp-empty">${d.isMe
-            ? `No photos yet. <a class="text-link" href="profile.html#mypage">Add your first photo</a>.`
-            : `${esc(first)} hasn't posted photos yet.`}</p>`}
+          <h2 class="mp-feed-title">Photos <small class="muted">${me ? `${d.partial ? me.photos.length : photos.length}/12` : photos.length}</small></h2>
+          ${me && (d.partial ? me.photos.length : photos.length) < 12 ? `
+            <label class="photo-add mp-photo-add" title="Add a photo">
+              <span aria-hidden="true">＋</span><span>Add a photo</span>
+              <input type="file" accept="image/*" data-photo-input hidden>
+            </label>
+            <p class="muted small mp-photo-rules">Post photos you'd show at the gym: a PR, a run, the squad after class. Only photos of yourself, or with the OK of who's in it. LEVEL-UP can remove a photo that doesn't fit.</p>` : ""}
+          ${d.partial ? `<p class="mp-empty">Loading…</p>`
+            : photos.length ? photos.map(photoCard).join("")
+            : `<p class="mp-empty">${me ? "No photos yet. Add your first one above." : `${esc(first)} hasn't posted photos yet.`}</p>`}
         </div>
       </div>`;
+    if (me) bindOwnPage();
     window.LevelUpSchedule?.refresh(); // fills the coach's level, sessions and open hours
+  }
+
+  // Your own page: add a photo (bound on the element itself, like the profile photo)
+  function bindOwnPage() {
+    const input = body.querySelector("[data-photo-input]");
+    input?.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const caption = prompt(tr("Add a short caption (optional, 140 characters):"), "");
+      if (caption === null) { input.value = ""; return; }
+      const tile = input.closest(".photo-add");
+      tile.classList.add("busy");
+      try {
+        await LevelUp.addPhoto(file, caption.slice(0, 140));
+        LevelUp.toast({ title: "Photo added", text: "It shows on your page now.", icon: "📸", tone: "green" });
+      } catch (err) {
+        tile.classList.remove("busy");
+        input.value = "";
+        LevelUp.toast({ title: "Photo not added", text: err.message, icon: "!" });
+      }
+    });
   }
 
   // A coach's calendar: schedule.js draws the board for this trainer and handles the booking
@@ -304,7 +433,7 @@
         return;
       }
       if (t.closest("[data-mp-photo-remove]")) {
-        if (!confirm(tr("Remove this photo from this member's page? They are not told."))) return;
+        if (!confirm(tr(page.isMe ? "Remove this photo from your page?" : "Remove this photo from this member's page? They are not told."))) return;
         await LevelUp.deletePhoto(ph.id);
         page.photos = page.photos.filter((x) => x.id !== ph.id);
         renderBody();
@@ -312,6 +441,36 @@
     } catch (err) {
       LevelUp.toast({ title: "That didn't work", text: err.message, icon: "!" });
     }
+  });
+
+  // Your own page: the line about yourself, and who may see your page
+  document.addEventListener("submit", async (event) => {
+    const form = event.target.closest("[data-mp-bio]");
+    if (!form) return;
+    event.preventDefault();
+    const btn = form.querySelector("[type=submit]");
+    btn.disabled = true;
+    form.querySelector(".form-error").textContent = "";
+    try {
+      await LevelUp.setProfile({ bio: form.elements.bio.value });
+      LevelUp.toast({ title: "Saved", text: "Your page is up to date.", icon: "✓", tone: "green" });
+    } catch (err) {
+      form.querySelector(".form-error").textContent = err.message;
+    }
+    btn.disabled = false;
+  });
+  document.addEventListener("change", async (event) => {
+    const box = event.target.closest("[data-page-visible]");
+    if (!box) return;
+    box.disabled = true;
+    try {
+      await LevelUp.setProfile({ visible: box.checked });
+      LevelUp.toast({ title: box.checked ? "Your page is visible" : "Your page is private", text: box.checked ? "Other members can open your page." : "Others only see your name and photo.", icon: box.checked ? "👁" : "🔒", tone: "green" });
+    } catch (err) {
+      box.checked = !box.checked;
+      LevelUp.toast({ title: "That didn't work", text: err.message, icon: "!" });
+    }
+    box.disabled = false;
   });
 
   document.addEventListener("submit", async (event) => {
@@ -339,8 +498,9 @@
   // ---------- Start ----------
   document.addEventListener("levelup:change", () => {
     if (!LevelUp.isReady()) return;
-    const now = LevelUp.getPlayer()?.id || "";
-    if (loadedFor === null || now !== loadedFor) load(); // first time, or someone logged in or out
+    const me = LevelUp.getPlayer();
+    if (loadedFor === null || (me?.id || "") !== loadedFor) { load(); return; } // first time, or someone logged in or out
+    if (own() && signature(me) !== lastSig) load(); // you changed your photo, your text or your photos
   });
   LevelUp.ready.then(() => { if (loadedFor === null) load(); });
 })();

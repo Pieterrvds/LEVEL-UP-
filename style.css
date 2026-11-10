@@ -2200,16 +2200,6 @@ input, select, textarea { border-radius: 8px; }
 .avatar { border-radius: 8px; }
 .avatar.xl { border-radius: 14px; }
 
-/* Player card (account header): an Ultimate Team style card in the rank colour */
-.player-header {
-  border: 0;
-  background:
-    linear-gradient(155deg, rgba(var(--green-bright-rgb), 0.42) 0%, rgba(var(--green-rgb), 0.12) 38%, transparent 62%),
-    linear-gradient(180deg, var(--panel-2), #000);
-  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%, 0 22px);
-  box-shadow: none;
-}
-.player-header-level { border-radius: 10px; border-width: 1px; }
 
 /* Page tabs and bottom bar */
 .page-tab { letter-spacing: 0.04em; }
@@ -2262,7 +2252,6 @@ input, select, textarea { border-radius: 8px; }
 .potm-chip { color: #000; background: var(--gold); border-color: var(--gold); }
 .streak-chip { color: #ffb36b; border-color: rgba(255, 138, 61, 0.55); background: rgba(255, 138, 61, 0.12); }
 .streak-nudge { margin: -4px 0 14px; font-size: 0.86rem; color: var(--muted); }
-.share-card-btn { grid-column: 1 / -1; justify-self: start; }
 .share-dialog { max-width: 440px; }
 .share-preview { width: 100%; height: auto; margin: 4px 0 16px; border-radius: 12px; border: 1px solid var(--frame); }
 
@@ -2531,7 +2520,7 @@ input, select, textarea { border-radius: 8px; }
 .bar { border-radius: 99px; }
 .bag { border-radius: 16px 0 0 16px; overflow: hidden; }
 /* Player card and the promotion card: rounded instead of cut corners */
-.player-header, .promo-card { clip-path: none; border-radius: 18px; overflow: hidden; }
+.promo-card { clip-path: none; border-radius: 18px; overflow: hidden; }
 .session-row img, .booking-trainer img, .coach-item img { border-radius: 8px; }
 .nav a { border-radius: 6px; }
 
@@ -2824,10 +2813,3 @@ button.like-badge:focus-visible { outline: 2px solid #ff5c86; outline-offset: 2p
 
 /* ---------- Member pages (member.html): anything that opens someone's page looks clickable ---------- */
 [data-profile], [data-profile-trainer], .team-card[id^="team-"] .team-photo-wrap, .team-card[id^="team-"] h3, img[data-coach] { cursor: pointer; }
-/* Photos on "My page" in the profile */
-.mypage-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.mypage-photos figure { position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: #000; border-radius: 8px; }
-.mypage-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo-remove { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
-  font-size: 0.85rem; color: #fff; background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; cursor: pointer; }
-.photo-remove:hover { background: var(--red); border-color: var(--red); }

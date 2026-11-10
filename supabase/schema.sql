@@ -1541,7 +1541,7 @@ begin
   if added > 0 then  -- a second tap in the same week sends nothing
     perform public._celebrate(p_to, 'like', jsonb_build_object('by', me.name));
     perform public._push(p_to, '❤️ ' || me.name || ' gave you a like', 'You have ' || total || ' like' || case when total = 1 then '' else 's' end || '. Keep it up!',
-      'profile.html', 'like-' || auth.uid());
+      'profile.html#likes', 'like-' || auth.uid());
   end if;
   return jsonb_build_object('likes', total, 'liked', true);
 end $$;
@@ -1742,7 +1742,7 @@ begin
   if ph.user_id <> auth.uid() then
     select name into who from public.profiles where id = auth.uid();
     perform public._push(ph.user_id, '💬 ' || coalesce(who, 'A member') || ' on your photo', left(msg, 140),
-      'member.html?u=' || ph.user_id || '#photo-' || ph.id, 'photo-' || ph.id);
+      'profile.html?u=' || ph.user_id || '#photo-' || ph.id, 'photo-' || ph.id);
   end if;
   return public._photo_json(ph);
 end $$;
@@ -2281,10 +2281,14 @@ begin
 end $$;
 
 -- Every active trainer for the website (never emails)
+-- avatar_url: the profile photo of the coach's own account. One photo per coach: the one they put on their page
+-- is also the one on their coach card, in the calendar and in the chat (the site falls back to the card's own photo).
+drop function if exists public.trainer_list(); -- the columns changed (avatar_url)
 create or replace function public.trainer_list()
-returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean)
+returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean, avatar_url text)
 language sql stable security definer set search_path = public as $$
-  select t.id, t.name, t.role, t.bio, t.specialties, t.color, t.chart_color, t.email is not null
+  select t.id, t.name, t.role, t.bio, t.specialties, t.color, t.chart_color, t.email is not null,
+         (select p.avatar_url from public.profiles p where t.email is not null and lower(p.email) = lower(t.email) limit 1)
   from public.trainers t where t.active order by t.created_at, t.id;
 $$;
 
@@ -2917,7 +2921,7 @@ begin
       perform public._push(coach, case when was = 'pending' then 'Request withdrawn' else 'Session cancelled' end,
                            client || ' · ' || slot, 'profile.html#coach', tag);
       if not by_player then
-        perform public._push(b.user_id, 'Session cancelled', trainer || ' · ' || slot || '. No costs.', 'profile.html', tag);
+        perform public._push(b.user_id, 'Session cancelled', trainer || ' · ' || slot || '. No costs.', 'profile.html#overview', tag);
       end if;
     end if;
     return old;
@@ -2928,20 +2932,20 @@ begin
     perform public._push(coach, 'New session request', client || ' · ' || slot || case when new.kind = 'duo' then ' · duo' else '' end,
                          'profile.html#coach', tag);
   elsif new.status = 'confirmed' then
-    perform public._push(new.user_id, 'Session confirmed ✓', trainer || ' · ' || slot, 'profile.html', tag);
+    perform public._push(new.user_id, 'Session confirmed ✓', trainer || ' · ' || slot, 'profile.html#overview', tag);
   elsif new.status = 'declined' then
     perform public._push(new.user_id, 'Request declined', trainer || ' can''t make ' || slot || '. Pick another hour.', 'index.html#schedule', tag);
   elsif new.status = 'expired' and was = 'pending' then
     perform public._push(new.user_id, 'Request expired', trainer || ' didn''t confirm ' || slot || ' in time. Pick another hour.', 'index.html#schedule', tag);
   elsif new.status = 'completed' then
-    perform public._push(new.user_id, '+' || new.xp || ' XP earned!', 'Session with ' || trainer || ' rewarded. Keep levelling up.', 'profile.html', tag);
+    perform public._push(new.user_id, '+' || new.xp || ' XP earned!', 'Session with ' || trainer || ' rewarded. Keep levelling up.', 'profile.html#overview', tag);
   elsif new.status = 'no_show' then
-    perform public._push(new.user_id, 'Missed session', trainer || ' · ' || slot || ' was marked as a no-show.', 'profile.html', tag);
+    perform public._push(new.user_id, 'Missed session', trainer || ' · ' || slot || ' was marked as a no-show.', 'profile.html#overview', tag);
   elsif new.status in ('late_cancel', 'cancelled') then
     perform public._push(coach, case when new.status = 'late_cancel' then 'Late cancellation' else 'Session cancelled' end,
                          client || ' · ' || slot, 'profile.html#coach', tag);
     if not by_player then
-      perform public._push(new.user_id, 'Session cancelled', trainer || ' · ' || slot, 'profile.html', tag);
+      perform public._push(new.user_id, 'Session cancelled', trainer || ' · ' || slot, 'profile.html#overview', tag);
     end if;
   end if;
   return new;
@@ -3285,7 +3289,7 @@ begin
     for update of k skip locked
   loop
     perform public._push(b.user_id, 'Session ' || case when b.day = today then 'today' else 'tomorrow' end || ' at ' || lpad(b.hour::text, 2, '0') || ':00',
-      'With ' || b.trainer || ' at Hoogstraat 40, Aalst. See you there!', 'profile.html', 'reminder-' || b.id);
+      'With ' || b.trainer || ' at Hoogstraat 40, Aalst. See you there!', 'profile.html#overview', 'reminder-' || b.id);
     update public.bookings set reminder_pushed_at = now() where id = b.id;
     n := n + 1;
   end loop;

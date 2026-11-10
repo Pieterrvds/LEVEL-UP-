@@ -716,7 +716,12 @@ const LevelUp = (() => {
       const rows = await call("trainer_list");
       (rows || []).forEach((r) => {
         const known = TRAINERS.find((t) => t.id === r.id);
-        if (known) { known.linked = Boolean(r.linked); return; }
+        if (known) {
+          known.linked = Boolean(r.linked);
+          known.defaultImg = known.defaultImg || known.img;
+          known.img = r.avatar_url || known.defaultImg; // the photo the coach put on their own page wins
+          return;
+        }
         TRAINERS.push({
           id: r.id,
           name: r.name,
@@ -724,7 +729,8 @@ const LevelUp = (() => {
           role: r.role || "Personal trainer",
           bio: r.bio || "",
           specialties: r.specialties || "",
-          img: "img/pfdefault.png",
+          img: r.avatar_url || "img/pfdefault.png",
+          defaultImg: "img/pfdefault.png",
           color: r.color || "#b0b0b0",
           chartColor: r.chart_color || "#8c8c8c",
           availability: {},
@@ -736,6 +742,22 @@ const LevelUp = (() => {
     } catch (err) {
       console.error("Loading trainers failed:", err);
     }
+    applyCoachPhotos();
+  }
+
+  // One photo per coach: the one on their page (their profile photo) is also the one on their coach card,
+  // in the calendar and in the chat. Coach faces that are written in the page itself follow here.
+  function applyCoachPhotos() {
+    if (player?.trainerId) {
+      const mine = TRAINERS.find((t) => t.id === player.trainerId);
+      if (mine) { mine.defaultImg = mine.defaultImg || mine.img; mine.img = player.avatarUrl || mine.defaultImg; }
+    }
+    TRAINERS.forEach((t) => {
+      if (!t.defaultImg) return;
+      document.querySelectorAll(`img[data-coach="${t.id}"], #team-${t.id} .team-photo`).forEach((img) => {
+        if (img.getAttribute("src") !== t.img) img.setAttribute("src", t.img);
+      });
+    });
   }
 
   const scoreRows = (rows) => (rows || []).map((r) => ({
@@ -1082,10 +1104,10 @@ const LevelUp = (() => {
   // After switching tabs: if the page was scrolled past the tab bar, go back to the top of the new tab
   function scrollToTabs(root) {
     const bar = root.querySelector(".page-tabs");
-    const before = bar?.previousElementSibling;
-    if (!before) return;
+    if (!bar) return;
+    const before = bar.previousElementSibling;
     const hud = (document.getElementById("hud")?.offsetHeight || 0) + 4;
-    const y = before.getBoundingClientRect().bottom + window.scrollY - hud;
+    const y = (before ? before.getBoundingClientRect().bottom : root.getBoundingClientRect().top) + window.scrollY - hud;
     if (window.scrollY > y) window.scrollTo({ top: y });
   }
 
@@ -2193,6 +2215,7 @@ const LevelUp = (() => {
   }
 
   function emit() {
+    applyCoachPhotos();
     applyRankTheme();
     renderHud();
     document.dispatchEvent(new CustomEvent("levelup:change", { detail: player }));
@@ -2263,7 +2286,8 @@ const LevelUp = (() => {
   function avatarHtml(p, size = "") {
     const letter = esc((p.name || "?").trim().charAt(0).toUpperCase() || "?");
     const tier = RANKS.indexOf(rankFor(levelFromXp(p.xp || 0)));
-    const url = p.avatarUrl || p.avatar;
+    const coach = p.trainerId ? TRAINERS.find((t) => t.id === p.trainerId) : null;
+    const url = p.avatarUrl || p.avatar || (coach && !coach.dynamic ? coach.defaultImg || coach.img : null);
     if (url) return `<span class="avatar has-photo ${size}" data-tier="${tier}" aria-hidden="true"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"></span>`;
     return `<span class="avatar ${size}" data-tier="${tier}" aria-hidden="true">${letter}</span>`;
   }
@@ -2437,7 +2461,7 @@ const LevelUp = (() => {
   }
 
   // ---------- Profile photo: square-cropped and shrunk in the browser, then stored in Storage "avatars" ----------
-  const AVATAR_SIZE = 320;
+  const AVATAR_SIZE = 640; // also the photo on a coach card, so a bit bigger than an avatar needs
   async function squarePhoto(file) {
     if (!/^image\//.test(file?.type || "")) throw new Error("Choose a photo (JPG, PNG or WebP).");
     if (file.size > 15 * 1024 * 1024) throw new Error("That photo is too big. Choose one under 15 MB.");
@@ -2542,11 +2566,12 @@ const LevelUp = (() => {
     emit();
   }
 
-  // ---------- Member pages: member.html shows another member or a coach (photos, classes, likes, chat, booking) ----------
+  // ---------- Member pages: profile.html?u=… or ?trainer=… shows another member or a coach (photos, classes, likes, chat, booking);
+  // without either it is your own page, with your account in tabs only you see ----------
   // Opens from anything with data-profile="<user id>" or data-profile-trainer="<trainer id>": the high scores,
   // a chat, the likes on your profile, a coach card. Coaches are public; members see each other when logged in.
   const publicProfile = (who) => call("public_profile", who.trainerId ? { p_trainer: who.trainerId } : { p_user: who.userId });
-  const memberLink = (who) => who.trainerId ? `member.html?trainer=${encodeURIComponent(who.trainerId)}` : `member.html?u=${encodeURIComponent(who.userId)}`;
+  const memberLink = (who) => who.trainerId ? `profile.html?trainer=${encodeURIComponent(who.trainerId)}` : `profile.html?u=${encodeURIComponent(who.userId)}`;
   function openProfile(who) {
     if (!who || (!who.trainerId && !who.userId)) { if (!player) openAuth("login"); return; }
     if (!who.trainerId && !player) { openAuth("login"); return; }

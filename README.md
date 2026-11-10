@@ -6,9 +6,9 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
-- `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. Sign-up is one step (name, email, password); body stats are filled in later in their own tab. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Body stats, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
+- `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs: My page (what others see), Overview (sessions, group classes, likes), Coach (trainers only), Rewards, Packs & shop, Body stats, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab. Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
 - `chat.html`: private chat between a player and a coach (see "Chat")
-- `member.html`: the page of another member or a coach: photos with comments, group classes, likes, chat and, for a coach, their calendar to book (see "Member pages")
+- `member.html`: only sends old links on to `profile.html` (the member pages used to live here)
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
@@ -430,11 +430,19 @@ then it waits. Not on `admin.html`. After 30 days a waiting one just counts as s
 `levelup-celebrate.js` is used as delivered (don't edit it): title and subtitle are passed in Dutch or English, and
 the accent is the site's own colour (which changes with the player's rank).
 
-## Member pages (member.html: profiles of other members and coaches)
+## Member pages (profile.html: your own page with your account, and the pages of other members and coaches)
 Tap someone's photo or name and their page opens: on the high scores (podium, rows, Player of the Month), in a
 chat (the header, or a name in a group chat), in the likes on your own profile, under a photo comment, and on a coach
 card ("Meet the team": the photo or name, and the small coach faces on the training cards).
-`member.html?u=<user id>` is a member, `member.html?trainer=<trainer id>` a coach, without either your own page.
+`profile.html?u=<user id>` is a member, `profile.html?trainer=<trainer id>` a coach, without either your own page.
+- **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (Overview,
+  Coach, Rewards, Packs & shop, Body stats, Me). The first tab, **My page**, is exactly what others see, with your
+  own buttons in it: 📷 on your photo, the text about yourself, "Add a photo", Remove under your photos and the
+  switch "Other members can see my page". `member.js` draws the top block and the My page tab, `profile.js` the
+  other tabs; on someone else's page `profile.js` draws nothing.
+- **One photo:** your profile photo is changed in one place (📷 on the photo at the top) and shows everywhere.
+  For a coach it is also the photo on the coach card, in the calendar, the booking window and the chat
+  (`trainer_list` returns `avatar_url`); a coach who uploaded nothing keeps the photo that came with the card.
 - **Top:** a cover in the rank colour, photo, name, rank and level with the XP bar, place on the high scores, streak,
   Player of the Month, and the buttons: 💬 Chat, ♥ Like, and for a coach **Book**.
 - **A coach's calendar:** the same week board and booking window as on the home page (`schedule.js`), for that coach
@@ -452,13 +460,13 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
   At most 300 characters and 6 comments a minute.
 - **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
 - **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
-  see the photos and counts but not the comments. A member can make their page private (My account → Overview →
-  My page): others then only see name and photo, and can't react to the photos.
-- **My page** (My account → Overview): a line about yourself (160 characters), up to 12 photos with a caption, and
-  the private switch. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
+  see the photos and counts but not the comments. A member can make their page private (the switch at the top of
+  their My page tab): others then only see name and photo, and can't react to the photos.
+- **Your own text and photos:** a line about yourself (160 characters), up to 12 photos with a caption, and
+  the private switch, all on the My page tab. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
 - **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
-- Files: `member.html`, `member.js`, `member.css`. Server: `public_profile`, `set_profile`, `photo_add`,
+- Files: `profile.html`, `member.js`, `member.css` (the page), `profile.js`, `profile.css` (the account tabs). Server: `public_profile`, `set_profile`, `photo_add`,
   `photo_delete`, `photo_like`, `photo_comment`, `photo_comment_delete`, `photo_comment_like` and the tables
   `profile_photos`, `photo_likes`, `photo_comments`, `photo_comment_likes` in `supabase/schema.sql`.
   The privacy policy (`privacy.html`) describes all this.
@@ -511,8 +519,8 @@ blue, Athlete purple, Warrior orange, Champion red, Legend gold (see "Rank colou
 Visitors, logged-out people and Rookies see green. Under Account, "Always use Carbon green" keeps the green look on that device. Rank badges and avatars keep their own rank colour.
 
 ## Profile photos
-Players upload a photo with the 📷 button on their avatar (Me → top of the page) or under Account → Profile photo.
-The photo is cropped square and shrunk to 320 px in the browser before upload (so it stays small and fast), then
+Players upload a photo with the 📷 button on their photo at the top of their own page (the only place; Me → Account
+has "Remove my photo"). The photo is cropped square and shrunk to 640 px in the browser before upload (so it stays small and fast), then
 stored in the Supabase Storage bucket `avatars`, in a folder named after the player's id. Everyone can only upload,
 change or delete files in their own folder. The photo shows on the high scores (podium and rows), the page header,
 the account page, coach booking requests and in admin. Remove sets it back to the letter. As admin you can remove

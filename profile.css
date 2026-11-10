@@ -21,31 +21,8 @@
 .no-save .btn-row { justify-content: center; }
 .no-save .pixel-heart { margin: 16px 0 40px; }
 
-/* Header */
-.player-header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: clamp(20px, 4vw, 40px);
-  align-items: center;
-  padding: clamp(20px, 4vw, 36px);
-  margin-bottom: 28px;
-}
-.player-header .section-kicker { margin-bottom: 10px; }
-.player-header-name { font-family: var(--display); font-size: clamp(1.1rem, 3vw, 1.8rem); margin-bottom: 14px; word-break: break-word; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
-.player-header-rank { display: flex; align-items: center; gap: 12px; font-family: var(--display); font-size: 0.65rem; color: var(--muted); margin-bottom: 18px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .xp-bar.big { height: 18px; }
 .xp-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
-.player-header-level {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 18px 22px;
-  background: #000;
-  border: 3px solid var(--gold);
-  box-shadow: var(--shadow);
-}
-.player-header-level span { font-family: var(--display); font-size: 0.6rem; color: var(--muted); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
-.player-header-level strong { font-family: var(--display); font-size: 2.2rem; font-weight: 400; color: var(--gold); line-height: 1.5; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 
 /* Summary tiles */
 .summary-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
@@ -196,11 +173,6 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 }
 
 @media (max-width: 640px) {
-  .player-header { grid-template-columns: auto 1fr; }
-  .player-header .avatar.xl { width: 64px; height: 64px; font-size: 1.4rem; }
-  .player-header-level { display: none; }
-  .player-header-info { grid-column: 1 / -1; }
-  .player-header { grid-template-rows: auto; }
   .workout-form { grid-template-columns: 1fr; }
   .result-tiles.three { grid-template-columns: 1fr 1fr; }
   .field-row.four { grid-template-columns: 1fr 1fr; }
@@ -297,8 +269,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .info-more[open] summary { margin-bottom: 8px; }
 .info-more p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 70ch; }
 
-/* Profile photo: camera button on the avatar, and the row under Account */
-.avatar-edit { position: relative; flex: none; align-self: start; }
+/* Profile photo: the camera button on your photo at the top of your page, and the row under Account */
 .avatar-edit-btn { position: absolute; right: -10px; bottom: -10px; width: 38px; height: 38px; display: grid; place-items: center;
   font-size: 1.05rem; background: var(--green-bright); border: 1px solid rgba(0, 0, 0, 0.6); box-shadow: var(--shadow-sm); cursor: pointer; }
 .avatar-edit-btn:hover { background: var(--green-bright); filter: brightness(1.12); }
@@ -308,13 +279,6 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .photo-setting label.btn { cursor: pointer; }
 @media (max-width: 640px) { .avatar-edit-btn { width: 32px; height: 32px; right: -8px; bottom: -8px; font-size: 0.9rem; } }
 
-/* Phones: the level sits in the top-right corner of the player card, like a rating on an Ultimate Team card */
-@media (max-width: 640px) {
-  .player-header { position: relative; }
-  .player-header-level { display: grid; position: absolute; top: 26px; right: 22px; gap: 0; padding: 0; background: none; border: 0; box-shadow: none; }
-  .player-header-level strong { font-size: 1.9rem; line-height: 1.4; color: var(--green-bright); }
-  .player-header-level span { font-size: 0.55rem; }
-}
 
 /* Shop: open tab and pack gifts */
 .pack-option span.pack-gift { color: var(--green-bright); font-weight: 700; font-size: 0.85rem; }
@@ -324,7 +288,6 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .tab-box .log-list li { align-items: center; }
 
 /* Likes: the heart on your own photo and who liked you */
-.avatar-edit .like-badge.at-left { right: auto; left: -8px; top: -8px; bottom: auto; }
 .like-total { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 1.1rem; color: #ff5c86; }
 .like-total small { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .liked-by { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
@@ -337,13 +300,9 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .news-setting input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-bright); }
 .news-setting small { display: block; font-size: 0.82rem; }
 
-/* My page: about me, photos and visibility */
+/* My page: about me and the tile to add a photo */
 .mypage-bio { display: grid; gap: 6px; margin: 12px 0 0; }
 .mypage-bio-row { display: flex; gap: 8px; }
-.mypage-bio-row input { flex: 1; min-width: 0; }
-.mypage-photos { margin-bottom: 10px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-.mypage-photos figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; font-size: 0.75rem; color: #fff;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .photo-add { display: grid; place-content: center; justify-items: center; gap: 4px; aspect-ratio: 1; cursor: pointer; border: 2px dashed var(--line); border-radius: 8px;
   font-family: var(--sans); font-size: 0.82rem; font-style: normal; font-weight: 600; text-transform: none; color: var(--muted); font-size-adjust: none; text-align: center; }
 .photo-add > span:first-child { font-size: 1.8rem; line-height: 1; color: var(--green-bright); }

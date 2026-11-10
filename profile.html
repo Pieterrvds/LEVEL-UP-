@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Player Profile | LEVEL-UP</title>
-  <script src="i18n-nl.js?v=202611102300"></script>
-  <script src="i18n.js?v=202611102300"></script>
-  <meta name="description" content="Your LEVEL-UP player profile: level, XP, sessions, body stats, achievements and gear.">
+  <title>Player profile | LEVEL-UP</title>
+  <script src="i18n-nl.js?v=202611110900"></script>
+  <script src="i18n.js?v=202611110900"></script>
+  <meta name="description" content="A LEVEL-UP player or coach: level, photos, group classes and, for coaches, their calendar to book a session.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
-  <meta property="og:title" content="My account | LEVEL-UP">
-  <meta property="og:description" content="Your LEVEL-UP player card: level, XP, sessions, streak and rewards.">
+  <meta property="og:title" content="LEVEL-UP player">
+  <meta property="og:description" content="Level, photos and group classes of a LEVEL-UP player or coach.">
   <meta property="og:url" content="https://pieterrvds.github.io/LEVEL-UP-/profile.html">
   <meta property="og:image" content="https://pieterrvds.github.io/LEVEL-UP-/img/og-image.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="LEVEL-UP: Train hard. Level up. Personal training in Aalst.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="robots" content="noindex">
   <meta name="theme-color" content="#070707">
   <script>try{var r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")document.documentElement.dataset.rank=r}catch(e){}</script>
   <link rel="manifest" href="manifest.webmanifest">
@@ -30,9 +29,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611102300">
-  <link rel="stylesheet" href="shop.css?v=202611102300">
-  <link rel="stylesheet" href="profile.css?v=202611102300">
+  <link rel="stylesheet" href="style.css?v=202611110900">
+  <link rel="stylesheet" href="shop.css?v=202611110900">
+  <link rel="stylesheet" href="profile.css?v=202611110900">
+  <link rel="stylesheet" href="member.css?v=202611110900">
 </head>
 <body>
 
@@ -75,10 +75,55 @@
     </button>
   </header>
 
-  <main class="profile-page">
-    <div class="hero-bg" aria-hidden="true"></div>
-    <div class="container" id="profileRoot"></div>
+  <main class="member-main">
+    <!-- Who this is: photo, name, level and what you can do; on your own page also the button to change your photo (member.js) -->
+    <div id="mpHero"><p class="board-message mp-loading">Loading…</p></div>
+
+    <!-- Only you: the tabs of your account (Overview, Coach, Rewards …) and what's in them (profile.js) -->
+    <div class="container mp-tabs" id="profileTabs" hidden></div>
+    <div class="container mp-account" id="profileRoot" hidden></div>
+
+    <!-- What other members see: a coach's calendar, then about, numbers, classes and photos (member.js) -->
+    <div id="mpPage">
+    <div class="container" id="mpOwnBar"></div>
+    <!-- A coach's calendar: the same board and booking window as on the home page (schedule.js), for this coach only -->
+    <section class="section section-alt mp-book" id="book" hidden>
+      <div class="container">
+        <p class="section-kicker">Calendar</p>
+        <h2 class="section-title" id="bookTitle">Book a session</h2>
+        <p class="section-intro">Pick an hour, your trainer confirms it and you earn <strong>+75 XP</strong>. Free cancellation up to 24 hours before.</p>
+        <div class="schedule-toolbar">
+          <div class="week-nav">
+            <button type="button" class="week-btn" id="weekPrev" aria-label="Previous week">◀</button>
+            <p class="week-label" id="weekLabel" aria-live="polite"></p>
+            <button type="button" class="week-btn" id="weekNext" aria-label="Next week">▶</button>
+          </div>
+          <div class="filter-tabs" id="trainerFilter" role="tablist" aria-label="Filter by trainer" hidden></div>
+        </div>
+        <div class="week-board" id="weekBoard"></div>
+        <div class="week-list" id="weekList" aria-live="polite"></div>
+        <p class="list-hint">Tap a time to book · <b>✓</b> = your session · <i>…</i> = waiting for the trainer</p>
+        <ul class="board-legend">
+          <li><span class="legend-swatch free"></span>Free: click to book</li>
+          <li><span class="legend-swatch requested"></span>Requested (waiting for trainer)</li>
+          <li><span class="legend-swatch mine"></span>Confirmed session</li>
+          <li><span class="legend-swatch taken"></span>Booked</li>
+          <li><span class="legend-swatch group"></span>Group session</li>
+          <li><span class="legend-swatch closed"></span><span id="noticeText">Closed: book at least 12 hours ahead</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- About, numbers, group classes, achievements, activity and the photos with their comments (member.js) -->
+    <div id="mpBody"></div>
+    </div>
   </main>
+
+  <!-- Booking window (schedule.js) -->
+  <dialog class="auth-dialog booking-dialog" id="bookingDialog" aria-labelledby="bookingTitle">
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <div id="bookingContent"></div>
+  </dialog>
 
   <footer class="footer">
     <div class="vine-divider" aria-hidden="true"></div>
@@ -94,11 +139,14 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="game.js?v=202611102300"></script>
-  <script src="statements.js?v=202611102300"></script>
-  <script src="hours-editor.js?v=202611102300"></script>
-  <script src="hours-planner.js?v=202611102300"></script>
-  <script src="classes.js?v=202611102300"></script>
-  <script src="profile.js?v=202611102300"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
+  <script src="game.js?v=202611110900"></script>
+  <script src="schedule.js?v=202611110900"></script>
+  <script src="statements.js?v=202611110900"></script>
+  <script src="hours-editor.js?v=202611110900"></script>
+  <script src="hours-planner.js?v=202611110900"></script>
+  <script src="classes.js?v=202611110900"></script>
+  <script src="member.js?v=202611110900"></script>
+  <script src="profile.js?v=202611110900"></script>
 </body>
 </html>
