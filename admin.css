@@ -257,10 +257,10 @@
 
 /* ---------- Shop tab ---------- */
 .shop-admin-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
-.shop-row {
-  display: grid; grid-template-columns: minmax(170px, 1.4fr) auto 100px 90px minmax(170px, 1fr) auto;
-  gap: 12px; align-items: end; padding: 12px; background: #000; border: 1px solid var(--line);
-}
+.shop-row { display: grid; gap: 10px; padding: 12px; background: #000; border: 1px solid var(--line); }
+.shop-row-main { display: grid; grid-template-columns: minmax(170px, 1.4fr) auto 100px 90px minmax(170px, 1fr) auto; gap: 12px; align-items: end; }
+.shop-row-sale { display: grid; grid-template-columns: 140px 110px minmax(170px, 220px) minmax(0, 1fr); gap: 12px; align-items: end;
+  padding-top: 10px; border-top: 1px dashed var(--line); }
 .shop-row-name { display: grid; gap: 4px; justify-items: start; align-self: center; }
 .shop-row label { display: grid; gap: 4px; font-size: 0.78rem; color: var(--muted); }
 .shop-row input[type="number"], .shop-row input[type="datetime-local"] { min-height: 40px; padding: 6px 8px; font-size: 0.9rem; width: 100%; }
@@ -276,8 +276,8 @@
 .fridge-qr { width: 180px; aspect-ratio: 1; padding: 8px; background: #fff; color: #000; font-size: 0.8rem; display: grid; place-items: center; }
 .fridge-qr svg { width: 100%; height: auto; display: block; }
 @media (max-width: 960px) {
-  .shop-row { grid-template-columns: 1fr 1fr; }
-  .shop-row-name { grid-column: 1 / -1; }
+  .shop-row-main, .shop-row-sale { grid-template-columns: 1fr 1fr; }
+  .shop-row-name, .shop-row-sale .switch-field { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
   .fridge-admin { grid-template-columns: 1fr; justify-items: start; }
@@ -285,4 +285,17 @@
 .shop-row label { font-family: var(--sans); font-size: 0.78rem; font-size-adjust: none; font-style: normal; font-weight: 600; text-transform: none; }
 .shop-row label > span { font-family: var(--sans); font-size: 0.78rem; font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; line-height: 1.3; color: var(--muted); }
 .shop-row .switch-field > span { color: var(--text); font-size: 0.88rem; white-space: nowrap; }
-.shop-row > *, .shop-row input { min-width: 0; }
+.shop-row-main > *, .shop-row-sale > *, .shop-row input, .shop-row select { min-width: 0; }
+.shop-row select { min-height: 40px; padding: 6px 30px 6px 8px; font-size: 0.9rem; width: 100%; }
+.shop-row-sale .switch-field > span { white-space: normal; }
+.status-chip.sale { color: #fff; background: #ff3b3b; }
+.bulk-sale, .announce-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; align-items: end; padding: 12px; background: #000; border: 1px solid var(--line); }
+.announce-form { grid-template-columns: minmax(180px, 1.2fr) minmax(200px, 2fr) 150px auto; }
+.bulk-sale label, .announce-form label { display: grid; gap: 4px; min-width: 0; font-family: var(--sans); font-size: 0.78rem; font-size-adjust: none; font-style: normal; font-weight: 600; text-transform: none; color: var(--muted); }
+.bulk-sale label > span, .announce-form label > span { font-family: var(--sans); font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; line-height: 1.3; }
+.bulk-sale input, .bulk-sale select, .announce-form input, .announce-form select { min-height: 40px; padding: 6px 8px; font-size: 0.9rem; width: 100%; min-width: 0; }
+.bulk-sale .switch-field { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text); cursor: pointer; }
+.bulk-sale .switch-field input { width: 20px; height: 20px; min-height: 0; accent-color: var(--green-bright); }
+.bulk-sale .switch-field > span { color: var(--text); font-size: 0.88rem; }
+.news-admin li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 960px) { .announce-form { grid-template-columns: 1fr; } }

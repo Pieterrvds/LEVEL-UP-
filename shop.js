@@ -61,13 +61,17 @@ const euro = (n) => `€${Number(n).toFixed(2)}`;
 const basket = () => cartLines().map(({ id, size, qty }) => ({ id, size, qty }));
 const tabTotal = () => LevelUp.openTab().reduce((sum, o) => sum + o.total, 0);
 const isLimited = (item) => item.stock != null || item.dropEndsAt;
+const onSale = (item) => item.listPrice != null && item.listPrice > item.price;
+const salePct = (item) => Math.round((1 - item.price / item.listPrice) * 100);
+const inFilter = (item, f) => f === "all" || (f === "sale" ? onSale(item) : item.category === f);
 
 // "Ends in 2d 5h" for a drop
-function endsIn(iso) {
+function endsIn(iso, what = "") {
   const ms = new Date(iso) - Date.now();
-  if (ms <= 0) return "Drop ended";
+  if (ms <= 0) return what ? "Sale ended" : "Drop ended";
   const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
-  return d ? `Ends in ${d}d ${h}h` : h ? `Ends in ${h}h ${m % 60}m` : `Ends in ${Math.max(1, m)}m`;
+  const left = d ? `${d}d ${h}h` : h ? `${h}h ${m % 60}m` : `${Math.max(1, m)}m`;
+  return what ? `Sale ends in ${left}` : `Ends in ${left}`;
 }
 
 // ---------- Item art ----------
@@ -93,15 +97,15 @@ function renderTabs() {
   const all = shopItems();
   document.querySelectorAll("[data-filter]").forEach((tab) => {
     const f = tab.dataset.filter;
-    tab.hidden = f !== "all" && !all.some((item) => item.category === f);
+    tab.hidden = f !== "all" && !all.some((item) => inFilter(item, f));
   });
-  if (filter !== "all" && !FRIDGE && !all.some((item) => item.category === filter)) filter = "all";
+  if (filter !== "all" && !FRIDGE && !all.some((item) => inFilter(item, filter))) filter = "all";
   document.querySelectorAll("[data-filter]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.filter === filter)));
 }
 
 function renderItems() {
   const player = LevelUp.getPlayer();
-  const items = shopItems().filter((item) => filter === "all" || item.category === filter);
+  const items = shopItems().filter((item) => inFilter(item, filter));
 
   if (!items.length) {
     itemGrid.innerHTML = `<p class="muted shop-empty">${FRIDGE
@@ -124,13 +128,16 @@ function renderItems() {
     const stockTag = item.stock != null && !out ? `<span class="stock-tag">${item.stock <= 10 ? `Only ${item.stock} left` : `${item.stock} left`}</span>` : "";
     const timer = item.dropEndsAt && !out ? `<p class="drop-timer" data-ends="${esc(item.dropEndsAt)}">${endsIn(item.dropEndsAt)}</p>` : "";
     const label = out ? (ended ? "Drop ended" : "Sold out") : FRIDGE ? "Take one" : "Add to bag";
+    const sale = onSale(item) && !out;
+    const saleTimer = sale && item.saleEndsAt ? `<p class="drop-timer sale-timer" data-ends="${esc(item.saleEndsAt)}" data-ends-label="Sale">${endsIn(item.saleEndsAt, "Sale")}</p>` : "";
 
     return `
-      <article class="item-card rarity-${item.rarity}${out ? " sold-out" : ""}${item.category === "fuel" ? " fuel-card" : ""}" data-id="${item.id}">
+      <article class="item-card rarity-${item.rarity}${out ? " sold-out" : ""}${sale ? " on-sale" : ""}${item.category === "fuel" ? " fuel-card" : ""}" data-id="${item.id}">
         <div class="item-media">
           ${itemArt(item)}
           <span class="rarity-tag">${isLimited(item) ? "limited" : item.rarity}</span>
           ${owned ? `<span class="owned-tag">Owned ×${owned}</span>` : ""}
+          ${sale ? `<span class="sale-tag">−${salePct(item)}%</span>` : ""}
           ${stockTag}
         </div>
         <div class="item-body">
@@ -139,9 +146,10 @@ function renderItems() {
           <p class="item-desc">${esc(item.desc)}</p>
           <ul class="item-perks">${item.perks.map((perk) => `<li>${perk}</li>`).join("")}</ul>
           ${timer}
+          ${saleTimer}
           ${out ? "" : sizes}
           <div class="item-foot">
-            <span class="price"><span class="coin" aria-hidden="true"></span>${euro(item.price)}</span>
+            <span class="price"><span class="coin" aria-hidden="true"></span>${euro(item.price)}${sale ? ` <s class="was-price">${euro(item.listPrice)}</s>` : ""}</span>
             <span class="xp-reward">+${LevelUp.orderXp(item.price)} XP</span>
           </div>
           <button type="button" class="btn ${out ? "btn-ghost" : "btn-primary"} btn-block add-btn" ${out ? "disabled" : ""}>${label}</button>
@@ -161,7 +169,8 @@ function renderXpBanner() {
     fuel && fuel !== top && `${esc(fuel.name)} <b>+${LevelUp.orderXp(fuel.price)} XP</b>`,
     !FRIDGE && `Every session <b>+${LevelUp.SESSION_XP} XP</b>`
   ].filter(Boolean);
-  xpBanner.innerHTML = `<span class="xp-rate"><span class="coin" aria-hidden="true"></span> €1 = 10 XP</span>${examples.map((e) => `<span>${e}</span>`).join("")}`;
+  const deal = items.filter(onSale).sort((a, b) => salePct(b) - salePct(a))[0];
+  xpBanner.innerHTML = `<span class="xp-rate"><span class="coin" aria-hidden="true"></span> €1 = 10 XP</span>${deal && !FRIDGE ? `<button type="button" class="sale-chip" data-filter-go="sale">🔥 Sale: up to −${salePct(deal)}%</button>` : ""}${examples.map((e) => `<span>${e}</span>`).join("")}`;
 }
 
 // Session packs that come with a free item (set in admin -> Shop)
@@ -248,7 +257,7 @@ function renderBag() {
       ${thumbArt(line.item)}
       <div class="bag-line-info">
         <p class="bag-line-name">${esc(line.item.name)}</p>
-        <p class="bag-line-meta">${line.size ? `Size ${line.size} · ` : ""}${euro(line.item.price)} · +${LevelUp.orderXp(line.item.price)} XP${line.item.available ? "" : ` · <span class="sold-note">Sold out</span>`}</p>
+        <p class="bag-line-meta">${line.size ? `Size ${line.size} · ` : ""}${euro(line.item.price)}${onSale(line.item) ? ` <s class="was-price">${euro(line.item.listPrice)}</s>` : ""} · +${LevelUp.orderXp(line.item.price)} XP${line.item.available ? "" : ` · <span class="sold-note">Sold out</span>`}</p>
         <div class="qty">
           <button type="button" data-qty="-1" data-index="${index}" aria-label="Remove one">−</button>
           <span aria-label="Quantity">${line.qty}</span>
@@ -406,6 +415,16 @@ bagBackdrop.addEventListener("click", closeBag);
 document.getElementById("bagClose").addEventListener("click", closeBag);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && bag.classList.contains("open")) closeBag();
+});
+
+// The sale chip in the banner jumps to the sale filter
+document.addEventListener("click", (event) => {
+  const go = event.target.closest("[data-filter-go]");
+  if (!go) return;
+  filter = go.dataset.filterGo;
+  renderTabs();
+  renderItems();
+  document.getElementById("items").scrollIntoView({ block: "start" });
 });
 
 // Filter tabs
@@ -632,7 +651,7 @@ LevelUp.ready.then(renderAll);
 // Drop countdowns tick every minute
 setInterval(() => {
   document.querySelectorAll("[data-ends]").forEach((el) => {
-    el.textContent = endsIn(el.dataset.ends);
+    el.textContent = endsIn(el.dataset.ends, el.dataset.endsLabel || "");
     if (new Date(el.dataset.ends) <= new Date()) LevelUp.loadShopCatalog().then(renderAll);
   });
 }, 60000);

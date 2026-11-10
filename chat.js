@@ -57,14 +57,14 @@ function peerAvatar(peer, size = "") {
 }
 function peerRole(peer) {
   if (peer.group) {
-    const closes = peer.closesAt ? new Date(peer.closesAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "";
-    return `Group chat · ${peer.members} member${peer.members === 1 ? "" : "s"}${closes ? ` · open until ${closes}` : ""}`;
+    // one chat per kind of group class; the next class of the group shows when there is one
+    const next = peer.next ? new Date(peer.next).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+    return `Group chat · ${peer.members} member${peer.members === 1 ? "" : "s"}${next ? ` · next: ${next}` : ""}`;
   }
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   return coach?.role || peer.role || "";
 }
-const peerName = (peer) => peer.group && peer.startsAt
-  ? `${peer.title} · ${new Date(peer.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+const peerName = (peer) => peer.group ? peer.title || peer.name || ""
   : (peer.trainerId ? LevelUp.trainerById(peer.trainerId)?.name : null) || peer.name || "";
 
 // ---------- Rendering ----------
@@ -212,7 +212,9 @@ function renderThread() {
           <span>${esc(peerRole(t))}</span>
         </div>
         ${coach && t.side === "client" ? `<a href="index.html#schedule" class="btn btn-small btn-primary chat-book" data-book-link="${esc(coach.id)}">Book</a>` : ""}
-        ${t.group ? `<a href="profile.html#classes" class="btn btn-small btn-ghost chat-book">My classes</a>` : ""}
+        ${t.group ? `<button type="button" class="chat-tool ${t.muted ? "off" : ""}" data-chat-mute title="${t.muted ? "Notifications are off for this group. Tap to turn them on." : "Turn off notifications for this group"}" aria-pressed="${Boolean(t.muted)}" aria-label="${t.muted ? "Turn on notifications for this group" : "Turn off notifications for this group"}">${t.muted ? "🔕" : "🔔"}</button>
+        ${t.canDelete ? `<button type="button" class="chat-tool" data-chat-delete title="Delete this group chat" aria-label="Delete this group chat">🗑</button>` : ""}
+        <a href="index.html#schedule" class="btn btn-small btn-ghost chat-book">Classes</a>` : ""}
       </header>
       <div class="chat-messages" id="chatMessages" data-no-i18n></div>
       <form class="chat-compose" id="chatCompose">
@@ -247,7 +249,7 @@ function renderMessages() {
   const all = [...state.messages, ...state.pending];
   if (!all.length) {
     if (state.active.group) {
-      list.innerHTML = `<p class="chat-hello">${esc(LevelUp_t("Say hi to the class 👋"))}<br><small>${esc(LevelUp_t("Only the people signed up for this class and the trainer can read this chat. It closes a day after the class."))}</small></p>`;
+      list.innerHTML = `<p class="chat-hello">${esc(LevelUp_t("Say hi to the group 👋"))}<br><small>${esc(LevelUp_t("Everyone who joins a class of this group is in this chat, with the trainer. It stays open between classes."))}</small></p>`;
       return;
     }
     const first = peerName(state.active).split(" ")[0];
@@ -420,6 +422,36 @@ root.addEventListener("click", async (event) => {
   if (event.target.closest("[data-back]")) {
     event.preventDefault();
     closeThread();
+    return;
+  }
+  // Group chat: notifications off / on for yourself
+  const mute = event.target.closest("[data-chat-mute]");
+  if (mute && state.active) {
+    mute.disabled = true;
+    try {
+      await LevelUp.chatMute(state.active.id, !state.active.muted);
+      state.active.muted = !state.active.muted;
+      LevelUp.toast({ title: state.active.muted ? "Notifications off" : "Notifications on", text: state.active.muted ? "You won't get notifications from this group." : "You get notifications from this group again.", icon: state.active.muted ? "🔕" : "🔔", tone: "green" });
+      render();
+      LevelUp.refreshChatUnread();
+    } catch (err) {
+      mute.disabled = false;
+      alert(err.message);
+    }
+    return;
+  }
+  // Group chat: only an admin can delete it (with all its messages)
+  const del = event.target.closest("[data-chat-delete]");
+  if (del && state.active) {
+    if (!confirm(LevelUp_t(`Delete the group chat "${peerName(state.active)}" with all its messages for everyone? This can't be undone. A new class with this name starts a fresh chat.`))) return;
+    del.disabled = true;
+    try {
+      await LevelUp.chatGroupDelete(state.active.id);
+      closeThread();
+    } catch (err) {
+      del.disabled = false;
+      alert(err.message);
+    }
   }
 });
 

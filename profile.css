@@ -330,3 +330,9 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .liked-by { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
 .liked-by li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: #000; border-left: 4px solid #ff3b6b; }
 .liked-by .avatar { width: 34px; height: 34px; font-size: 0.8rem; }
+
+/* News notifications on / off */
+.news-setting { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px; background: #000; border: 1px solid var(--line); cursor: pointer;
+  font-family: var(--sans); font-size: 0.92rem; font-style: normal; font-weight: 400; text-transform: none; color: var(--text); font-size-adjust: none; line-height: 1.45; }
+.news-setting input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-bright); }
+.news-setting small { display: block; font-size: 0.82rem; }

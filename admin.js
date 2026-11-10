@@ -167,6 +167,8 @@ async function render() {
 
     <section class="panel admin-panel applications" id="applications"></section>
 
+    <section class="panel admin-panel" id="newsPanel"></section>
+
     <section class="kpi-row" id="kpis" aria-label="Key numbers"></section>
 
     <section class="chart-grid">
@@ -262,6 +264,7 @@ async function render() {
   renderBookings();
   renderMembers();
   renderShopAdmin();
+  renderNewsPanel();
   LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
 }
 
@@ -1565,11 +1568,12 @@ const localInput = (iso) => {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+const salePctOf = (i) => Math.round((1 - Number(i.salePrice) / Number(i.price)) * 100);
 function shopStatus(i) {
   if (!i.active) return `<span class="status-chip">Off</span>`;
   if (i.dropEndsAt && new Date(i.dropEndsAt) <= new Date()) return `<span class="status-chip declined">Drop ended</span>`;
   if (i.stock != null && i.stock <= 0) return `<span class="status-chip declined">Sold out</span>`;
-  return `<span class="status-chip confirmed">On sale</span>`;
+  return `<span class="status-chip confirmed">In the shop</span>${i.onSale ? ` <span class="status-chip sale">Sale −${salePctOf(i)}%</span>` : ""}`;
 }
 
 function renderShopAdmin() {
@@ -1613,31 +1617,59 @@ function renderTabsPanel() {
     }).join("")}</ul>` : `<p class="muted">No open tabs. Members put drinks and bars from the fridge on their tab via the QR code; they pay here at the desk and get the XP once you mark it paid.</p>`}`;
 }
 
-// Products: on/off, price, stock and the end of a drop
+// Products: on/off, price, discount, stock and the end of a drop
 function renderShopPanel() {
   const el = document.getElementById("shopPanel");
+  const anySale = data.shop.items.some((i) => i.salePrice != null);
   el.innerHTML = `
     <div class="panel-head">
       <h2>Products</h2>
       <a class="btn btn-small btn-ghost" href="shop.html" target="_blank" rel="noopener">Open the shop ↗</a>
     </div>
-    <p class="muted small">Switched-off products don't show in the shop. Leave stock empty for unlimited; a limited drop shows "Only N left" and its end date counts down. Prices count for new orders.</p>
+    <p class="muted small">Switched-off products don't show in the shop. Leave stock empty for unlimited; a limited drop shows "Only N left" and counts down.
+    A discount shows the normal price crossed out with a −% label; XP counts on what the member pays. Prices count for new orders.</p>
     <ul class="shop-admin-list">${data.shop.items.map((i) => `
       <li>
         <form class="shop-row" data-shop-item="${esc(i.id)}">
-          <div class="shop-row-name">
-            <strong>${esc(shopName(i.id))}</strong>
-            <span class="muted small">${CATEGORY_LABEL[i.category] || esc(i.category)} · ${i.sold} sold</span>
-            ${shopStatus(i)}
+          <div class="shop-row-main">
+            <div class="shop-row-name">
+              <strong>${esc(shopName(i.id))}</strong>
+              <span class="muted small">${CATEGORY_LABEL[i.category] || esc(i.category)} · ${i.sold} sold</span>
+              <span>${shopStatus(i)}</span>
+            </div>
+            <label class="switch-field"><input type="checkbox" name="active" ${i.active ? "checked" : ""}> <span>In the shop</span></label>
+            <label><span>Price €</span><input type="number" name="price" min="0" max="1000" step="0.05" value="${Number(i.price)}" required></label>
+            <label><span>Stock</span><input type="number" name="stock" min="0" max="10000" step="1" value="${i.stock ?? ""}" placeholder="∞"></label>
+            <label><span>Drop ends</span><input type="datetime-local" name="dropEndsAt" value="${localInput(i.dropEndsAt)}"></label>
+            <button type="submit" class="btn btn-small btn-primary">Save</button>
           </div>
-          <label class="switch-field"><input type="checkbox" name="active" ${i.active ? "checked" : ""}> <span>On sale</span></label>
-          <label><span>Price €</span><input type="number" name="price" min="0" max="1000" step="0.5" value="${Number(i.price)}" required></label>
-          <label><span>Stock</span><input type="number" name="stock" min="0" max="10000" step="1" value="${i.stock ?? ""}" placeholder="∞"></label>
-          <label><span>Ends</span><input type="datetime-local" name="dropEndsAt" value="${localInput(i.dropEndsAt)}"></label>
-          <button type="submit" class="btn btn-small btn-primary">Save</button>
+          <div class="shop-row-sale">
+            <label><span>Discount</span><select data-sale-pct>
+              <option value="">${i.salePrice != null ? `Now −${salePctOf(i)}%` : "No discount"}</option>
+              ${[10, 15, 20, 25, 30, 40, 50].map((pct) => `<option value="${pct}">−${pct}%</option>`).join("")}
+              ${i.salePrice != null ? `<option value="0">Remove discount</option>` : ""}
+            </select></label>
+            <label><span>Sale price €</span><input type="number" name="salePrice" min="0" max="1000" step="0.05" value="${i.salePrice ?? ""}" placeholder="—"></label>
+            <label><span>Sale ends (optional)</span><input type="datetime-local" name="saleEndsAt" value="${localInput(i.saleEndsAt)}"></label>
+            <label class="switch-field"><input type="checkbox" name="notify" ${i.category === "fuel" ? "" : "checked"}> <span>📣 Tell members when it's new or on sale</span></label>
+          </div>
         </form>
       </li>`).join("")}</ul>
-    <p class="form-error" role="alert" id="shopError"></p>`;
+    <p class="form-error" role="alert" id="shopError"></p>
+
+    <h3 class="panel-sub">Sale on a whole category</h3>
+    <form class="bulk-sale" id="bulkSale">
+      <label><span>What</span><select name="category">
+        <option value="all">Everything in the shop</option><option value="merch">Merch</option><option value="tools">Tools</option>
+        <option value="fuel">Fuel</option><option value="limited">Limited</option></select></label>
+      <label><span>Discount</span><select name="pct">${[10, 15, 20, 25, 30, 40, 50].map((pct) => `<option value="${pct}" ${pct === 20 ? "selected" : ""}>−${pct}%</option>`).join("")}</select></label>
+      <label><span>Until (optional)</span><input type="datetime-local" name="ends"></label>
+      <label class="switch-field"><input type="checkbox" name="notify" checked> <span>📣 Tell members (one message)</span></label>
+      <button type="submit" class="btn btn-small btn-primary">Start sale</button>
+      ${anySale ? `<button type="button" class="btn btn-small btn-ghost" data-end-sales>End all discounts</button>` : ""}
+    </form>
+    <p class="muted small">Members get a message at most once per product every 3 days, at most 2 news notifications a day, and never at night (it waits until 8:00).</p>
+    <p class="form-error" role="alert" id="bulkSaleError"></p>`;
 }
 
 // Session packs with a free item, and gifts to hand out at the desk
@@ -1764,8 +1796,84 @@ root.addEventListener("submit", async (event) => {
   event.preventDefault();
   await saveShopItem(form);
 });
+// A discount on a whole category (or everything) in one go
+async function bulkSale(category, pct, ends, notify, btn) {
+  const error = document.getElementById("bulkSaleError");
+  error.textContent = "";
+  btn.disabled = true;
+  try {
+    const r = await LevelUp.adminShopSale(category, pct, ends, notify);
+    await Promise.all([LevelUp.loadShopCatalog(), LevelUp.loadPricing()]);
+    LevelUp.toast({ title: pct ? `−${pct}% on ${r.items} product${r.items === 1 ? "" : "s"}` : "Discounts ended",
+      text: pct && notify ? `Members told · ${r.reached} notification${r.reached === 1 ? "" : "s"}` : pct ? "Not announced" : `${r.items} product${r.items === 1 ? "" : "s"} back to the normal price`, icon: "🔥", tone: "green" });
+    render();
+  } catch (err) {
+    btn.disabled = false;
+    error.textContent = err.message;
+  }
+}
+root.addEventListener("submit", (event) => {
+  if (event.target.id !== "bulkSale") return;
+  event.preventDefault();
+  const f = event.target.elements;
+  const label = f.category.options[f.category.selectedIndex].text.toLowerCase();
+  if (!confirm(`Start −${f.pct.value}% on ${label}${f.ends.value ? ` until ${new Date(f.ends.value).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}?${f.notify.checked ? " Members get one message." : ""}`)) return;
+  bulkSale(f.category.value, Number(f.pct.value), f.ends.value ? new Date(f.ends.value).toISOString() : null, f.notify.checked, event.target.querySelector("[type=submit]"));
+});
+
+// ---------- Messages to everyone (the bell + a notification) ----------
+function renderNewsPanel() {
+  const el = document.getElementById("newsPanel");
+  if (!el) return;
+  const list = LevelUp.getNews();
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Message to everyone</h2>
+      <span class="muted">Shows behind the 🔔 on every page and goes out as a notification</span>
+    </div>
+    <form class="announce-form" id="announceForm">
+      <label><span>Title</span><input name="title" maxlength="60" required placeholder="e.g. Closed on Monday 11 November"></label>
+      <label><span>Message (optional)</span><input name="body" maxlength="200" placeholder="Public holiday. See you on Tuesday!"></label>
+      <label><span>Opens</span><select name="url">
+        <option value="index.html">Home</option><option value="index.html#schedule">Schedule</option><option value="shop.html">Shop</option>
+        <option value="index.html#highScores">High scores</option><option value="profile.html">Their profile</option></select></label>
+      <button type="submit" class="btn btn-small btn-primary">📣 Send to everyone</button>
+    </form>
+    <p class="muted small">At most 3 a day. New group classes, new products and discounts are announced by themselves, so keep this for real news.</p>
+    <p class="form-error" role="alert" id="announceError"></p>
+    ${list.length ? `<h3 class="panel-sub">Behind the bell now</h3><ul class="detail-list news-admin">${list.map((n) => `
+      <li><span><b>${esc(n.title)}</b>${n.body ? ` <span class="muted">· ${esc(n.body)}</span>` : ""}</span>
+        <span class="muted small">${fmtDate(n.date)} <button type="button" class="btn btn-small btn-ghost" data-news-delete="${n.id}" aria-label="Remove this news item">✕</button></span></li>`).join("")}</ul>` : ""}`;
+}
+root.addEventListener("submit", async (event) => {
+  if (event.target.id !== "announceForm") return;
+  event.preventDefault();
+  const f = event.target.elements;
+  const error = document.getElementById("announceError");
+  error.textContent = "";
+  if (!confirm(`Send "${f.title.value.trim()}" to every member now?`)) return;
+  const btn = event.target.querySelector("[type=submit]");
+  btn.disabled = true;
+  try {
+    const r = await LevelUp.adminAnnounce(f.title.value.trim(), f.body.value.trim(), f.url.value);
+    await LevelUp.loadPricing();
+    LevelUp.toast({ title: "Message sent", text: `${r.reached} notification${r.reached === 1 ? "" : "s"} · everyone sees it behind the bell`, icon: "📣", tone: "green" });
+    render();
+  } catch (err) {
+    btn.disabled = false;
+    error.textContent = err.message;
+  }
+});
 root.addEventListener("change", (event) => {
   if (event.target.name === "active" && event.target.closest("[data-shop-item]")) saveShopItem(event.target.closest("[data-shop-item]"));
+  // The discount list fills in the sale price (still to be saved)
+  const pctSelect = event.target.closest("[data-sale-pct]");
+  if (pctSelect && pctSelect.value !== "") {
+    const f = pctSelect.closest("form").elements;
+    const pct = Number(pctSelect.value);
+    f.salePrice.value = pct ? (Math.round(Number(f.price.value) * (100 - pct)) / 100).toFixed(2) : "";
+    if (!pct) f.saleEndsAt.value = "";
+  }
   const giftSelect = event.target.closest("[data-pack-gift]");
   if (giftSelect) {
     giftSelect.disabled = true;
@@ -1782,14 +1890,18 @@ async function saveShopItem(form) {
   const btn = form.querySelector("[type=submit]");
   btn.disabled = true;
   try {
-    await LevelUp.adminShopUpdate(form.dataset.shopItem, {
+    const r = await LevelUp.adminShopUpdate(form.dataset.shopItem, {
       active: f.active.checked,
       price: f.price.value,
       stock: f.stock.value.trim(),
-      dropEndsAt: f.dropEndsAt.value ? new Date(f.dropEndsAt.value).toISOString() : ""
+      dropEndsAt: f.dropEndsAt.value ? new Date(f.dropEndsAt.value).toISOString() : "",
+      salePrice: f.salePrice.value.trim(),
+      saleEndsAt: f.saleEndsAt.value ? new Date(f.saleEndsAt.value).toISOString() : "",
+      notify: f.notify.checked
     });
-    await LevelUp.loadShopCatalog();
-    LevelUp.toast({ title: "Saved", text: `${shopName(form.dataset.shopItem)}${f.active.checked ? " · on sale" : " · off"}`, icon: "✓", tone: "green" });
+    await Promise.all([LevelUp.loadShopCatalog(), LevelUp.loadPricing()]);
+    const told = r?.announced === "new" ? "Members told: new in the shop" : r?.announced === "sale" ? "Members told about the discount" : "";
+    LevelUp.toast({ title: "Saved", text: told ? `${told} · ${r.reached} notification${r.reached === 1 ? "" : "s"}` : `${shopName(form.dataset.shopItem)}${f.active.checked ? " · in the shop" : " · off"}`, icon: told ? "📣" : "✓", tone: "green" });
     render();
   } catch (err) {
     btn.disabled = false;
@@ -1798,6 +1910,20 @@ async function saveShopItem(form) {
 }
 root.addEventListener("click", async (event) => {
   if (event.target.closest("[data-fridge-poster]")) { printFridgePoster(); return; }
+  const endSales = event.target.closest("[data-end-sales]");
+  if (endSales) {
+    if (!confirm("End every discount in the shop? All products go back to their normal price.")) return;
+    bulkSale("all", 0, null, false, endSales);
+    return;
+  }
+  const newsDel = event.target.closest("[data-news-delete]");
+  if (newsDel) {
+    if (!confirm("Remove this news item for everyone? Notifications that were already sent stay sent.")) return;
+    newsDel.disabled = true;
+    try { await LevelUp.adminDeleteNews(Number(newsDel.dataset.newsDelete)); await LevelUp.loadPricing(); render(); }
+    catch (err) { newsDel.disabled = false; alert(err.message); }
+    return;
+  }
   const paid = event.target.closest("[data-tab-paid]");
   const voidBtn = event.target.closest("[data-tab-void]");
   const gift = event.target.closest("[data-gift-given]");

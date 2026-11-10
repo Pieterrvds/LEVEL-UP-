@@ -729,7 +729,7 @@ function renderClassDialog(message = "") {
       ${late ? `<p class="booking-warning">Starts in less than ${LevelUp.getPricing().classCancelHours} hours: signing out now is charged in full (${euro(m.price)}).</p>` : ""}
       <p class="form-error" role="alert">${esc(message)}</p>
       <div class="btn-row">
-        ${c.chatId && c.chatOpen && LevelUp.classIn(c) ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Class chat</a>` : ""}
+        ${c.chatId && c.chatOpen && LevelUp.classIn(c) ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Group chat</a>` : ""}
         ${!started ? `<a class="btn btn-ghost btn-small" href="${classCalendarLink(c)}" target="_blank" rel="noopener">Add to Google Calendar</a>` : ""}
         ${canLeave ? `<button type="button" class="btn btn-small btn-danger" id="leaveClass">${m.status === "waitlist" ? "Leave the waitlist" : "Sign out"}</button>` : ""}
       </div>`;
@@ -848,7 +848,7 @@ function showClassSignedUp(c) {
       : `<span>${c.taken} of ${c.capacity} places taken.</span> ${c.price > 0 && c.mine?.payStatus !== "paid" ? `<span>Pay <strong>${LevelUp.euro(c.price)}</strong> at the class.</span>` : ""} <span>You get a reminder before it starts.</span>`}</p>
     ${LevelUp.pushCalloutHtml("Get the reminder and the class chat on this phone.")}
     <div class="btn-row">
-      ${!waiting && c.chatId ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Class chat</a>` : ""}
+      ${!waiting && c.chatId ? `<a class="btn btn-small btn-primary" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Group chat</a>` : ""}
       ${!waiting ? `<a class="btn btn-small" href="${classCalendarLink(c)}" target="_blank" rel="noopener">Add to Google Calendar</a>` : ""}
       <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
     </div>`;

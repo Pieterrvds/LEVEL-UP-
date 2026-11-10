@@ -424,3 +424,17 @@ body.no-scroll { overflow: hidden; }
 @media (max-width: 760px) {
   body.has-tabbar .bag-button { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ---------- Sale: crossed-out price, −% tag and a countdown ---------- */
+.sale-tag {
+  position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; z-index: 1;
+  font-family: var(--display); font-size: 0.8rem; font-style: italic; font-weight: 800; line-height: 1.4;
+  color: #fff; background: #ff3b3b; box-shadow: var(--shadow-sm); transform: rotate(-4deg);
+}
+.item-card.on-sale { border-color: color-mix(in srgb, #ff3b3b 60%, var(--line)); }
+.was-price { margin-left: 6px; font-size: 0.8em; font-weight: 500; color: var(--muted); text-decoration: line-through; }
+.item-card.on-sale .price { color: #ff6b6b; }
+.sale-timer { color: #ff6b6b; }
+.sale-timer::before { content: "🔥 "; }
+.xp-banner .sale-chip { padding: 6px 10px; font: 800 0.85rem var(--sans); color: #fff; background: #ff3b3b; border: 1px solid #ff3b3b; cursor: pointer; }
+.xp-banner .sale-chip:hover { filter: brightness(1.12); }

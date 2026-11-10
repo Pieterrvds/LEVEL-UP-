@@ -319,7 +319,7 @@ const LevelUp = (() => {
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
     packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false,
-    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30
+    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: []
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
@@ -336,7 +336,8 @@ const LevelUp = (() => {
   // Changes that can queue a push notification: send it right away
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
     "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp",
-    "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish", "shop_tab_paid"]);
+    "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish", "shop_tab_paid",
+    "class_create", "admin_shop_update", "admin_shop_sale", "admin_announce", "give_like"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -462,9 +463,11 @@ const LevelUp = (() => {
   function shopItems() {
     return ITEMS.map((item) => {
       const c = shopCatalog?.[item.id];
-      if (!c) return ALWAYS_ON.includes(item.category) ? { ...item, available: true, stock: null, dropEndsAt: null } : null;
+      if (!c) return ALWAYS_ON.includes(item.category) ? { ...item, available: true, stock: null, dropEndsAt: null, listPrice: null, saleEndsAt: null } : null;
       if (!c.active) return null;
-      return { ...item, price: c.price, available: c.available, stock: c.stock, dropEndsAt: c.dropEndsAt };
+      // listPrice: the normal price while a sale runs (price is then the sale price)
+      return { ...item, price: c.price, available: c.available, stock: c.stock, dropEndsAt: c.dropEndsAt,
+               listPrice: c.listPrice == null ? null : Number(c.listPrice), saleEndsAt: c.saleEndsAt || null };
     }).filter(Boolean);
   }
   const shopCheck = (items) => call("shop_check", { p_items: items });
@@ -482,6 +485,14 @@ const LevelUp = (() => {
   const openTab = (p = player) => (p?.purchases || []).filter((o) => o.status === "open");
   const adminShop = () => call("admin_shop");
   const adminShopUpdate = (id, p) => call("admin_shop_update", { p_id: id, p });
+  const adminShopSale = (category, pct, ends, notify) => call("admin_shop_sale", { p_category: category, p_pct: Number(pct), p_ends: ends || null, p_notify: Boolean(notify) });
+  const adminAnnounce = (title, body, url) => call("admin_announce", { p_title: title, p_body: body || "", p_url: url || "index.html" });
+  const adminDeleteNews = (id) => call("admin_delete_news", { p_id: id });
+  async function setPushNews(on) {
+    await call("set_push_news", { p_on: Boolean(on) });
+    await refreshPlayer();
+    emit();
+  }
   const tabPaid = (id) => call("shop_tab_paid", { p_id: id });
   const packGift = (size, gift) => call("admin_pack_gift", { p_size: size, p_gift: gift || "" });
   const markPackGiftGiven = (id) => call("mark_pack_gift_given", { p_id: id });
@@ -586,6 +597,7 @@ const LevelUp = (() => {
         classPrice: Number(p.classPrice ?? pricing.classPrice), classXp: Number(p.classXp ?? pricing.classXp),
         classCapacity: Number(p.classCapacity ?? pricing.classCapacity), classCancelHours: Number(p.classCancelHours ?? pricing.classCancelHours),
         classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee), tabLimit: Number(p.tabLimit ?? pricing.tabLimit),
+        news: (p.news || []).map((n) => ({ ...n, id: Number(n.id) })),
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
     } catch (err) {
@@ -1988,6 +2000,8 @@ const LevelUp = (() => {
   const chatList = () => call("chat_list");
   const chatThread = (id, after = 0) => call("chat_thread", { p_thread: id, p_after: after });
   const chatSend = (id, body) => call("chat_send", { p_thread: id, p_body: body });
+  const chatMute = (id, on) => call("chat_mute", { p_thread: id, p_on: Boolean(on) });
+  const chatGroupDelete = (id) => call("chat_group_delete", { p_thread: id });
   const chatOpen = (trainerId) => call("chat_open", { p_trainer: trainerId });
   const chatSearch = (query) => call("chat_search", { p_query: query });
   const chatOpenUser = (userId) => call("chat_open_user", { p_user: userId });
@@ -2475,11 +2489,12 @@ const LevelUp = (() => {
       return;
     }
     if (!player) {
-      slot.innerHTML = `<button type="button" class="btn btn-small hud-login" data-auth-open="login">▶ Log in</button>`;
+      slot.innerHTML = `${newsButtonHtml()}<button type="button" class="btn btn-small hud-login" data-auth-open="login">▶ Log in</button>`;
       return;
     }
     const p = progress(player.xp);
     slot.innerHTML = `
+      ${newsButtonHtml()}
       <a href="chat.html" class="hud-chat" title="Chat" aria-label="Chat">${CHAT_ICON}<i class="chat-badge" data-chat-badge ${chatUnread ? "" : "hidden"}>${chatUnread > 9 ? "9+" : chatUnread}</i></a>
       <a href="profile.html" class="hud-player" title="Your profile · ${p.xp} XP">
         ${avatarHtml(player)}
@@ -2491,6 +2506,53 @@ const LevelUp = (() => {
       </a>
       ${isAdmin() ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
   }
+
+  // ---------- News (the bell): new group classes, products, sales and messages from LEVEL-UP ----------
+  // The same items go out as notifications; here everyone sees them, also without notifications on.
+  // What you've seen is remembered on this device.
+  const NEWS_SEEN_KEY = "levelup.newsSeen";
+  const BELL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg>';
+  const newsSeen = () => Number(read(NEWS_SEEN_KEY, 0)) || 0;
+  function newsButtonHtml() {
+    const list = pricing.news || [];
+    if (!list.length) return "";
+    const fresh = list.filter((n) => n.id > newsSeen()).length;
+    return `<button type="button" class="hud-news ${fresh ? "has-new" : ""}" data-news-open title="News" aria-label="News${fresh ? ` (${fresh} new)` : ""}">${BELL_ICON}${fresh ? `<i class="chat-badge">${fresh}</i>` : ""}</button>`;
+  }
+  let newsDialog;
+  function openNews() {
+    const list = pricing.news || [];
+    if (!newsDialog) {
+      newsDialog = document.createElement("dialog");
+      newsDialog.className = "auth-dialog news-dialog";
+      newsDialog.setAttribute("aria-labelledby", "newsTitle");
+      document.body.appendChild(newsDialog);
+      newsDialog.addEventListener("click", (event) => {
+        if (event.target === newsDialog || event.target.closest("[data-close], a")) newsDialog.close();
+      });
+    }
+    const seen = newsSeen();
+    newsDialog.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <p class="section-kicker">What's new</p>
+      <h2 class="auth-title" id="newsTitle">News</h2>
+      ${list.length ? `<ul class="news-list">${list.map((n) => `
+        <li class="${n.id > seen ? "fresh" : ""}">
+          <a href="${esc(n.url)}">
+            <b>${esc(n.title)}</b>
+            ${n.body ? `<span>${esc(n.body)}</span>` : ""}
+            <small>${shortDate(n.date)}</small>
+          </a>
+        </li>`).join("")}</ul>` : `<p class="muted">No news right now.</p>`}
+      <p class="auth-note">${player ? `New classes and shop deals also come as a notification, at most 2 a day. Switch them off in <a class="text-link" href="profile.html#app">your profile → Me</a>.`
+        : `<button type="button" class="link-btn" data-auth-open="login" data-close>Log in</button> and turn on notifications to hear it first.`}</p>`;
+    if (list.length) write(NEWS_SEEN_KEY, Math.max(...list.map((n) => n.id)));
+    renderHud();
+    newsDialog.showModal();
+  }
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-news-open]")) openNews();
+  });
 
   // ---------- Login dialog ----------
   let dialog;
@@ -3010,7 +3072,7 @@ const LevelUp = (() => {
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
-    chatList, chatThread, chatSend, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
+    chatList, chatThread, chatSend, chatMute, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast,
     getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,

@@ -91,7 +91,7 @@ XP goes to the trainer's own account, so the level on the team card and in the p
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every
 `class_*` function is in `supabase/schema.sql` ("Group classes"). Settings in `app_config`: `class_price` (12),
 `class_trainer_fee` (35, a fixed fee per class held), `class_xp` (50), `class_capacity` (12), `class_cancel_hours` (4),
-`class_reminder_minutes` (90) and `class_chat_hours` (24).
+`class_reminder_minutes` (90) and `class_chat_days` (60).
 - **Planning:** a trainer plans their own classes in the profile's Coach tab, the admin plans any trainer's under
   admin.html → Group classes (`class_create`, once or every week for 4/8/12 weeks). Only the admin can change the price
   and the trainer fee. A class can't overlap the trainer's other classes or 1:1 sessions, and while it runs the
@@ -111,9 +111,16 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
   before the start (`_push_class_reminders`, run by the push Edge Function and its cron) the trainer gets the numbers
   (signed up, to pay at the class, first-timers, waitlist) and every player a LEVEL-UP line to get going plus the
   address and what to pay. Cancelling a class (one, or the rest of a weekly series) tells everyone, with the reason.
-- **Class chat:** every class has its own chat (`chat_threads.class_id`) for everyone signed up and the trainer, in
-  the normal chat page with the sender's name on each message. Read positions per member are in `chat_reads`. It
-  closes `class_chat_hours` after the class and is deleted a week later.
+- **Announcement:** planning a class tells everyone (tick box "Tell all members", on by default): a news item behind
+  the 🔔 and a notification with the class, the day and time, the trainer and the note the trainer wrote. A weekly
+  series gives one message; cancelling the class takes the news away again. See "News and notifications for everyone".
+- **Group chat:** one chat per kind of group class, by its name (`chat_threads.group_key`): every "Hyrox" class
+  uses the Hyrox chat, every "Social run club" class the run club chat. It is made with the first class of that name
+  and stays between classes. In it: everyone who signed up for a class of that group in the last `class_chat_days`
+  (60) or a coming one, the trainers who give it, and every admin (admins are in all group chats). Each member can
+  switch off its notifications (🔔 in the chat header). Only an admin can delete a group chat (🗑, with all its
+  messages); a new class of that name starts a fresh one. Read positions and "muted" per member are in `chat_reads`.
+  Old chats per class were merged into the chat of their group by `supabase/schema.sql`.
 - **Online payment for classes** needs the updated `payments` Edge Function (it accepts `type: "class"`): redeploy
   `supabase/functions/payments/index.ts` when you switch online payments on.
 
@@ -205,6 +212,11 @@ Players and trainers can turn on notifications (My account → Me, after booking
   no-show, free session earned, pack active, cancelled by LEVEL-UP.
 - **Trainers** (linked account): new session request, request withdrawn, cancellation and late cancellation.
 - **Bonus XP** from the admin, with the reason.
+- **Trainers, open requests:** a request that still isn't answered after 3 hours gives one reminder ("⏳ Lien is
+  waiting for your answer", or one message for several requests), and a last call when under 3 hours are left
+  before it expires. With that last call the admins hear it too. Never at night.
+- **Everyone, news:** a new group class, a new product, a discount or a message from the admin (see "News and
+  notifications for everyone").
 - **Both:** a new chat message (title = who sent it, text = the start of the message; not shown when that chat is
   already open on screen).
 
@@ -235,6 +247,22 @@ On iPhone, notifications only work in the home-screen app (iOS 16.4 or newer).
    (Stop it with `select cron.unschedule('levelup-push');`.)
 
 The admin dashboard shows a "To do: push notifications" card until step 3 is done.
+
+## News and notifications for everyone
+The 🔔 in the header (also for visitors) lists the latest news: new group classes, new products, discounts and
+messages from the admin. The same items go out as a notification to everyone with notifications on.
+So it never feels like spam:
+- at most **2 news notifications per person per 24 hours** (more news still shows behind the bell);
+- **nothing at night**: news and reminders queued between 22:00 and 8:00 go out at 8:00 (`push_outbox.send_after`);
+- a weekly class series is one message; a product is "new" once and gets at most one discount message every 3 days;
+- players switch news off under My account → Me → **News notifications** (their own sessions, chat and XP always
+  come through); the person who made the news doesn't get it themselves;
+- news about a class that started, a cancelled class or a discount that ended disappears by itself.
+
+**Admin → Overview → Message to everyone** sends your own message (title, optional text, where it opens), at most 3
+a day, and lists what is behind the bell now (✕ removes an item).
+Server: table `news`, `_broadcast` and `admin_announce` in `supabase/schema.sql`; the list comes with `pricing_info`,
+so it costs no extra request. What someone has seen is remembered on their device.
 
 ## Health questionnaire
 
@@ -438,6 +466,11 @@ Everything is run from **admin → Shop**:
   products start switched off, so nothing new shows until you turn it on. Leave stock empty for unlimited. A product
   with stock or an end date shows "Only N left" and a countdown; at 0 or after the date it shows Sold out / Drop ended.
   Before PayPal opens, the server checks the bag again (`shop_check`) and its prices are the ones charged.
+- **Prices and discounts**: change the price in the product row. For a discount pick −10 % … −50 % (or type a sale
+  price) and optionally an end date: the shop shows the normal price crossed out, a −% label, a countdown and a
+  🔥 Sale filter; the XP counts on what the member pays. "Sale on a whole category" does this for everything, merch,
+  tools, fuel or limited in one go, and "End all discounts" puts every price back. With "Tell members" ticked,
+  members get one message when a product is new or goes on sale.
 - **Fuel** (protein shake, bar, energy drink, water) is for the fridge at the gym. **The fridge**: print the poster with
   the QR code to `shop.html?fridge`. Members scan it, tap what they took and pay right away with PayPal, or put it
   **on their tab** (logged in, drinks and bars only, at most `tab_limit` euro open, default €30 in `app_config`). A wrong

@@ -56,7 +56,8 @@ insert into public.app_config (key, value) values
   ('class_capacity', '12'),       -- group class: default number of places
   ('class_cancel_hours', '4'),    -- group class: free sign-out up to this many hours before; later = charged
   ('class_reminder_minutes', '90'), -- group class: the "starts soon" push goes out this long before
-  ('class_chat_hours', '24'),     -- group class: the class chat stays open this long after the class
+  ('class_chat_hours', '24'),     -- (no longer used: group chats are per kind of class now, see class_chat_days)
+  ('class_chat_days', '60'),      -- group chat: you stay in a group's chat this many days after your last class of it
   ('tab_limit', '30')             -- shop: most a member can have open "on their tab" (drinks and bars at the gym)
 on conflict (key) do nothing;
 
@@ -110,7 +111,13 @@ alter table public.shop_items add column if not exists category text not null de
 alter table public.shop_items add column if not exists active boolean not null default true;
 alter table public.shop_items add column if not exists stock integer check (stock is null or stock >= 0);
 alter table public.shop_items add column if not exists drop_ends_at timestamptz;
+-- Discounts: a sale price (optionally until a date); "price" stays the normal price and shows crossed out
+alter table public.shop_items add column if not exists sale_price numeric(10, 2) check (sale_price is null or sale_price >= 0);
+alter table public.shop_items add column if not exists sale_ends_at timestamptz;
+alter table public.shop_items add column if not exists announced_at timestamptz;       -- "New in the shop" went out
+alter table public.shop_items add column if not exists sale_announced_at timestamptz;  -- the last "on sale" message
 update public.shop_items set category = 'tools' where id in ('parallettes', 'bands') and category = 'merch';
+update public.shop_items set announced_at = now() where active and announced_at is null;  -- already on sale = already introduced
 insert into public.shop_items (id, name, price, category, active, stock) values
   ('shake', 'Protein shake', 3.5, 'fuel', false, null),
   ('bar', 'Protein bar', 2.5, 'fuel', false, null),
@@ -147,6 +154,23 @@ create table if not exists public.player_likes (
 );
 create index if not exists player_likes_to_idx on public.player_likes (to_id, week);
 alter table public.player_likes enable row level security;  -- no policies: only the functions below read and write it
+
+-- News for everyone: a new group class, a new product, a sale or a message from the admin.
+-- It shows behind the bell on the website and goes out as a notification (see _broadcast for the anti-spam rules).
+create table if not exists public.news (
+  id bigint generated always as identity primary key,
+  kind text not null default 'info',    -- class | shop_new | shop_sale | info
+  title text not null,
+  body text not null default '',
+  url text not null default 'index.html',
+  ref text,                              -- what it is about (class-<id>, shop-<id>), to take it away again
+  expires_at timestamptz,                -- a class that started or a sale that ended is no news any more
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.news enable row level security;  -- read through pricing_info only
+-- Players can switch off news notifications (their own bookings, chat and XP always come through)
+alter table public.profiles add column if not exists push_news boolean not null default true;
 
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
@@ -826,6 +850,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'createdAt', p.created_at,
     'lastLogin', p.last_login,
     'showOnLeaderboard', p.show_on_leaderboard,
+    'pushNews', p.push_news,
     'avatarUrl', p.avatar_url,
     'application', (select jsonb_build_object('status', a.status, 'role', a.role_title, 'specialties', a.specialties,
                       'bio', a.bio, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at)
@@ -1468,10 +1493,28 @@ returns boolean language sql stable as $$
   select s.active and (s.stock is null or s.stock > 0) and (s.drop_ends_at is null or s.drop_ends_at > now());
 $$;
 
--- The shop as the website shows it: price, on/off, stock left and the end of a drop (anyone)
+-- Is the sale price running right now?
+create or replace function public._shop_on_sale(s public.shop_items)
+returns boolean language sql stable as $$
+  select s.sale_price is not null and s.sale_price < s.price and (s.sale_ends_at is null or s.sale_ends_at > now());
+$$;
+-- What it costs right now: the sale price while the sale runs, else the normal price
+create or replace function public._shop_price(s public.shop_items)
+returns numeric language sql stable as $$
+  select case when public._shop_on_sale(s) then s.sale_price else s.price end;
+$$;
+create or replace function public._euro(p numeric)
+returns text language sql immutable as $$
+  select '€' || case when p = trunc(p) then trunc(p)::text else to_char(p, 'FM999990.00') end;
+$$;
+
+-- The shop as the website shows it: price, on/off, stock left and the end of a drop (anyone).
+-- price = what you pay now; listPrice = the normal price while there is a sale
 create or replace function public.shop_catalog()
 returns jsonb language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'price', s.price, 'category', s.category,
+  select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'price', public._shop_price(s), 'category', s.category,
+           'listPrice', case when public._shop_on_sale(s) then s.price end,
+           'saleEndsAt', case when public._shop_on_sale(s) then s.sale_ends_at end,
            'active', s.active, 'stock', s.stock, 'dropEndsAt', s.drop_ends_at, 'available', public._shop_available(s)) order by s.id), '[]'::jsonb)
   from public.shop_items s;
 $$;
@@ -1498,8 +1541,8 @@ begin
     elsif not s.active then
       continue; -- a product that isn't for sale never earns XP
     end if;
-    v_total := v_total + s.price * qty;
-    clean := clean || jsonb_build_array(jsonb_build_object('id', s.id, 'name', s.name, 'size', item ->> 'size', 'qty', qty, 'price', s.price));
+    v_total := v_total + public._shop_price(s) * qty;
+    clean := clean || jsonb_build_array(jsonb_build_object('id', s.id, 'name', s.name, 'size', item ->> 'size', 'qty', qty, 'price', public._shop_price(s)));
   end loop;
   if jsonb_array_length(clean) = 0 then raise exception 'Invalid order.'; end if;
   return jsonb_build_object('items', clean, 'total', v_total, 'xp', round(v_total * 10));
@@ -1605,6 +1648,7 @@ begin
   return jsonb_build_object(
     'items', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'price', s.price, 'category', s.category,
                 'active', s.active, 'stock', s.stock, 'dropEndsAt', s.drop_ends_at, 'available', public._shop_available(s),
+                'salePrice', s.sale_price, 'saleEndsAt', s.sale_ends_at, 'onSale', public._shop_on_sale(s), 'announced', s.announced_at is not null,
                 'sold', (select coalesce(sum((i ->> 'qty')::int), 0) from public.orders o, jsonb_array_elements(o.items) i
                          where o.status <> 'cancelled' and i ->> 'id' = s.id)) order by s.category, s.id), '[]'::jsonb)
               from public.shop_items s),
@@ -1617,22 +1661,128 @@ begin
   );
 end $$;
 
--- Admin: change a product (price, on/off, stock left, end of the drop)
+-- Admin: change a product: price, sale price (and until when), on/off, stock left, end of the drop.
+-- With "notify" members hear about it once: a product that goes on sale for the first time ("New in the shop")
+-- or a new or deeper discount (at most one sale message per product every 3 days).
+drop function if exists public.admin_shop_update(text, jsonb);
 create or replace function public.admin_shop_update(p_id text, p jsonb)
-returns void language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_price numeric := nullif(p ->> 'price', '')::numeric;
+  was public.shop_items;
+  s public.shop_items;
+  was_sale boolean;
+  pct integer;
+  reached integer;
+  told text;
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
-  if not exists (select 1 from public.shop_items where id = p_id) then raise exception 'Product not found.'; end if;
+  select * into was from public.shop_items where id = p_id for update;
+  if not found then raise exception 'Product not found.'; end if;
   if v_price is not null and (v_price < 0 or v_price > 1000) then raise exception 'Enter a price between 0 and 1000.'; end if;
+  was_sale := public._shop_on_sale(was);
   update public.shop_items set
     price = coalesce(v_price, price),
     active = coalesce((p ->> 'active')::boolean, active),
     stock = case when p ? 'stock' then nullif(p ->> 'stock', '')::int else stock end,
-    drop_ends_at = case when p ? 'dropEndsAt' then nullif(p ->> 'dropEndsAt', '')::timestamptz else drop_ends_at end
+    drop_ends_at = case when p ? 'dropEndsAt' then nullif(p ->> 'dropEndsAt', '')::timestamptz else drop_ends_at end,
+    sale_price = case when p ? 'salePrice' then nullif(p ->> 'salePrice', '')::numeric else sale_price end,
+    sale_ends_at = case when p ? 'salePrice' and nullif(p ->> 'salePrice', '') is null then null
+                        when p ? 'saleEndsAt' then nullif(p ->> 'saleEndsAt', '')::timestamptz else sale_ends_at end
+  where id = p_id returning * into s;
+  if s.sale_price is not null and s.sale_price >= s.price then raise exception 'The sale price must be lower than the normal price.'; end if;
+  if s.sale_price is not null and s.sale_ends_at is not null and s.sale_ends_at <= now() then raise exception 'The end of the sale must be in the future.'; end if;
+
+  if coalesce((p ->> 'notify')::boolean, false) and public._shop_available(s) then
+    if not was.active and s.announced_at is null then
+      reached := public._broadcast('shop_new', '🆕 New in the shop: ' || s.name,
+        public._euro(public._shop_price(s)) || ' · +' || round(public._shop_price(s) * 10) || ' XP'
+          || case when s.stock is not null then ' · only ' || s.stock || ' pieces' else '' end,
+        'shop.html', 'shop-' || s.id, coalesce(s.drop_ends_at, now() + interval '10 days'));
+      told := 'new';
+    elsif public._shop_on_sale(s) and (not was_sale or s.sale_price < was.sale_price)
+          and (s.sale_announced_at is null or s.sale_announced_at < now() - interval '3 days') then
+      pct := round((1 - s.sale_price / s.price) * 100);
+      reached := public._broadcast('shop_sale', '🔥 −' || pct || '% on ' || s.name,
+        'Now ' || public._euro(s.sale_price) || ' instead of ' || public._euro(s.price)
+          || case when s.sale_ends_at is not null then ' · until ' || to_char(s.sale_ends_at at time zone 'Europe/Brussels', 'Dy DD Mon') else '' end,
+        'shop.html', 'shop-' || s.id, coalesce(s.sale_ends_at, now() + interval '10 days'));
+      told := 'sale';
+    end if;
+  end if;
+  -- anything that is on sale counts as introduced, so switching it off and on later is not "new" again
+  update public.shop_items set announced_at = case when active then coalesce(announced_at, now()) else announced_at end,
+    sale_announced_at = case when told = 'sale' then now() else sale_announced_at end
   where id = p_id;
+  if not public._shop_on_sale(s) then delete from public.news where ref = 'shop-' || s.id and kind = 'shop_sale'; end if;
+  if not s.active then delete from public.news where ref = 'shop-' || s.id; end if;
+  return jsonb_build_object('announced', told, 'reached', coalesce(reached, 0));
 end $$;
+
+-- Admin: a discount on a whole category (or 'all') in one go; 0 % ends the sale. One message for everyone.
+create or replace function public.admin_shop_sale(p_category text, p_pct integer, p_ends timestamptz default null, p_notify boolean default true)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  cat text := lower(coalesce(p_category, 'all'));
+  n integer;
+  reached integer := 0;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if cat not in ('all', 'merch', 'tools', 'fuel', 'limited') then raise exception 'Unknown category.'; end if;
+  if p_pct is null or p_pct < 0 or p_pct > 90 then raise exception 'Choose a discount between 0 and 90%%.'; end if;
+  if p_pct > 0 and p_ends is not null and p_ends <= now() then raise exception 'The end of the sale must be in the future.'; end if;
+  if p_pct = 0 then
+    update public.shop_items set sale_price = null, sale_ends_at = null where cat = 'all' or category = cat;
+    get diagnostics n = row_count;
+    delete from public.news where kind = 'shop_sale' and (ref = 'shop-sale-' || cat or cat = 'all'
+      or ref in (select 'shop-' || id from public.shop_items where category = cat));
+    return jsonb_build_object('items', n, 'reached', 0);
+  end if;
+  update public.shop_items set sale_price = round(price * (100 - p_pct) / 100.0, 2), sale_ends_at = p_ends
+    where active and price > 0 and (cat = 'all' or category = cat);
+  get diagnostics n = row_count;
+  if n = 0 then raise exception 'No products on sale in this category. Switch them on first.'; end if;
+  if p_notify then
+    reached := public._broadcast('shop_sale',
+      '🔥 −' || p_pct || '% on ' || case cat when 'all' then 'everything in the shop' when 'merch' then 'all merch'
+        when 'tools' then 'all training tools' when 'fuel' then 'all drinks and bars' else 'the limited drops' end,
+      case when p_ends is not null then 'Until ' || to_char(p_ends at time zone 'Europe/Brussels', 'Dy DD Mon') || ' · ' else '' end || 'Every euro still earns 10 XP',
+      'shop.html', 'shop-sale-' || cat, coalesce(p_ends, now() + interval '10 days'));
+    update public.shop_items set sale_announced_at = now() where active and (cat = 'all' or category = cat);
+  end if;
+  return jsonb_build_object('items', n, 'reached', reached);
+end $$;
+
+-- Admin: a message for everyone (bell on the website + notification), e.g. "Closed on Monday"
+create or replace function public.admin_announce(p_title text, p_body text default '', p_url text default 'index.html')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  ttl text := btrim(coalesce(p_title, ''));
+  link text := case when p_url in ('index.html', 'index.html#schedule', 'index.html#highScores', 'shop.html', 'profile.html') then p_url else 'index.html' end;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if char_length(ttl) < 3 or char_length(ttl) > 60 then raise exception 'Write a title of 3 to 60 characters.'; end if;
+  if char_length(btrim(coalesce(p_body, ''))) > 200 then raise exception 'Keep the message under 200 characters.'; end if;
+  if (select count(*) from public.news where kind = 'info' and created_at > now() - interval '24 hours') >= 3 then
+    raise exception 'That''s 3 messages in one day already. More would feel like spam: try again tomorrow.';
+  end if;
+  return jsonb_build_object('reached', public._broadcast('info', ttl, btrim(coalesce(p_body, '')), link, null, now() + interval '14 days', true));
+end $$;
+
+-- Admin: take a news item away again (it disappears behind the bell; notifications already sent stay sent)
+create or replace function public.admin_delete_news(p_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  delete from public.push_outbox where tag = 'news-' || p_id and sent_at is null;
+  delete from public.news where id = p_id;
+end $$;
+
+-- Players switch news notifications on or off
+create or replace function public.set_push_news(p_on boolean)
+returns void language sql security definer set search_path = public as $$
+  update public.profiles set push_news = coalesce(p_on, true) where id = auth.uid();
+$$;
 
 -- Admin: a pack size comes with a gift from the shop (or none)
 create or replace function public.admin_pack_gift(p_size integer, p_gift text)
@@ -1816,6 +1966,10 @@ returns jsonb language sql stable security definer set search_path = public as $
     'classCancelHours', public._config('class_cancel_hours')::int,
     'classTrainerFee', public._config('class_trainer_fee')::numeric,
     'tabLimit', public._config('tab_limit')::numeric,
+    -- the latest news (new classes, products, sales, messages) for the bell on every page
+    'news', coalesce((select jsonb_agg(jsonb_build_object('id', n.id, 'kind', n.kind, 'title', n.title, 'body', n.body, 'url', n.url, 'date', n.created_at) order by n.id desc)
+                      from (select * from public.news where created_at > now() - interval '14 days' and (expires_at is null or expires_at > now())
+                            order by id desc limit 8) n), '[]'::jsonb),
     'hq', 'Hoogstraat 40, 9308 Aalst',
     'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
   );
@@ -2323,6 +2477,51 @@ alter table public.push_keys enable row level security;
 revoke all on public.push_subscriptions, public.push_outbox, public.push_keys from anon, authenticated;
 
 alter table public.bookings add column if not exists reminder_pushed_at timestamptz;
+-- A trainer who hasn't answered a request gets a reminder (at most two per request)
+alter table public.bookings add column if not exists pending_reminders integer not null default 0;
+alter table public.bookings add column if not exists pending_reminded_at timestamptz;
+-- News and reminders queued at night wait until the morning
+alter table public.push_outbox add column if not exists send_after timestamptz;
+
+-- Quiet hours (22:00 - 8:00, Brussels time): the time to wait until, or null during the day
+create or replace function public._after_quiet(p_now timestamptz default now())
+returns timestamptz language sql stable as $$
+  select case when extract(hour from p_now at time zone 'Europe/Brussels') >= 22
+                then (((p_now at time zone 'Europe/Brussels')::date + 1) + time '08:00') at time zone 'Europe/Brussels'
+              when extract(hour from p_now at time zone 'Europe/Brussels') < 8
+                then ((p_now at time zone 'Europe/Brussels')::date + time '08:00') at time zone 'Europe/Brussels'
+         end;
+$$;
+
+-- News for everyone: it always shows behind the bell; as a notification it goes to everyone with notifications on
+-- who didn't switch news off, except the sender. So it never feels like spam: at most 2 news notifications per
+-- person per 24 hours (p_force: a message the admin wrote always goes out) and nothing at night.
+create or replace function public._broadcast(p_kind text, p_title text, p_body text, p_url text, p_ref text default null,
+                                             p_expires timestamptz default null, p_force boolean default false)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  nid bigint;
+  n integer := 0;
+  u record;
+  later timestamptz := public._after_quiet();
+begin
+  if p_ref is not null then delete from public.news where ref = p_ref and kind = p_kind; end if;
+  insert into public.news (kind, title, body, url, ref, expires_at, created_by)
+  values (p_kind, left(p_title, 80), left(coalesce(p_body, ''), 240), p_url, p_ref, p_expires, auth.uid()) returning id into nid;
+  for u in
+    select p.id from public.profiles p
+    where p.push_news and p.id is distinct from auth.uid()
+      and exists (select 1 from public.push_subscriptions s where s.user_id = p.id)
+      and (p_force or (select count(*) from public.push_outbox o
+                       where o.user_id = p.id and o.tag like 'news-%' and o.created_at > now() - interval '24 hours') < 2)
+  loop
+    insert into public.push_outbox (user_id, title, body, url, tag, send_after)
+    values (u.id, left(p_title, 80), left(coalesce(p_body, ''), 240), p_url, 'news-' || nid, later);
+    n := n + 1;
+  end loop;
+  delete from public.news where created_at < now() - interval '60 days';
+  return n;
+end $$;
 
 -- Queue a message for a player (only when they have notifications on somewhere)
 create or replace function public._push(p_user uuid, p_title text, p_body text, p_url text, p_tag text default '')
@@ -2661,6 +2860,57 @@ begin
   return n;
 end $$;
 
+-- Requests a trainer hasn't answered: a reminder after 3 hours, and a last call when under 3 hours are left.
+-- One message per trainer however many requests are waiting, never at night. With the last call the admins hear
+-- it too, so someone can still save the session.
+create or replace function public._push_request_reminders()
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  t record;
+  a record;
+  coach uuid;
+  n integer := 0;
+begin
+  if public._after_quiet() is not null then return 0; end if;
+  for t in
+    with due as (
+      select k.id, k.trainer_id, k.day, k.hour, k.pending_reminders, p.name,
+             public._confirm_deadline(coalesce(k.request_at, k.created_at), k.day, k.hour) as deadline
+      from public.bookings k join public.profiles p on p.id = k.user_id
+      where k.status = 'pending'
+    )
+    select d.trainer_id, count(*) as waiting, min(d.deadline) as deadline, bool_or(d.pending_reminders = 1) as last_call,
+           (array_agg(d.name order by d.deadline))[1] as who, (array_agg(public._slot_label(d.day, d.hour) order by d.deadline))[1] as slot,
+           array_agg(d.id) as ids
+    from due d join public.bookings k on k.id = d.id
+    where d.deadline > now()
+      and ((d.pending_reminders = 0 and coalesce(k.request_at, k.created_at) < now() - interval '3 hours')
+        or (d.pending_reminders = 1 and d.deadline < now() + interval '3 hours' and k.pending_reminded_at < now() - interval '1 hour'))
+    group by d.trainer_id
+  loop
+    coach := public._trainer_user(t.trainer_id);
+    perform public._push(coach,
+      case when t.waiting = 1 then '⏳ ' || t.who || ' is waiting for your answer'
+           else '⏳ ' || t.waiting || ' requests are waiting for your answer' end,
+      case when t.waiting = 1 then t.slot else t.who || ' · ' || t.slot || ' and ' || (t.waiting - 1) || ' more' end
+        || ' · Confirm or decline before ' || to_char(t.deadline at time zone 'Europe/Brussels', 'Dy HH24:MI'),
+      'profile.html#coach', 'pending-' || t.trainer_id);
+    if t.last_call then
+      for a in select p.id from public.profiles p
+               where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ','))
+                 and p.id is distinct from coach loop
+        perform public._push(a.id, '⏳ Request about to expire',
+          t.who || ' → ' || (select split_part(name, ' ', 1) from public.trainers where id = t.trainer_id) || ' · ' || t.slot
+            || ' · expires ' || to_char(t.deadline at time zone 'Europe/Brussels', 'Dy HH24:MI'),
+          'admin.html#bookings', 'pending-' || t.trainer_id);
+      end loop;
+    end if;
+    update public.bookings set pending_reminders = pending_reminders + 1, pending_reminded_at = now() where id = any (t.ids);
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
 create or replace function public.push_due_reminders()
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -2681,11 +2931,9 @@ begin
     n := n + 1;
   end loop;
   n := n + public._push_class_reminders();
+  n := n + public._push_request_reminders();
   perform public._settle_player_of_month();
   n := n + public._push_streak_reminders();
-  -- class chats are temporary: a week after the class they are deleted with their messages
-  delete from public.chat_threads th using public.class_sessions c
-  where th.class_id = c.id and c.starts_at < now() - interval '7 days';
   return n;
 end $$;
 
@@ -2694,7 +2942,7 @@ create or replace function public.push_claim(p_limit integer default 100)
 returns jsonb language sql security definer set search_path = public as $$
   with picked as (
     select id from public.push_outbox
-    where sent_at is null and created_at > now() - interval '2 days'
+    where sent_at is null and created_at > now() - interval '2 days' and (send_after is null or send_after <= now())
     order by id limit p_limit for update skip locked
   ), claimed as (
     update public.push_outbox o set sent_at = now() from picked where o.id = picked.id
@@ -2799,23 +3047,55 @@ create unique index if not exists chat_threads_pair_idx on public.chat_threads
   (least(client_id, member_id), greatest(client_id, member_id)) where member_id is not null;
 create index if not exists chat_threads_member_idx on public.chat_threads (member_id, last_at desc) where member_id is not null;
 
--- Group class chats: one per class (class_id), for everyone signed up and the trainer; no client/trainer/member.
--- Each member's read position is kept in chat_reads. The chat closes class_chat_hours after the class.
+-- Group chats: ONE per kind of group class (its name: "Social run club", "Hyrox" ...), not one per class.
+-- It is made with the first class of that name and stays; only an admin can delete it. In it: everyone who signed up
+-- for a class of that group lately (class_chat_days), the trainers who give it and every admin.
+-- Each member's read position (and "muted") is kept in chat_reads. class_id is the old model (one chat per class).
 alter table public.chat_threads add column if not exists class_id uuid references public.class_sessions (id) on delete cascade;
+alter table public.chat_threads add column if not exists group_key text;     -- the class name, lower case
+alter table public.chat_threads add column if not exists group_title text;   -- the name as it shows
 alter table public.chat_threads alter column client_id drop not null;
 alter table public.chat_threads drop constraint if exists chat_threads_kind_check;
-alter table public.chat_threads add constraint chat_threads_kind_check check (
-  (class_id is not null and client_id is null and trainer_id is null and member_id is null)
-  or (class_id is null and client_id is not null and (trainer_id is null) <> (member_id is null)));
 create unique index if not exists chat_threads_class_idx on public.chat_threads (class_id) where class_id is not null;
+create unique index if not exists chat_threads_group_idx on public.chat_threads (group_key) where group_key is not null;
+create or replace function public._group_key(p_title text)
+returns text language sql immutable as $$
+  select lower(regexp_replace(btrim(coalesce(p_title, '')), '\s+', ' ', 'g'));
+$$;
 create table if not exists public.chat_reads (
   thread_id uuid not null references public.chat_threads (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   read_id bigint not null default 0,
   primary key (thread_id, user_id)
 );
+alter table public.chat_reads add column if not exists muted boolean not null default false;  -- no notifications for this group
 alter table public.chat_reads enable row level security;
 revoke all on public.chat_reads from anon, authenticated;
+
+-- Once: the old chats per class move into the chat of their group (messages and read positions keep their ids)
+insert into public.chat_threads (group_key, group_title, last_at)
+select distinct on (public._group_key(c.title)) public._group_key(c.title), btrim(c.title), th.last_at
+from public.chat_threads th join public.class_sessions c on c.id = th.class_id
+order by public._group_key(c.title), c.starts_at
+on conflict do nothing;
+update public.chat_messages m set thread_id = g.id
+from public.chat_threads old join public.class_sessions c on c.id = old.class_id
+     join public.chat_threads g on g.group_key = public._group_key(c.title)
+where m.thread_id = old.id;
+insert into public.chat_reads (thread_id, user_id, read_id)
+select g.id, r.user_id, max(r.read_id)
+from public.chat_reads r join public.chat_threads old on old.id = r.thread_id
+     join public.class_sessions c on c.id = old.class_id
+     join public.chat_threads g on g.group_key = public._group_key(c.title)
+group by g.id, r.user_id
+on conflict (thread_id, user_id) do update set read_id = greatest(public.chat_reads.read_id, excluded.read_id);
+update public.chat_threads g set last_at = x.at
+from (select thread_id, max(created_at) as at from public.chat_messages group by thread_id) x
+where g.id = x.thread_id and g.group_key is not null and x.at > g.last_at;
+delete from public.chat_threads where class_id is not null;
+alter table public.chat_threads add constraint chat_threads_kind_check check (
+  (group_key is not null and class_id is null and client_id is null and trainer_id is null and member_id is null)
+  or (group_key is null and class_id is null and client_id is not null and (trainer_id is null) <> (member_id is null)));
 
 alter table public.chat_threads enable row level security;
 alter table public.chat_messages enable row level security;
@@ -2835,23 +3115,33 @@ returns text language sql stable security definer set search_path = public as $$
   where p.id = p_user and t.email is not null limit 1;
 $$;
 
--- In a class chat: signed up (booked or present) or the class's trainer, until class_chat_hours after the class
-create or replace function public._class_chat_member(p_class uuid)
+drop function if exists public._class_chat_member(uuid);
+-- Everyone in a group's chat: signed up (booked or present) for one of its classes in the last class_chat_days
+-- (or a coming one), the trainers who give it, and every admin
+create or replace function public._group_chat_users(p_key text)
+returns setof uuid language sql stable security definer set search_path = public as $$
+  select g.user_id from public.class_sessions c join public.class_signups g on g.class_id = c.id
+  where public._group_key(c.title) = p_key and c.status <> 'cancelled' and g.status in ('booked', 'attended')
+    and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
+  union
+  select public._trainer_user(c.trainer_id) from public.class_sessions c
+  where public._group_key(c.title) = p_key and c.status <> 'cancelled'
+    and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
+    and public._trainer_user(c.trainer_id) is not null
+  union
+  select p.id from public.profiles p
+  where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ','));
+$$;
+create or replace function public._group_chat_member(p_key text)
 returns boolean language plpgsql stable security definer set search_path = public as $$
 begin
-  return exists (
-    select 1 from public.class_sessions c
-    where c.id = p_class and c.status <> 'cancelled'
-      and now() < c.starts_at + make_interval(mins => c.minutes) + make_interval(hours => public._config('class_chat_hours')::int)
-      and (c.trainer_id = public._my_trainer()
-           or exists (select 1 from public.class_signups g where g.class_id = c.id and g.user_id = auth.uid()
-                      and g.status in ('booked', 'attended'))));
+  return auth.uid() is not null and (public.is_admin() or auth.uid() in (select public._group_chat_users(p_key)));
 end $$;
 
 -- 'client', 'trainer', 'group' or null (not your conversation)
 create or replace function public._chat_side(p_thread public.chat_threads)
 returns text language sql stable security definer set search_path = public as $$
-  select case when p_thread.class_id is not null then case when public._class_chat_member(p_thread.class_id) then 'group' end
+  select case when p_thread.group_key is not null then case when public._group_chat_member(p_thread.group_key) then 'group' end
               when p_thread.client_id = auth.uid() then 'client'
               when p_thread.member_id is not null and p_thread.member_id = auth.uid() then 'trainer'
               when p_thread.member_id is null and p_thread.trainer_id = public._my_trainer() then 'trainer' end;
@@ -2871,13 +3161,14 @@ $$;
 create or replace function public._chat_peer(p_thread public.chat_threads, p_side text)
 returns jsonb language sql stable security definer set search_path = public as $$
   select case
-    when p_thread.class_id is not null then
-      (select jsonb_build_object('name', c.title || ' · ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI'),
-              'role', 'Group chat', 'group', true, 'classId', c.id, 'trainerId', null, 'avatarUrl', null,
-              'title', c.title, 'startsAt', c.starts_at,
-              'members', 1 + (select count(*) from public.class_signups g where g.class_id = c.id and g.status in ('booked', 'attended')),
-              'closesAt', c.starts_at + make_interval(mins => c.minutes) + make_interval(hours => public._config('class_chat_hours')::int))
-       from public.class_sessions c where c.id = p_thread.class_id)
+    when p_thread.group_key is not null then
+      jsonb_build_object('name', p_thread.group_title, 'role', 'Group chat', 'group', true, 'groupKey', p_thread.group_key,
+              'trainerId', null, 'avatarUrl', null, 'title', p_thread.group_title,
+              'members', (select count(*) from public._group_chat_users(p_thread.group_key)),
+              'next', (select min(c.starts_at) from public.class_sessions c
+                       where public._group_key(c.title) = p_thread.group_key and c.status = 'scheduled' and c.starts_at > now()),
+              'muted', coalesce((select r.muted from public.chat_reads r where r.thread_id = p_thread.id and r.user_id = auth.uid()), false),
+              'canDelete', public.is_admin())
     when p_thread.member_id is not null then
       public._chat_person(case when p_side = 'client' then p_thread.member_id else p_thread.client_id end)
     when p_side = 'client' then
@@ -2914,14 +3205,14 @@ begin
                      and u.id > case when s.side = 'client' then th.client_read_id else th.trainer_read_id end) end
     ) as row
     from public.chat_threads th
-    cross join lateral (select case when th.class_id is not null then 'group'
+    cross join lateral (select case when th.group_key is not null then 'group'
                                     when th.client_id = auth.uid() then 'client' else 'trainer' end as side) s
     left join lateral (select x.body, x.from_trainer, x.sender_id, p.name as sender_name from public.chat_messages x
                        left join public.profiles p on p.id = x.sender_id
                        where x.thread_id = th.id order by x.id desc limit 1) m on true
     where (th.client_id = auth.uid() or th.member_id = auth.uid()
-           or (me_trainer is not null and th.member_id is null and th.class_id is null and th.trainer_id = me_trainer)
-           or (th.class_id is not null and public._class_chat_member(th.class_id)))
+           or (me_trainer is not null and th.member_id is null and th.group_key is null and th.trainer_id = me_trainer)
+           or (th.group_key is not null and public._group_chat_member(th.group_key)))
       and (s.side in ('client', 'group') or m.body is not null)   -- the other side only sees it once there is a message
   ) q;
   return out;
@@ -3017,7 +3308,7 @@ begin
                                                'mine', case when side = 'group' then x.sender_id = auth.uid() else x.from_trainer = (side = 'trainer') end,
                                                'name', case when side = 'group' then coalesce(
                                                  (select split_part(tr.name, ' ', 1) from public.trainers tr
-                                                  where x.from_trainer and tr.id = (select c.trainer_id from public.class_sessions c where c.id = th.class_id)),
+                                                  where x.from_trainer and tr.id = public._trainer_of(x.sender_id)),
                                                  (select p.name from public.profiles p where p.id = x.sender_id), 'Member') end,
                                                'coach', side = 'group' and x.from_trainer,
                                                'body', x.body, 'at', x.created_at) order by x.id), '[]'::jsonb),
@@ -3059,18 +3350,17 @@ begin
   end if;
   if side = 'group' then
     insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
-    values (th.id, auth.uid(), coalesce((select c.trainer_id = public._my_trainer() from public.class_sessions c where c.id = th.class_id), false), msg)
+    values (th.id, auth.uid(), public._my_trainer() is not null, msg)
     returning id, created_at into new_id, at;
     update public.chat_threads set last_at = at where id = th.id;
     insert into public.chat_reads (thread_id, user_id, read_id) values (th.id, auth.uid(), new_id)
     on conflict (thread_id, user_id) do update set read_id = greatest(public.chat_reads.read_id, excluded.read_id);
     select name into sender from public.profiles where id = auth.uid();
-    perform public._push(u.id, '💬 ' || c.title, coalesce(split_part(sender, ' ', 1), 'Member') || ': ' || left(msg, 120),
+    perform public._push(u.id, '💬 ' || th.group_title, coalesce(split_part(sender, ' ', 1), 'Member') || ': ' || left(msg, 120),
                          'chat.html?t=' || th.id, 'chat-' || th.id)
-    from public.class_sessions c,
-         lateral (select g.user_id as id from public.class_signups g where g.class_id = c.id and g.status in ('booked', 'attended')
-                  union select public._trainer_user(c.trainer_id)) u
-    where c.id = th.class_id and u.id is not null and u.id <> auth.uid();
+    from public._group_chat_users(th.group_key) u(id)
+    where u.id is not null and u.id <> auth.uid()
+      and not exists (select 1 from public.chat_reads r where r.thread_id = th.id and r.user_id = u.id and r.muted);
     return jsonb_build_object('id', new_id, 'mine', true, 'body', msg, 'at', at);
   end if;
   insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
@@ -3088,6 +3378,26 @@ begin
   perform public._push(recipient, '💬 ' || coalesce(sender, 'New message'), left(msg, 140),
                        'chat.html?t=' || th.id, 'chat-' || th.id);
   return jsonb_build_object('id', new_id, 'mine', true, 'body', msg, 'at', at);
+end $$;
+
+-- A member switches the notifications of one group chat off (or on again)
+create or replace function public.chat_mute(p_thread uuid, p_on boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare th public.chat_threads;
+begin
+  select * into th from public.chat_threads where id = p_thread;
+  if not found or th.group_key is null or not public._group_chat_member(th.group_key) then raise exception 'Conversation not found.'; end if;
+  insert into public.chat_reads (thread_id, user_id, muted) values (th.id, auth.uid(), coalesce(p_on, true))
+  on conflict (thread_id, user_id) do update set muted = excluded.muted;
+end $$;
+
+-- Admin only: delete a group chat with all its messages. A new class of that name starts a fresh one.
+create or replace function public.chat_group_delete(p_thread uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Only an admin can delete a group chat.'; end if;
+  delete from public.chat_threads where id = p_thread and group_key is not null;
+  if not found then raise exception 'Conversation not found.'; end if;
 end $$;
 
 -- For the chat icon: unread messages in total and the newest one (to pop up a notice on the page)
@@ -3109,18 +3419,18 @@ begin
                            (select split_part(tr.name, ' ', 1) from public.trainers tr where tr.id = t.trainer_id))
                 else (select p.name from public.profiles p where p.id = t.client_id) end as name
     from public.chat_threads t join public.chat_messages m on m.thread_id = t.id
-    where t.class_id is null
+    where t.group_key is null
       and (t.client_id = auth.uid() or t.member_id = auth.uid()
            or (me_trainer is not null and t.member_id is null and t.trainer_id = me_trainer))
       and m.from_trainer = (t.client_id = auth.uid())
       and m.id > case when t.client_id = auth.uid() then t.client_read_id else t.trainer_read_id end
     union all
-    select m.id, m.thread_id, m.body, c.title || ' · ' || coalesce(split_part(p.name, ' ', 1), 'Member')
+    select m.id, m.thread_id, m.body, t.group_title || ' · ' || coalesce(split_part(p.name, ' ', 1), 'Member')
     from public.chat_threads t
-    join public.class_sessions c on c.id = t.class_id
     join public.chat_messages m on m.thread_id = t.id
     left join public.profiles p on p.id = m.sender_id
-    where t.class_id is not null and public._class_chat_member(t.class_id)
+    where t.group_key is not null and public._group_chat_member(t.group_key)
+      and not exists (select 1 from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid() and r.muted)
       and m.sender_id is distinct from auth.uid()
       and m.id > coalesce((select r.read_id from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid()), 0)
   )
@@ -3135,6 +3445,12 @@ revoke execute on function public._trainer_of(uuid) from public, anon, authentic
 revoke execute on function public._chat_side(public.chat_threads) from public, anon, authenticated;
 revoke execute on function public._chat_person(uuid) from public, anon, authenticated;
 revoke execute on function public._chat_peer(public.chat_threads, text) from public, anon, authenticated;
+revoke execute on function public._group_chat_users(text) from public, anon, authenticated;
+revoke execute on function public._group_chat_member(text) from public, anon, authenticated;
+revoke execute on function public.chat_mute(uuid, boolean) from public, anon;
+revoke execute on function public.chat_group_delete(uuid) from public, anon;
+grant execute on function public.chat_mute(uuid, boolean) to authenticated;
+grant execute on function public.chat_group_delete(uuid) to authenticated;
 revoke execute on function public.chat_list() from public, anon;
 revoke execute on function public.chat_open(text) from public, anon;
 revoke execute on function public.chat_search(text) from public, anon;
@@ -3222,8 +3538,8 @@ begin
     'price', c.price, 'xp', c.xp, 'location', c.location, 'note', c.note,
     'status', c.status, 'cancelReason', c.cancel_reason, 'seriesId', c.series_id,
     'freeCancelUntil', c.starts_at - make_interval(hours => public._config('class_cancel_hours')::int),
-    'chatId', (select th.id from public.chat_threads th where th.class_id = c.id),
-    'chatOpen', c.status <> 'cancelled' and now() < ends + make_interval(hours => public._config('class_chat_hours')::int),
+    'chatId', (select th.id from public.chat_threads th where th.group_key = public._group_key(c.title)),
+    'chatOpen', c.status <> 'cancelled' and now() < ends + make_interval(days => public._config('class_chat_days')::int),
     'mine', case when me.id is null then null else jsonb_build_object(
       'id', me.id, 'status', me.status, 'price', me.price, 'payMethod', me.pay_method, 'payStatus', me.pay_status,
       'refundStatus', me.refund_status, 'xp', me.xp, 'updatedAt', me.updated_at,
@@ -3409,6 +3725,8 @@ declare
   c public.class_sessions;
   made jsonb := '[]'::jsonb;
   skipped integer := 0;
+  first public.class_sessions;
+  reached integer;
 begin
   if uid is null then raise exception 'Log in first.'; end if;
   if trainer is null or not public._can_coach(trainer) then raise exception 'Only the trainer or an admin can plan a group class.'; end if;
@@ -3438,10 +3756,20 @@ begin
     insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by)
     values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid)
     returning * into c;
-    insert into public.chat_threads (class_id) values (c.id) on conflict do nothing;
+    insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
     made := made || jsonb_build_array(public._class_json(c, uid));
+    if first.id is null then first := c; end if;
   end loop;
-  return jsonb_build_object('created', made, 'skipped', skipped);
+  -- Tell everyone (one message, also for a weekly series): the name, when, the trainer's own words
+  if first.id is not null and coalesce((p ->> 'announce')::boolean, true) then
+    reached := public._broadcast('class',
+      '📣 ' || ttl || ' · ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
+      case when remark <> '' then remark || ' · ' else '' end
+        || 'With ' || (select split_part(name, ' ', 1) from public.trainers where id = trainer)
+        || case when jsonb_array_length(made) > 1 then ' · every week' else '' end || ' · Sign up in the app',
+      'index.html#schedule', 'class-' || first.id, first.starts_at);
+  end if;
+  return jsonb_build_object('created', made, 'skipped', skipped, 'announced', reached);
 end $$;
 
 -- Cancel a class (or it and the rest of its weekly series): everyone signed up is told, paid places are refunded
@@ -3464,6 +3792,7 @@ begin
     order by starts_at for update
   loop
     update public.class_sessions set status = 'cancelled', cancel_reason = why where id = c.id;
+    delete from public.news where ref = 'class-' || c.id;
     for g in select * from public.class_signups where class_id = c.id and status in ('booked', 'awaiting_payment', 'waitlist', 'late_cancel') for update loop
       update public.class_signups set status = 'cancelled', updated_at = now(),
         refund_status = case when pay_status = 'paid' and price > 0 then case when pay_method = 'online' then 'due' else 'manual' end end
@@ -3769,7 +4098,6 @@ revoke execute on function public._class_money(uuid) from public, anon, authenti
 revoke execute on function public._class_promote(uuid) from public, anon, authenticated;
 revoke execute on function public._expire_class_payments() from public, anon, authenticated;
 revoke execute on function public._class_mine_json(uuid) from public, anon, authenticated;
-revoke execute on function public._class_chat_member(uuid) from public, anon, authenticated;
 revoke execute on function public._push_class_reminders() from public, anon, authenticated;
 revoke execute on function public.class_signup(uuid, text) from public, anon;
 revoke execute on function public.class_cancel(uuid) from public, anon;
@@ -3804,6 +4132,16 @@ revoke execute on function public.admin_shop_update(text, jsonb) from public, an
 revoke execute on function public.admin_pack_gift(integer, text) from public, anon;
 revoke execute on function public.mark_pack_gift_given(uuid) from public, anon;
 grant execute on function public.shop_catalog() to anon, authenticated;
+revoke execute on function public._broadcast(text, text, text, text, text, timestamptz, boolean) from public, anon, authenticated;
+revoke execute on function public._push_request_reminders() from public, anon, authenticated;
+revoke execute on function public.admin_shop_sale(text, integer, timestamptz, boolean) from public, anon;
+revoke execute on function public.admin_announce(text, text, text) from public, anon;
+revoke execute on function public.admin_delete_news(bigint) from public, anon;
+revoke execute on function public.set_push_news(boolean) from public, anon;
+grant execute on function public.admin_shop_sale(text, integer, timestamptz, boolean) to authenticated;
+grant execute on function public.admin_announce(text, text, text) to authenticated;
+grant execute on function public.admin_delete_news(bigint) to authenticated;
+grant execute on function public.set_push_news(boolean) to authenticated;
 grant execute on function public.shop_check(jsonb) to anon, authenticated;
 grant execute on function public.shop_tab_order(jsonb) to authenticated;
 grant execute on function public.shop_tab_cancel(text) to authenticated;

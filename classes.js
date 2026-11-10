@@ -4,7 +4,7 @@
 
 window.LevelUpClasses = (() => {
   const { esc, euro } = LevelUp;
-  const PRESETS = ["CrossFit WOD", "HIIT", "Bootcamp", "Calisthenics", "Mobility", "Running club", "Spinning", "Muay Thai"];
+  const PRESETS = ["CrossFit WOD", "HIIT", "Hyrox", "Bootcamp", "Calisthenics", "Mobility", "Social run club", "Spinning", "Muay Thai"];
   const STATUS = {
     booked: ["Signed up", "confirmed"], awaiting_payment: ["Paying online…", "pending"], waitlist: ["Waitlist", "pending"],
     attended: ["Present", "completed"], no_show: ["No-show", "declined"], late_cancel: ["Late sign-out", "declined"]
@@ -57,7 +57,7 @@ window.LevelUpClasses = (() => {
             </div>
             <div class="gc-actions">
               ${c.status !== "cancelled" ? `<button type="button" class="btn btn-small ${c.canFinish || (started && c.status === "scheduled") ? "btn-primary" : ""}" data-gc-roster="${c.id}" aria-expanded="${open}">${open ? "Close list ▲" : started ? "Tick off ▼" : "Who's coming ▼"}</button>` : ""}
-              ${c.chatId && c.chatOpen && (admin ? t?.id === player?.trainerId : true) ? `<a class="btn btn-small btn-ghost" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Chat</a>` : ""}
+              ${c.chatId && c.chatOpen ? `<a class="btn btn-small btn-ghost" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Chat</a>` : ""}
               ${c.status === "scheduled" && !started ? `<button type="button" class="btn btn-small btn-ghost" data-gc-cancel="${c.id}">Cancel</button>` : ""}
             </div>
           </div>
@@ -134,6 +134,8 @@ window.LevelUpClasses = (() => {
             <label>Trainer fee per class (€)<input type="number" name="trainerFee" min="0" max="1000" step="1" value="${pricing.classTrainerFee}"></label>
           </div>` : `<p class="muted small">Players pay ${euro(pricing.classPrice)} per class; you get ${euro(pricing.classTrainerFee)} per class you lead.</p>`}
           <label>Note for the players (optional)<input name="note" maxlength="300" placeholder="Bring a towel and water · level: everyone welcome"></label>
+          <label class="gc-announce"><input type="checkbox" name="announce" checked> <span>📣 Tell all members: news behind the bell and a notification, with your note in it</span></label>
+          <p class="muted small">Classes with the same name share one group chat (e.g. every "Hyrox" class uses the Hyrox chat).</p>
           <p class="form-error" role="alert">${esc(st.error)}</p>
           <div class="btn-row">
             <button type="submit" class="btn btn-primary">Plan class ▶</button>
@@ -171,9 +173,12 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        const r = await LevelUp.classCreate(Object.fromEntries(new FormData(form)));
+        const r = await LevelUp.classCreate({ ...Object.fromEntries(new FormData(form)), announce: form.elements.announce.checked });
         const n = r.created.length;
-        LevelUp.toast({ title: n === 1 ? "Class planned" : `${n} classes planned`, text: r.skipped ? `${r.skipped} week${r.skipped === 1 ? "" : "s"} skipped (clash or too soon)` : "Players can sign up now", icon: "👥", tone: "green" });
+        LevelUp.toast({ title: n === 1 ? "Class planned" : `${n} classes planned`,
+          text: r.skipped ? `${r.skipped} week${r.skipped === 1 ? "" : "s"} skipped (clash or too soon)`
+            : r.announced != null ? `Everyone got the news · ${r.announced} notification${r.announced === 1 ? "" : "s"} sent` : "Players can sign up now", icon: "👥", tone: "green" });
+        LevelUp.loadPricing();
         st.creating = false;
         await load();
       } catch (err) {

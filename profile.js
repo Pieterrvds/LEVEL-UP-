@@ -786,6 +786,10 @@ function renderAppPanel() {
       </div>
       <h3 class="panel-sub">Notifications</h3>
       <div class="push-setting push-${push}">${pushText}</div>
+      <label class="news-setting">
+        <input type="checkbox" data-push-news ${LevelUp.getPlayer().pushNews === false ? "" : "checked"}>
+        <span><b>News notifications</b> <small class="muted">New group classes, new products and sales: at most 2 a day and never at night. Your own sessions, chat and XP always come through.</small></span>
+      </label>
     </section>`;
 }
 
@@ -1055,6 +1059,20 @@ function bindEvents(player) {
       error.textContent = err.message;
       submit.disabled = false;
       submit.textContent = "Try again";
+    }
+  });
+
+  // News notifications on / off (new classes, shop news)
+  root.querySelector("[data-push-news]")?.addEventListener("change", async (event) => {
+    const box = event.target;
+    box.disabled = true;
+    try {
+      await LevelUp.setPushNews(box.checked);
+      LevelUp.toast({ title: box.checked ? "News notifications on" : "News notifications off", text: box.checked ? "You hear about new classes and deals." : "You only get messages about your own sessions.", icon: box.checked ? "🔔" : "🔕", tone: "green" });
+    } catch (err) {
+      box.checked = !box.checked;
+      box.disabled = false;
+      alert(err.message);
     }
   });
 

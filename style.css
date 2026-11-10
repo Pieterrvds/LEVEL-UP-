@@ -2797,3 +2797,27 @@ button.like-badge:focus-visible { outline: 2px solid #ff5c86; outline-offset: 2p
 .like-badge.pop { animation: like-pop 0.5s ease-out; }
 @keyframes like-pop { 0% { transform: scale(1); } 35% { transform: scale(1.6) rotate(-8deg); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .like-badge.pop { animation: none; } }
+
+/* ---------- News: the bell in the header and its list ---------- */
+.hud-news {
+  position: relative; display: grid; place-items: center; width: 46px; height: 46px; margin-right: 8px; padding: 0;
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.hud-news:hover { border-color: var(--gold); color: var(--gold); }
+.hud-news svg { width: 22px; height: 22px; }
+.hud-news.has-new { border-color: var(--gold); color: var(--gold); }
+.hud-news.has-new svg { animation: bell-ring 2.4s ease-in-out 1s 2; transform-origin: 50% 10%; }
+@keyframes bell-ring { 0%, 100% { transform: rotate(0); } 8% { transform: rotate(14deg); } 16% { transform: rotate(-12deg); } 24% { transform: rotate(8deg); } 32% { transform: rotate(0); } }
+@media (prefers-reduced-motion: reduce) { .hud-news.has-new svg { animation: none; } }
+@media (max-width: 760px) { .hud-news { width: 40px; height: 40px; margin-right: 6px; } }
+.news-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.news-list a { display: grid; gap: 3px; padding: 10px 12px; color: var(--text); text-decoration: none; background: #000; border-left: 4px solid var(--line); border-radius: 6px; }
+.news-list a:hover { border-left-color: var(--green-bright); }
+.news-list .fresh a { border-left-color: var(--gold); }
+.news-list b { font-size: 0.98rem; }
+.news-list span { color: var(--muted); font-size: 0.9rem; }
+.news-list small { color: var(--muted); font-size: 0.75rem; }
+.gc-announce { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px dashed var(--gold); cursor: pointer;
+  font-family: var(--sans); font-size: 0.9rem; font-style: normal; font-weight: 600; text-transform: none; color: var(--text); font-size-adjust: none; line-height: 1.4; }
+.gc-form .gc-announce input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--green-bright); }
