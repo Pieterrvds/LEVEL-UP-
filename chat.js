@@ -206,11 +206,13 @@ function renderThread() {
     box.innerHTML = `
       <header class="chat-head">
         <a href="chat.html" class="chat-back" data-back aria-label="All conversations">${BACK_ICON}</a>
+        <span class="chat-head-who" ${t.group ? "" : t.trainerId ? `data-profile-trainer="${esc(t.trainerId)}"` : t.userId ? `data-profile="${esc(t.userId)}"` : ""}>
         ${peerAvatar(t, "head")}
         <div class="chat-head-info">
           <b data-no-i18n>${esc(peerName(t))}</b>
           <span>${esc(peerRole(t))}</span>
         </div>
+        </span>
         ${coach && t.side === "client" ? `<a href="index.html#schedule" class="btn btn-small btn-primary chat-book" data-book-link="${esc(coach.id)}">Book</a>` : ""}
         ${t.group ? `<button type="button" class="chat-tool ${t.muted ? "off" : ""}" data-chat-mute title="${t.muted ? "Notifications are off for this group. Tap to turn them on." : "Turn off notifications for this group"}" aria-pressed="${Boolean(t.muted)}" aria-label="${t.muted ? "Turn on notifications for this group" : "Turn off notifications for this group"}">${t.muted ? "🔕" : "🔔"}</button>
         ${t.canDelete ? `<button type="button" class="chat-tool" data-chat-delete title="Delete this group chat" aria-label="Delete this group chat">🗑</button>` : ""}
@@ -268,7 +270,7 @@ function renderMessages() {
     const showName = state.active.group && !m.mine && (!prev || prev.mine || prev.name !== m.name || at - new Date(prev.at) > 5 * 60e3);
     html += `
       <div class="chat-msg ${m.mine ? "mine" : "theirs"} ${groupEnd ? "end" : ""} ${m.coach ? "coach" : ""} ${m.pending ? "pending" : ""} ${m.failed ? "failed" : ""}">
-        ${showName ? `<span class="chat-from">${esc(m.name)}${m.coach ? ` · ${esc(LevelUp_t("Coach"))}` : ""}</span>` : ""}
+        ${showName ? `<span class="chat-from" ${m.userId ? `data-profile="${esc(m.userId)}"` : ""}>${esc(m.name)}${m.coach ? ` · ${esc(LevelUp_t("Coach"))}` : ""}</span>` : ""}
         <p>${esc(m.body)}</p>
         ${groupEnd ? `<span class="chat-meta">${timeLabel(m.at)}${m.failed ? ` · ${esc(LevelUp_t("Not sent"))}` : ""}${lastMineRead && m.id === lastMineRead.id ? ` · ${esc(LevelUp_t("Seen"))}` : ""}</span>` : ""}
       </div>`;

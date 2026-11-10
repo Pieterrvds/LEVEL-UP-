@@ -52,6 +52,50 @@ function renderHeader(player, p) {
     </section>`;
 }
 
+const LevelUp_t = (text) => (window.t ? window.t(text) : text); // Dutch/English for confirm() and prompt()
+
+// Your page for other members: a line about yourself, photos, and who may see it
+function renderMyPage(player) {
+  const coach = Boolean(player.trainerId);
+  return `
+    <section class="panel panel-wide my-page" id="mypage">
+      <div class="panel-head">
+        <h2>My page</h2>
+        <button type="button" class="btn btn-small btn-ghost" ${coach ? `data-profile-trainer="${esc(player.trainerId)}"` : `data-profile="${esc(player.id)}"`}>👁 See my page</button>
+      </div>
+      <p class="muted">${coach
+        ? "Your page opens from your coach card, also for visitors: your photos, the group classes you give and your level."
+        : "Other members open your page from the high scores or a chat: your level, likes, photos and the group classes you join. Never your email, body stats, sessions or payments."}</p>
+      <form class="mypage-bio" id="bioForm">
+        <label for="bioInput">About me <small class="muted">(optional, 160 characters)</small></label>
+        <div class="mypage-bio-row">
+          <input id="bioInput" name="bio" maxlength="160" value="${esc(player.bio)}" placeholder="e.g. Training for my first Hyrox 💪">
+          <button type="submit" class="btn btn-small btn-primary">Save</button>
+        </div>
+      </form>
+      <h3 class="panel-sub">My photos <small class="muted">${player.photos.length}/12</small></h3>
+      <div class="mypage-photos">
+        ${player.photos.map((ph) => `
+          <figure>
+            <img src="${esc(ph.url)}" alt="" loading="lazy">
+            ${ph.caption ? `<figcaption data-no-i18n>${esc(ph.caption)}</figcaption>` : ""}
+            <button type="button" class="photo-remove" data-my-photo-remove="${esc(ph.id)}" aria-label="Remove this photo">✕</button>
+          </figure>`).join("")}
+        ${player.photos.length < 12 ? `
+          <label class="photo-add" title="Add a photo">
+            <span aria-hidden="true">＋</span><span>Add a photo</span>
+            <input type="file" accept="image/*" data-photo-input hidden>
+          </label>` : ""}
+      </div>
+      <p class="muted small">Post photos you'd show at the gym: a PR, a run, the squad after class. Only photos of yourself, or with the OK of who's in it. LEVEL-UP can remove a photo that doesn't fit.</p>
+      <p class="form-error" role="alert" id="myPageError"></p>
+      ${coach ? "" : `<label class="news-setting">
+        <input type="checkbox" data-page-visible ${player.profileVisible ? "checked" : ""}>
+        <span><b>Other members can see my page</b> <small class="muted">Off: they only see your name and photo. You can still chat and get likes on the high scores.</small></span>
+      </label>`}
+    </section>`;
+}
+
 // Hearts from other players (given on the high scores, once per player per week)
 function renderLikes(player) {
   if (player.trainerId) return "";
@@ -64,7 +108,7 @@ function renderLikes(player) {
       </div>
       ${player.likedBy.length ? `
         <ul class="liked-by">${player.likedBy.map((f) => `
-          <li>${LevelUp.avatarHtml({ name: f.name, avatarUrl: f.avatarUrl })}<span><b>${esc(f.name)}</b> liked you</span><small class="muted">${formatDate(f.date)}</small></li>`).join("")}
+          <li data-profile="${esc(f.userId || "")}">${LevelUp.avatarHtml({ name: f.name, avatarUrl: f.avatarUrl })}<span><b>${esc(f.name)}</b> liked you</span><small class="muted">${formatDate(f.date)}</small></li>`).join("")}
         </ul>` : `<p class="muted">No likes yet. Players give each other a heart on the high scores: tap the ♥ on someone's photo.</p>`}
       ${player.showOnLeaderboard === false ? `<p class="muted small">You're hidden from the high scores, so nobody can like you right now. Change this under Me → Account.</p>` : ""}
       <a href="index.html#highScores" class="text-link">♥ Give someone a like on the high scores →</a>
@@ -843,6 +887,7 @@ function render() {
     <div class="panel-grid">
       ${inTab("overview", renderSessions())}
       ${inTab("overview", renderLikes(player))}
+      ${inTab("overview", renderMyPage(player))}
       ${inTab("overview", renderMyClasses(player))}
       ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}
@@ -1059,6 +1104,63 @@ function bindEvents(player) {
       error.textContent = err.message;
       submit.disabled = false;
       submit.textContent = "Try again";
+    }
+  });
+
+  // My page: the line about yourself, photos and who may see it
+  const pageError = () => root.querySelector("#myPageError");
+  root.querySelector("#bioForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const btn = event.target.querySelector("[type=submit]");
+    btn.disabled = true;
+    try {
+      await LevelUp.setProfile({ bio: event.target.elements.bio.value });
+      LevelUp.toast({ title: "Saved", text: "Your page is up to date.", icon: "✓", tone: "green" });
+    } catch (err) {
+      btn.disabled = false;
+      pageError().textContent = err.message;
+    }
+  });
+  root.querySelector("[data-photo-input]")?.addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    const caption = prompt(LevelUp_t("Add a short caption (optional, 140 characters):"), "");
+    if (caption === null) { input.value = ""; return; }
+    const tile = input.closest(".photo-add");
+    tile.classList.add("busy");
+    pageError().textContent = "";
+    try {
+      await LevelUp.addPhoto(file, caption.slice(0, 140));
+      LevelUp.toast({ title: "Photo added", text: "It shows on your page now.", icon: "📸", tone: "green" });
+    } catch (err) {
+      tile.classList.remove("busy");
+      input.value = "";
+      pageError().textContent = err.message;
+    }
+  });
+  root.querySelectorAll("[data-my-photo-remove]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!confirm(LevelUp_t("Remove this photo from your page?"))) return;
+      button.disabled = true;
+      try {
+        await LevelUp.deletePhoto(button.dataset.myPhotoRemove);
+      } catch (err) {
+        button.disabled = false;
+        pageError().textContent = err.message;
+      }
+    });
+  });
+  root.querySelector("[data-page-visible]")?.addEventListener("change", async (event) => {
+    const box = event.target;
+    box.disabled = true;
+    try {
+      await LevelUp.setProfile({ visible: box.checked });
+      LevelUp.toast({ title: box.checked ? "Your page is visible" : "Your page is private", text: box.checked ? "Other members can open your page." : "Others only see your name and photo.", icon: box.checked ? "👁" : "🔒", tone: "green" });
+    } catch (err) {
+      box.checked = !box.checked;
+      box.disabled = false;
+      alert(err.message);
     }
   });
 

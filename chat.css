@@ -170,3 +170,5 @@
 .chat-tool.off { opacity: 0.6; }
 .chat-tool[data-chat-delete]:hover { border-color: var(--red); }
 @media (max-width: 480px) { .chat-head .chat-book { display: none; } }
+.chat-head-who { display: contents; }
+.chat-from[data-profile]:hover { text-decoration: underline; }

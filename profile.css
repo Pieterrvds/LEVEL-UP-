@@ -336,3 +336,17 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   font-family: var(--sans); font-size: 0.92rem; font-style: normal; font-weight: 400; text-transform: none; color: var(--text); font-size-adjust: none; line-height: 1.45; }
 .news-setting input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-bright); }
 .news-setting small { display: block; font-size: 0.82rem; }
+
+/* My page: about me, photos and visibility */
+.mypage-bio { display: grid; gap: 6px; margin: 12px 0 0; }
+.mypage-bio-row { display: flex; gap: 8px; }
+.mypage-bio-row input { flex: 1; min-width: 0; }
+.mypage-photos { margin-bottom: 10px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.mypage-photos figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; font-size: 0.75rem; color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.photo-add { display: grid; place-content: center; justify-items: center; gap: 4px; aspect-ratio: 1; cursor: pointer; border: 2px dashed var(--line); border-radius: 8px;
+  font-family: var(--sans); font-size: 0.82rem; font-style: normal; font-weight: 600; text-transform: none; color: var(--muted); font-size-adjust: none; text-align: center; }
+.photo-add > span:first-child { font-size: 1.8rem; line-height: 1; color: var(--green-bright); }
+.photo-add:hover { border-color: var(--green-bright); color: var(--text); }
+.photo-add.busy { opacity: 0.5; pointer-events: none; }
+.liked-by li[data-profile] { cursor: pointer; }

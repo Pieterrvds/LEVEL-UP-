@@ -169,6 +169,18 @@ create table if not exists public.news (
   created_at timestamptz not null default now()
 );
 alter table public.news enable row level security;  -- read through pricing_info only
+-- A member's page for other members: a short text about themselves, photos, and whether others may see it at all
+alter table public.profiles add column if not exists bio text;
+alter table public.profiles add column if not exists profile_visible boolean not null default true;
+create table if not exists public.profile_photos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  url text not null,          -- public URL in the Storage bucket "avatars" (the member's own folder)
+  caption text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists profile_photos_user_idx on public.profile_photos (user_id, created_at desc);
+alter table public.profile_photos enable row level security;  -- only through the functions below
 -- Players can switch off news notifications (their own bookings, chat and XP always come through)
 alter table public.profiles add column if not exists push_news boolean not null default true;
 
@@ -851,6 +863,10 @@ returns jsonb language sql stable security definer set search_path = public as $
     'lastLogin', p.last_login,
     'showOnLeaderboard', p.show_on_leaderboard,
     'pushNews', p.push_news,
+    'bio', p.bio,
+    'profileVisible', p.profile_visible,
+    'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
+                        from public.profile_photos ph where ph.user_id = p.id), '[]'::jsonb),
     'avatarUrl', p.avatar_url,
     'application', (select jsonb_build_object('status', a.status, 'role', a.role_title, 'specialties', a.specialties,
                       'bio', a.bio, 'createdAt', a.created_at, 'reviewedAt', a.reviewed_at)
@@ -883,7 +899,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'likes', (select count(*) from public.player_likes l where l.to_id = p.id),
     'likesWeek', (select count(*) from public.player_likes l where l.to_id = p.id
                   and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date),
-    'likedBy', coalesce((select jsonb_agg(jsonb_build_object('name', f.name, 'avatarUrl', f.avatar_url, 'date', l.created_at) order by l.created_at desc)
+    'likedBy', coalesce((select jsonb_agg(jsonb_build_object('userId', f.id, 'name', f.name, 'avatarUrl', f.avatar_url, 'date', l.created_at) order by l.created_at desc)
                          from (select * from public.player_likes where to_id = p.id order by created_at desc limit 8) l
                          join public.profiles f on f.id = l.from_id), '[]'::jsonb),
     'introEligible', not exists (select 1 from public.bookings k where k.user_id = p.id
@@ -1427,6 +1443,123 @@ begin
       'profile.html', 'like-' || auth.uid());
   end if;
   return jsonb_build_object('likes', total, 'liked', true);
+end $$;
+
+-- ---------------------------------------------------------
+-- Member pages: what one member sees of another (opened from the high scores, a chat or a coach card)
+-- ---------------------------------------------------------
+-- Limited on purpose: name, photo, level, likes, streak, achievements, their own photos and the GROUP classes they
+-- go to or went to. Never: email, body stats, health form, payments, orders or 1:1 sessions with times.
+-- Members see each other only when logged in; a trainer's page is public like their card on the home page.
+-- A member who switched "profile_visible" off shows only a name and photo to others.
+create or replace function public.public_profile(p_user uuid default null, p_trainer text default null)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  t public.trainers;
+  p public.profiles;
+  uid uuid := p_user;
+  open_page boolean;
+  out jsonb;
+begin
+  if p_trainer is not null then
+    select * into t from public.trainers where id = p_trainer and active;
+    if not found then raise exception 'Profile not found.'; end if;
+    uid := public._trainer_user(t.id);
+  end if;
+  if uid is not null then
+    select * into p from public.profiles where id = uid;
+    if t.id is null then
+      select tr.* into t from public.trainers tr where tr.email is not null and lower(tr.email) = lower(p.email) and tr.active limit 1;
+    end if;
+  end if;
+  if p.id is null and t.id is null then raise exception 'Profile not found.'; end if;
+  if t.id is null and me is null then raise exception 'Log in to see other players.'; end if;
+  open_page := p.id is not null and (p.profile_visible or t.id is not null or p.id = me or public.is_admin());
+  out := jsonb_build_object(
+    'userId', case when me is not null then p.id end,
+    'name', coalesce(case when t.id is not null then t.name end, p.name),
+    'avatarUrl', p.avatar_url, 'isMe', coalesce(p.id = me, false),
+    'trainerId', t.id, 'role', case when t.id is not null then coalesce(t.role, 'Personal trainer') end,
+    'private', p.id is not null and not open_page,
+    'linked', p.id is not null,
+    'canModerate', public.is_admin());
+  if t.id is not null then
+    out := out || jsonb_build_object(
+      'trainerBio', t.bio, 'specialties', t.specialties,
+      'teaching', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title, 'startsAt', c.starts_at,
+                                'taken', public._class_taken(c.id), 'capacity', c.capacity) order by c.starts_at)
+                            from (select * from public.class_sessions where trainer_id = t.id and status = 'scheduled' and starts_at > now()
+                                  order by starts_at limit 6) c), '[]'::jsonb));
+  end if;
+  if not open_page then return out; end if;
+  return out || jsonb_build_object(
+    'xp', p.xp, 'since', p.created_at, 'bio', p.bio,
+    'likes', (select count(*) from public.player_likes l where l.to_id = p.id),
+    'liked', exists (select 1 from public.player_likes l where l.from_id = me and l.to_id = p.id
+                     and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date),
+    'canLike', me is not null and p.id <> me and p.show_on_leaderboard,
+    'streak', coalesce((public._streak(p.id) ->> 'weeks')::int, 0),
+    'potmWins', (select count(*) from public.monthly_awards a where a.user_id = p.id),
+    'place', case when t.id is null and p.show_on_leaderboard then
+               (select count(*) + 1 from public.profiles o where o.show_on_leaderboard and o.xp > p.xp
+                  and not exists (select 1 from public.trainers tr where tr.email is not null and lower(tr.email) = lower(o.email))) end,
+    'sessions', (select count(*) from public.bookings k where k.user_id = p.id and k.status = 'completed'),
+    'classesDone', (select count(*) from public.class_signups g where g.user_id = p.id and g.status = 'attended'),
+    'achievements', coalesce((select jsonb_agg(k) from jsonb_object_keys(p.achievements) k), '[]'::jsonb),
+    'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
+                        from public.profile_photos ph where ph.user_id = p.id), '[]'::jsonb),
+    -- group classes only: the ones they are signed up for, and the ones they did lately
+    'upcoming', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title, 'startsAt', c.starts_at) order by c.starts_at)
+                          from (select c.* from public.class_sessions c join public.class_signups g on g.class_id = c.id
+                                where g.user_id = p.id and g.status = 'booked' and c.status = 'scheduled' and c.starts_at > now()
+                                order by c.starts_at limit 5) c), '[]'::jsonb),
+    'recent', coalesce((select jsonb_agg(jsonb_build_object('title', c.title, 'startsAt', c.starts_at) order by c.starts_at desc)
+                        from (select c.* from public.class_sessions c join public.class_signups g on g.class_id = c.id
+                              where g.user_id = p.id and g.status = 'attended' and c.starts_at > now() - interval '60 days'
+                              order by c.starts_at desc limit 5) c), '[]'::jsonb));
+end $$;
+
+-- Your own page: the text about yourself and whether other members may see your page
+create or replace function public.set_profile(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare about text := btrim(coalesce(p ->> 'bio', ''));
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if p ? 'bio' and char_length(about) > 160 then raise exception 'Keep the text about yourself under 160 characters.'; end if;
+  update public.profiles set
+    bio = case when p ? 'bio' then nullif(about, '') else bio end,
+    profile_visible = coalesce((p ->> 'visible')::boolean, profile_visible)
+  where id = auth.uid();
+  return public._player_json(auth.uid());
+end $$;
+
+-- Add a photo to your page (at most 12). The file is already in your own Storage folder.
+create or replace function public.photo_add(p_url text, p_caption text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if p_url is null or p_url !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
+                                || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Invalid photo.';
+  end if;
+  if char_length(btrim(coalesce(p_caption, ''))) > 140 then raise exception 'Keep the caption under 140 characters.'; end if;
+  if (select count(*) from public.profile_photos where user_id = auth.uid()) >= 12 then
+    raise exception 'You can show 12 photos. Remove one first.';
+  end if;
+  insert into public.profile_photos (user_id, url, caption) values (auth.uid(), p_url, btrim(coalesce(p_caption, '')));
+  return public._player_json(auth.uid());
+end $$;
+
+-- Remove a photo: your own, or any photo as admin (not suitable). Returns its URL so the file can go too.
+create or replace function public.photo_delete(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare ph public.profile_photos;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  delete from public.profile_photos where id = p_id and (user_id = auth.uid() or public.is_admin()) returning * into ph;
+  if not found then raise exception 'Photo not found.'; end if;
+  return jsonb_build_object('url', ph.url, 'userId', ph.user_id);
 end $$;
 
 create or replace function public.set_leaderboard_visibility(p_show boolean)
@@ -2494,8 +2627,9 @@ returns timestamptz language sql stable as $$
 $$;
 
 -- News for everyone: it always shows behind the bell; as a notification it goes to everyone with notifications on
--- who didn't switch news off, except the sender. So it never feels like spam: at most 2 news notifications per
--- person per 24 hours (p_force: a message the admin wrote always goes out) and nothing at night.
+-- who didn't switch news off. So it never feels like spam: at most 2 news notifications per person per 24 hours
+-- (p_force: a message the admin wrote always goes out) and nothing at night. The sender gets a copy too, so they
+-- see what their members see.
 create or replace function public._broadcast(p_kind text, p_title text, p_body text, p_url text, p_ref text default null,
                                              p_expires timestamptz default null, p_force boolean default false)
 returns integer language plpgsql security definer set search_path = public as $$
@@ -2510,9 +2644,9 @@ begin
   values (p_kind, left(p_title, 80), left(coalesce(p_body, ''), 240), p_url, p_ref, p_expires, auth.uid()) returning id into nid;
   for u in
     select p.id from public.profiles p
-    where p.push_news and p.id is distinct from auth.uid()
+    where p.push_news
       and exists (select 1 from public.push_subscriptions s where s.user_id = p.id)
-      and (p_force or (select count(*) from public.push_outbox o
+      and (p_force or p.id = auth.uid() or (select count(*) from public.push_outbox o
                        where o.user_id = p.id and o.tag like 'news-%' and o.created_at > now() - interval '24 hours') < 2)
   loop
     insert into public.push_outbox (user_id, title, body, url, tag, send_after)
@@ -2985,6 +3119,10 @@ begin
       with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
     create policy "avatars: delete own" on storage.objects for delete to authenticated
       using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+    -- an admin can take away a photo that isn't suitable (profile photos and the photos on member pages share this bucket)
+    drop policy if exists "avatars: admin delete" on storage.objects;
+    create policy "avatars: admin delete" on storage.objects for delete to authenticated
+      using (bucket_id = 'avatars' and public.is_admin());
   end if;
 end $$;
 
@@ -3176,7 +3314,7 @@ returns jsonb language sql stable security definer set search_path = public as $
               'avatarUrl', (select p.avatar_url from public.profiles p where p.id = public._trainer_user(t.id)))
        from public.trainers t where t.id = p_thread.trainer_id)
     else
-      (select jsonb_build_object('name', p.name, 'role', 'Player', 'trainerId', null, 'avatarUrl', p.avatar_url)
+      (select jsonb_build_object('name', p.name, 'role', 'Player', 'trainerId', null, 'avatarUrl', p.avatar_url, 'userId', p.id)
        from public.profiles p where p.id = p_thread.client_id)
     end;
 $$;
@@ -3311,6 +3449,7 @@ begin
                                                   where x.from_trainer and tr.id = public._trainer_of(x.sender_id)),
                                                  (select p.name from public.profiles p where p.id = x.sender_id), 'Member') end,
                                                'coach', side = 'group' and x.from_trainer,
+                                               'userId', case when side = 'group' then x.sender_id end,
                                                'body', x.body, 'at', x.created_at) order by x.id), '[]'::jsonb),
          max(x.id)
     into msgs, top
@@ -3968,6 +4107,13 @@ revoke execute on function public.set_leaderboard_visibility(boolean) from publi
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
 revoke execute on function public.give_like(uuid) from public, anon;
+revoke execute on function public.set_profile(jsonb) from public, anon;
+revoke execute on function public.photo_add(text, text) from public, anon;
+revoke execute on function public.photo_delete(uuid) from public, anon;
+grant execute on function public.public_profile(uuid, text) to anon, authenticated;
+grant execute on function public.set_profile(jsonb) to authenticated;
+grant execute on function public.photo_add(text, text) to authenticated;
+grant execute on function public.photo_delete(uuid) to authenticated;
 grant execute on function public.give_like(uuid) to authenticated;
 grant execute on function public.player_of_month() to anon, authenticated;
 grant execute on function public.public_reviews() to anon, authenticated;

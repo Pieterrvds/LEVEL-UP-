@@ -256,7 +256,7 @@ So it never feels like spam:
 - **nothing at night**: news and reminders queued between 22:00 and 8:00 go out at 8:00 (`push_outbox.send_after`);
 - a weekly class series is one message; a product is "new" once and gets at most one discount message every 3 days;
 - players switch news off under My account → Me → **News notifications** (their own sessions, chat and XP always
-  come through); the person who made the news doesn't get it themselves;
+  come through); the person who made the news gets a copy too, so they see what their members see;
 - news about a class that started, a cancelled class or a discount that ended disappears by itself.
 
 **Admin → Overview → Message to everyone** sends your own message (title, optional text, where it opens), at most 3
@@ -404,6 +404,24 @@ you're unsure about anything legal.
   large brand-coloured cards (Instagram, WhatsApp community, Facebook) with Follow / Join / Like buttons.
 - **Link preview:** `img/og-image.jpg` (1200×630) with the Open Graph tags on every page, used by WhatsApp,
   Facebook, LinkedIn… WhatsApp keeps old previews for a while; new shares show the new image.
+
+## Member pages (profiles of other members and coaches)
+Tap someone's photo or name and their page opens in a window: on the high scores (podium, rows, Player of the
+Month), in a chat (the header, or a name in a group chat), in the likes on your own profile, and on a coach card
+("Meet the team": the photo or name, and the small coach faces on the training cards).
+- **What it shows:** name, photo, rank and level, place on the high scores, streak, likes (with a Like button),
+  a 💬 Chat button, a line about themselves, their photos, achievements, and the **group classes** they signed up
+  for ("Going to": Social run club · Wed 19:00, with a link to join too) or did lately. A coach page also shows the
+  group classes they give and a Book button.
+- **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
+- **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card.
+  A member can make their page private (My account → Overview → My page): others then only see name and photo.
+- **My page** (My account → Overview): a line about yourself (160 characters), up to 12 photos with a caption, and
+  the private switch. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
+  `avatars`, in the member's own folder, like the profile photo.
+- **Moderation:** an admin sees every page and can remove any photo (✕ on the photo); the file is deleted too.
+- Server: `public_profile`, `set_profile`, `photo_add`, `photo_delete` and table `profile_photos` in
+  `supabase/schema.sql`. The privacy policy (`privacy.html`) describes all this.
 
 ## Likes (hearts on the high scores)
 Logged-in players give each other a like by tapping the ♥ on someone's photo: on the podium, in the high score rows

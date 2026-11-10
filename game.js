@@ -368,7 +368,10 @@ const LevelUp = (() => {
       potmWins: Number(data.potmWins) || 0,
       likes: Number(data.likes) || 0,           // hearts other players gave you (all time)
       likesWeek: Number(data.likesWeek) || 0,
-      likedBy: data.likedBy || []               // the latest likes: { name, avatarUrl, date }
+      likedBy: data.likedBy || [],              // the latest likes: { userId, name, avatarUrl, date }
+      bio: data.bio || "",                      // their page for other members
+      profileVisible: data.profileVisible !== false,
+      photos: data.photos || []
     };
   }
 
@@ -2477,6 +2480,214 @@ const LevelUp = (() => {
     emit();
   }
 
+  // ---------- Member pages: photos on your own page (same Storage bucket as the profile photo) ----------
+  const PHOTO_MAX = 1280; // longest side, to keep the file small
+  async function fitPhoto(file) {
+    if (!/^image\//.test(file?.type || "")) throw new Error("Choose a photo (JPG, PNG or WebP).");
+    if (file.size > 15 * 1024 * 1024) throw new Error("That photo is too big. Choose one under 15 MB.");
+    let img;
+    try {
+      img = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+      img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("This photo can't be read. Try a JPG or PNG."));
+        el.src = URL.createObjectURL(file);
+      });
+    }
+    const scale = Math.min(1, PHOTO_MAX / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = (q) => new Promise((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't prepare the photo.")), "image/jpeg", q));
+    let out = await blob(0.82);
+    if (out.size > 950 * 1024) out = await blob(0.6); // the bucket takes files up to 1 MB
+    return out;
+  }
+  async function addPhoto(file, caption = "") {
+    if (!player || !sb) throw new Error("Log in first.");
+    if (player.photos.length >= 12) throw new Error("You can show 12 photos. Remove one first.");
+    const blob = await fitPhoto(file);
+    const path = `${player.id}/p${Date.now()}.jpg`;
+    const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
+    if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
+    const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    try {
+      player = normalisePlayer(await call("photo_add", { p_url: url, p_caption: String(caption || "").trim() }));
+    } catch (err) {
+      sb.storage.from("avatars").remove([path]).catch(() => {});
+      throw err;
+    }
+    emit();
+  }
+  // Your own photo, or any photo as admin: the row and the file both go
+  async function deletePhoto(id) {
+    const r = await call("photo_delete", { p_id: id });
+    const path = avatarPath(r?.url);
+    if (path && sb) sb.storage.from("avatars").remove([path]).catch(() => {});
+    if (player && r?.userId === player.id) { await refreshPlayer(); emit(); }
+  }
+  async function setProfile(p) {
+    player = normalisePlayer(await call("set_profile", { p }));
+    emit();
+  }
+
+  // ---------- Member pages: what you see of another member or a coach ----------
+  // Opens from anything with data-profile="<user id>" or data-profile-trainer="<trainer id>": the high scores,
+  // a chat, the likes on your profile, a coach card. Coaches are public; members see each other when logged in.
+  let pageDialog;
+  let page = null; // the page that is open
+  const monthYear = (value) => new Date(value).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  const classWhen = (value) => new Date(value).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  async function openProfile(who) {
+    if (!who || (!who.trainerId && !who.userId)) { if (!player) openAuth("login"); return; }
+    if (!who.trainerId && !player) { openAuth("login"); return; }
+    if (!pageDialog) {
+      pageDialog = document.createElement("dialog");
+      pageDialog.className = "auth-dialog member-page";
+      pageDialog.setAttribute("aria-labelledby", "pageName");
+      document.body.appendChild(pageDialog);
+      pageDialog.addEventListener("click", onPageClick);
+    }
+    page = null;
+    pageDialog.innerHTML = `<button type="button" class="dialog-close" data-close aria-label="Close">✕</button><p class="muted page-loading">Loading…</p>`;
+    if (!pageDialog.open) pageDialog.showModal();
+    try {
+      page = await call("public_profile", who.trainerId ? { p_trainer: who.trainerId } : { p_user: who.userId });
+      renderPage();
+    } catch (err) {
+      pageDialog.innerHTML = `<button type="button" class="dialog-close" data-close aria-label="Close">✕</button><p class="form-error">${esc(err.message)}</p>`;
+    }
+  }
+  function renderPage() {
+    const d = page;
+    const coach = d.trainerId ? trainerById(d.trainerId) : null;
+    const photo = coach && !coach.dynamic ? coach.img : d.avatarUrl;
+    const prog = d.xp != null ? progress(d.xp) : null;
+    const first = String(d.name || "").split(" ")[0];
+    const likes = Number(d.likes) || 0;
+    const chips = [
+      d.place ? `<span>🏆 #${d.place} on the high scores</span>` : "",
+      d.streak ? `<span>🔥 ${d.streak}-week streak</span>` : "",
+      d.potmWins ? `<span>👑 Player of the Month${d.potmWins > 1 ? ` ×${d.potmWins}` : ""}</span>` : ""
+    ].filter(Boolean).join("");
+    const unlocked = ACHIEVEMENTS.filter((a) => (d.achievements || []).includes(a.id));
+    const tags = String(d.specialties || coach?.specialties || "").split(/[,·]/).map((x) => x.trim()).filter(Boolean).slice(0, 5);
+    const about = d.bio || d.trainerBio || coach?.bio || "";
+    const list = (rows, row) => `<ul class="page-list">${rows.map(row).join("")}</ul>`;
+    pageDialog.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <header class="page-head">
+        <span class="page-avatar ${photo ? "has-photo" : ""}">${photo ? `<img src="${esc(photo)}" alt="">` : esc(first.charAt(0).toUpperCase())}</span>
+        <div>
+          <h2 class="page-name" id="pageName" data-no-i18n>${esc(d.name)}</h2>
+          <p class="page-rank">${d.role ? `<span class="page-role">${esc(d.role)}</span>` : ""}${prog ? `<span class="rank-badge" data-tier="${RANKS.indexOf(prog.rank)}">${prog.rank.title}</span> <b>LVL ${prog.level}</b>` : ""}</p>
+          ${d.since ? `<p class="muted small">${d.trainerId ? "Coach" : "Player"} since ${monthYear(d.since)}</p>` : ""}
+        </div>
+      </header>
+      ${chips ? `<p class="page-chips">${chips}</p>` : ""}
+      ${d.isMe ? `<p class="page-own">This is how other members see your page. <a class="text-link" href="profile.html#mypage">Edit my page</a></p>` : `
+      <div class="btn-row page-actions">
+        ${d.linked === false ? "" : `<button type="button" class="btn btn-small btn-primary" data-page-chat>💬 Chat</button>`}
+        ${d.canLike || (!player && d.trainerId && !d.private) ? `<button type="button" class="btn btn-small btn-ghost page-like ${d.liked ? "liked" : ""}" data-page-like aria-pressed="${Boolean(d.liked)}"><span aria-hidden="true">♥</span> ${d.liked ? "Liked" : "Like"}${likes ? ` · ${likes}` : ""}</button>` : ""}
+        ${d.trainerId ? `<a class="btn btn-small btn-ghost" href="index.html#schedule" data-book-trainer="${esc(d.trainerId)}">Book ${esc(first)}</a>` : ""}
+      </div>`}
+      ${d.private ? `<p class="page-private">🔒 ${esc(first)} keeps their page private.</p>` : ""}
+      ${about ? `<p class="page-bio" data-no-i18n>${esc(about)}</p>` : ""}
+      ${tags.length ? `<ul class="team-chips page-tags">${tags.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+      ${prog ? `<div class="page-stats">
+        <div><b>${d.xp.toLocaleString("en-US")}</b><span>XP</span></div>
+        <div><b>${Number(d.sessions) || 0}</b><span>Sessions</span></div>
+        <div><b>${Number(d.classesDone) || 0}</b><span>Group classes</span></div>
+        <div><b>${likes}</b><span>Likes</span></div>
+      </div>` : ""}
+      ${(d.photos || []).length ? `<h3 class="panel-sub">Photos</h3><div class="page-photos">${d.photos.map((ph, i) => `
+        <figure>
+          <button type="button" class="page-photo" data-photo-view="${i}" aria-label="Open this photo"><img src="${esc(ph.url)}" alt="${esc(ph.caption || "")}" loading="lazy"></button>
+          ${d.canModerate && !d.isMe ? `<button type="button" class="photo-remove" data-photo-remove="${esc(ph.id)}" title="Remove this photo (admin)" aria-label="Remove this photo">✕</button>` : ""}
+        </figure>`).join("")}</div>` : ""}
+      ${(d.teaching || []).length ? `<h3 class="panel-sub">Group classes with ${esc(first)}</h3>${list(d.teaching, (c) => `
+        <li><a href="index.html#schedule"><b data-no-i18n>${esc(c.title)}</b><span>${classWhen(c.startsAt)}</span><small>${c.taken}/${c.capacity}</small></a></li>`)}` : ""}
+      ${(d.upcoming || []).length ? `<h3 class="panel-sub">Going to</h3>${list(d.upcoming, (c) => `
+        <li><a href="index.html#schedule"><b data-no-i18n>${esc(c.title)}</b><span>${classWhen(c.startsAt)}</span><small>Join too →</small></a></li>`)}` : ""}
+      ${(d.recent || []).length ? `<h3 class="panel-sub">Lately</h3>${list(d.recent, (c) => `
+        <li><span class="page-done"><b data-no-i18n>${esc(c.title)}</b><span>${new Date(c.startsAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span><small>✓</small></span></li>`)}` : ""}
+      ${unlocked.length ? `<h3 class="panel-sub">Achievements <small class="muted">${unlocked.length}/${ACHIEVEMENTS.length}</small></h3>
+        <p class="page-badges">${unlocked.map((a) => `<span title="${esc(a.title)}">${a.icon}</span>`).join("")}</p>` : ""}
+      <p class="form-error" role="alert"></p>`;
+  }
+  async function onPageClick(event) {
+    if (event.target === pageDialog || event.target.closest("[data-close]")) { pageDialog.close(); return; }
+    if (event.target.closest(".photo-view")) { event.target.closest(".photo-view").remove(); return; }
+    if (!page) return;
+    const error = pageDialog.querySelector(".form-error");
+    const view = event.target.closest("[data-photo-view]");
+    if (view) {
+      const ph = page.photos[Number(view.dataset.photoView)];
+      const box = document.createElement("div");
+      box.className = "photo-view";
+      box.innerHTML = `<img src="${esc(ph.url)}" alt="">${ph.caption ? `<p data-no-i18n>${esc(ph.caption)}</p>` : ""}<small>${shortDate(ph.date)} · tap to close</small>`;
+      pageDialog.appendChild(box);
+      return;
+    }
+    const remove = event.target.closest("[data-photo-remove]");
+    if (remove) {
+      if (!confirm("Remove this photo from this member's page? They are not told.")) return;
+      remove.disabled = true;
+      try {
+        await deletePhoto(remove.dataset.photoRemove);
+        page.photos = page.photos.filter((ph) => ph.id !== remove.dataset.photoRemove);
+        renderPage();
+      } catch (err) { remove.disabled = false; error.textContent = err.message; }
+      return;
+    }
+    if (event.target.closest("[data-page-chat]")) {
+      if (!player) { pageDialog.close(); openAuth("login"); return; }
+      if (page.trainerId) { pageDialog.close(); openChatWith(page.trainerId); return; }
+      try {
+        const id = await chatOpenUser(page.userId);
+        location.href = `chat.html?t=${encodeURIComponent(id)}`;
+      } catch (err) { error.textContent = err.message; }
+      return;
+    }
+    const like = event.target.closest("[data-page-like]");
+    if (like) {
+      if (!player) { pageDialog.close(); openAuth("login"); return; }
+      if (page.liked) { toast({ title: "Already liked this week", text: `You can like ${page.name} again on Monday.`, icon: "♥", tone: "gold" }); return; }
+      like.disabled = true;
+      try {
+        const res = await call("give_like", { p_to: page.userId });
+        page.liked = true;
+        page.likes = Number(res?.likes) || (Number(page.likes) || 0) + 1;
+        eachLikeTarget(page.userId, (r) => { r.liked = true; r.likes = page.likes; });
+        toast({ title: "Like sent", text: `${page.name} gets a heart from you ❤️`, icon: "♥", tone: "green" });
+        renderPage();
+        emit();
+      } catch (err) { like.disabled = false; error.textContent = err.message; }
+      return;
+    }
+    if (event.target.closest("a")) pageDialog.close();
+  }
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("button[data-like]")) return; // the heart on a photo gives a like
+    const el = event.target.closest("[data-profile], [data-profile-trainer]");
+    if (el) {
+      event.preventDefault();
+      openProfile(el.dataset.profileTrainer ? { trainerId: el.dataset.profileTrainer } : { userId: el.dataset.profile });
+      return;
+    }
+    if (event.target.closest("a, button, dialog")) return;
+    // a coach card on the home page (photo or name) and the small coach faces on the training cards
+    const card = event.target.closest(".team-card[id^='team-']");
+    if (card && event.target.closest(".team-photo-wrap, h3")) { openProfile({ trainerId: card.id.slice(5) }); return; }
+    const face = event.target.closest("img[data-coach]");
+    if (face) openProfile({ trainerId: face.dataset.coach });
+  });
+
   async function adminClearAvatar(userId) {
     await call("admin_clear_avatar", { p_user: userId });
   }
@@ -3057,7 +3268,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, likeHtml, giveLike, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, likeHtml, giveLike, openProfile, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
