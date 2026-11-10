@@ -972,6 +972,20 @@ function renderDynamicTeam() {
 // ---------- High scores: arcade board with a podium, all time or this month ----------
 let hsPeriod = "all";
 const HS_MEDALS = ["#ffd23f", "#c9d1d9", "#cd7f32"];
+// Confetti over the number one of the podium: a fixed set of pieces (place, colour, speed, start), so it looks the
+// same on every draw and never jumps. Pure CSS (see .hs-confetti); off with "reduce motion".
+const HS_CONFETTI = (() => {
+  const colors = ["var(--gold)", "var(--green-bright)", "#ff7eb6", "#5ac8fa", "#ffffff"];
+  const pieces = Array.from({ length: 16 }, (_, k) => {
+    const x = 4 + ((k * 37) % 90);              // % from the left, spread over the width
+    const t = 2.6 + ((k * 7) % 9) * 0.2;        // seconds for one fall
+    const d = -((k * 11) % 16) * 0.27;          // negative start: already falling when it appears
+    const dx = ((k * 13) % 9 - 4) * 5;          // px of drift sideways
+    const w = 5 + (k % 3) * 2, h = k % 2 ? 5 : 9;
+    return `<i style="--x:${x}%;--t:${t.toFixed(1)}s;--d:${d.toFixed(2)}s;--dx:${dx}px;--w:${w}px;--h:${h}px;--c:${colors[k % colors.length]}"></i>`;
+  }).join("");
+  return `<span class="hs-confetti" aria-hidden="true">${pieces}</span>`;
+})();
 const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7cff6b", "#ffd23f", "#b46cff"];
 const HS_TIER_COLORS = ["#7cff6b", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
 const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "TH" : ["TH", "ST", "ND", "RD"][n % 10] || "TH"}`;
@@ -1018,7 +1032,7 @@ function renderHighScores() {
     podium.innerHTML = [1, 0, 2].filter((i) => top[i]).map((i) => {
       const r = top[i];
       return `
-        <div class="hs-pod p${i + 1} ${r.isMe ? "me" : ""}" data-profile="${esc(r.userId || "")}" title="${esc(r.name)}">
+        <div class="hs-pod p${i + 1} ${r.isMe ? "me" : ""}" data-profile="${esc(r.userId || "")}" title="${esc(r.name)}">${i === 0 ? HS_CONFETTI : ""}
           <div class="hs-pod-av ${r.avatarUrl ? "photo" : ""}" style="--m:${HS_MEDALS[i]}">${i === 0 ? `<span class="hs-crown" aria-hidden="true">👑</span>` : ""}${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : esc(r.name.trim().charAt(0).toUpperCase())}${LevelUp.likeHtml(r, "big")}</div>
           <span class="hs-pod-name">${esc(r.name)}${r.isMe ? ` <span class="hs-you">You</span>` : ""}</span>
           <span class="hs-pod-score">${score(r)}</span>

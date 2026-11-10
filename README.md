@@ -411,6 +411,8 @@ Under the team cards: an arcade-style board with a podium for the top 3 and 25 p
 month). Equal scores are ordered by who got there first. Your own row is highlighted (also when you're below 25th),
 with how much XP you need to pass the player above you. Player name and level only, never email. Trainers are left
 out (their level is on their card). Players can hide themselves in their profile under Account.
+Confetti falls in a loop over the number one of the podium (`HS_CONFETTI` in `schedule.js`, `.hs-confetti` in
+`style.css`: CSS only, takes no clicks, off with "reduce motion").
 On phones the middle button of the bottom bar (Scores) jumps here.
 
 ## Dutch and English (NL | EN)
