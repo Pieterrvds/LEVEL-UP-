@@ -371,7 +371,8 @@ const LevelUp = (() => {
       likedBy: data.likedBy || [],              // the latest likes: { userId, name, avatarUrl, date }
       bio: data.bio || "",                      // their page for other members
       profileVisible: data.profileVisible !== false,
-      photos: data.photos || []
+      photos: data.photos || [],
+      celebrations: data.celebrations || []     // waiting full-screen moments: { id, kind, payload }
     };
   }
 
@@ -1323,12 +1324,15 @@ const LevelUp = (() => {
       : type === "class" ? myClass()?.mine.payStatus === "paid"
       : ["paid"].includes(player.bookings.find((b) => b.id === id)?.payStatus);
     toast({ title: "Checking your payment…", text: "One moment", icon: "€" });
+    celebrateHolds.add("payment"); // the purchase celebration waits until the payment is checked
+    setTimeout(() => holdCelebrations("payment", false), 30000); // never keep it waiting for good
     const gaveUp = () => (type === "booking" && player.bookings.find((b) => b.id === id)?.status === "expired")
       || (type === "class" && myClass()?.mine.status === "cancelled");
     for (let i = 0; i < 10 && !isPaid() && !gaveUp(); i++) {
       await new Promise((r) => setTimeout(r, 2000));
       await refreshPlayer();
     }
+    celebrateHolds.delete("payment");
     emit();
     if (isPaid()) {
       if (type === "class") {
@@ -2023,6 +2027,7 @@ const LevelUp = (() => {
     try {
       const r = await call("chat_unread");
       setChatBadge(Number(r?.unread) || 0);
+      checkCelebrations(Number(r?.celebrations) || 0);
       const seen = Number(read(chatSeenKey(), 0));
       if (r?.lastId && r.lastId > seen) {
         write(chatSeenKey(), r.lastId);
@@ -2718,6 +2723,148 @@ const LevelUp = (() => {
       ${isAdmin() ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
   }
 
+  // ---------- Celebrations: a full-screen moment for a purchase, a higher place on the high scores or a like ----------
+  // The animation is levelup-celebrate.js (loaded here, once, the first time one is due). The server keeps the queue
+  // (table "celebrations"); each one is claimed just before it plays, so it shows exactly once, on any device.
+  // They play one after another, and never on top of a form, a dialog or a payment: then they wait.
+  const CELEBRATE_FILE = "levelup-celebrate.js?v=1";
+  const onAdminPage = /admin\.html$/.test(location.pathname);
+  const celebrated = new Set();      // ids this page already handled
+  const celebrateHolds = new Set();  // reasons to wait, e.g. "paypal" while the payment window is open
+  let celebrateLib = null;
+  let celebrateRun = null;
+  let celebrateTimer = null;
+  let celebratedOnce = false;
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function loadCelebrate() {
+    if (window.LevelUpCelebrate) return Promise.resolve(window.LevelUpCelebrate);
+    celebrateLib ||= new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = CELEBRATE_FILE;
+      script.onload = () => window.LevelUpCelebrate ? resolve(window.LevelUpCelebrate) : reject(new Error("Celebration didn't load."));
+      script.onerror = () => { celebrateLib = null; reject(new Error("Celebration didn't load.")); };
+      document.head.appendChild(script);
+    });
+    return celebrateLib;
+  }
+  function holdCelebrations(reason, on) {
+    if (on) celebrateHolds.add(reason); else celebrateHolds.delete(reason);
+    if (!on) queueCelebrations(300);
+  }
+  // In the middle of something? A dialog, the bag, the loading or promotion screen, typing in a field, a payment
+  function celebrateBusy() {
+    if (celebrateHolds.size || document.visibilityState !== "visible") return true;
+    if (document.getElementById("boot")) return true;
+    if (document.querySelector("dialog[open], .promo, .bag.open, .lu-cel") || document.body.classList.contains("no-scroll")) return true;
+    const a = document.activeElement;
+    return Boolean(a && a !== document.body && a.matches(
+      "textarea, select, [contenteditable=''], [contenteditable='true'], input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file])"));
+  }
+  const themeAccent = () => {
+    const c = getComputedStyle(document.documentElement).getPropertyValue("--green-bright").trim();
+    return /^#[0-9a-f]{6}$/i.test(c) ? c : undefined; // the site's own colour (it changes with the player's rank)
+  };
+  function purchaseLine(p) {
+    if (p.what === "pack") return `Your ${p.size}-session pack is ready.${p.gift ? ` · Your free ${p.gift} is waiting at the desk` : ""}`;
+    if (p.what === "session") return `Session with ${p.trainer} · ${p.slot}`;
+    if (p.what === "class") return `${p.title} · ${p.slot}`;
+    const items = p.items || [];
+    return `${items[0] || "Your order"}${items.length > 1 ? ` and ${items.length - 1} more` : ""}${p.xp ? ` · +${p.xp} XP` : ""}`;
+  }
+  function likeNames(rows) {
+    const names = [...new Set(rows.map((r) => String(r.payload?.by || "").trim()).filter(Boolean))];
+    if (names.length <= 1) return `Likes from ${names[0] || "a member"}`;
+    if (names.length === 2) return `Likes from ${names[0]} and ${names[1]}`;
+    if (names.length === 3) return `Likes from ${names[0]}, ${names[1]} and ${names[2]}`;
+    return `Likes from ${names[0]}, ${names[1]} and ${names.length - 2} others`;
+  }
+  // The waiting rows as the moments to play: every purchase, then one for the ranking, then one for all likes
+  function celebrationShows(rows) {
+    const shows = [];
+    rows.filter((r) => r.kind === "purchase").forEach((r) => shows.push({ ids: [r.id], fn: "purchase",
+      opts: { title: tr("Purchase complete!"), subtitle: tr(purchaseLine(r.payload || {})) } }));
+    const ranks = rows.filter((r) => r.kind === "rank");
+    if (ranks.length) {
+      const from = Math.max(...ranks.map((r) => Number(r.payload?.from) || 0));
+      const to = Number(ranks[ranks.length - 1].payload?.to) || 0;
+      shows.push({ ids: ranks.map((r) => r.id), fn: to && to < from ? "rankUp" : null,
+        opts: { from, to, title: tr("Level up!"), subtitle: tr("You climbed the high scores.") } });
+    }
+    const likes = rows.filter((r) => r.kind === "like");
+    if (likes.length === 1) {
+      const by = String(likes[0].payload?.by || "").trim() || tr("A member");
+      shows.push({ ids: [likes[0].id], fn: "like", opts: { by, title: tr("New like!"), subtitle: tr(`${by} gave you a like.`) } });
+    } else if (likes.length > 1) {
+      shows.push({ ids: likes.map((r) => r.id), fn: "like",
+        opts: { by: likes[0].payload?.by, title: tr(`${likes.length} new likes!`), subtitle: tr(likeNames(likes)) } });
+    }
+    return shows;
+  }
+  const waitingCelebrations = () => (player?.celebrations || []).filter((c) => !celebrated.has(c.id));
+  // only: play just this kind now (after a payment: the purchase first, the rest once the order summary is closed)
+  function runCelebrations(only = null) {
+    if (celebrateRun) return celebrateRun;
+    const due = () => waitingCelebrations().filter((c) => !only || c.kind === only);
+    if (onAdminPage || !player || !sb || !due().length) return Promise.resolve();
+    if (celebrateBusy()) { queueCelebrations(1500); return Promise.resolve(); }
+    celebrateRun = (async () => {
+      try {
+        const lib = await loadCelebrate();
+        for (const show of celebrationShows(due())) {
+          while (celebrateBusy()) await pause(1000);            // something opened in between: wait for it
+          show.ids.forEach((id) => celebrated.add(id));
+          const mine = await call("celebrations_claim", { p_ids: show.ids }); // seen from now on, here and on other devices
+          if (!show.fn || !(mine || []).length) continue;        // another tab or phone already showed it
+          await lib[show.fn]({ accent: themeAccent(), ...show.opts }).done;
+          await pause(250);
+        }
+      } catch (err) {
+        console.warn("Celebration skipped:", err.message);
+      } finally {
+        if (player) player.celebrations = waitingCelebrations();
+        celebrateRun = null;
+        queueCelebrations(1500); // anything left (or new) plays when nothing is in the way
+      }
+    })();
+    return celebrateRun;
+  }
+  function queueCelebrations(delay = 400) {
+    clearTimeout(celebrateTimer);
+    if (onAdminPage || !player || !waitingCelebrations().length) return;
+    celebrateTimer = setTimeout(() => runCelebrations(), delay);
+  }
+  // Right now (the page knows nothing is in the way, e.g. just after a payment): resolves when they are over
+  async function celebrateNow(only = null) {
+    clearTimeout(celebrateTimer);
+    if (celebrateRun) await celebrateRun;
+    return runCelebrations(only);
+  }
+  // Something that isn't in the queue: a visitor without an account who just paid
+  async function celebrateLocal(kind, opts = {}) {
+    try {
+      const lib = await loadCelebrate();
+      const fn = kind === "like" ? "like" : kind === "rank" ? "rankUp" : "purchase";
+      await lib[fn]({ accent: themeAccent(), title: tr(kind === "purchase" ? "Purchase complete!" : kind === "like" ? "New like!" : "Level up!"),
+        ...opts, subtitle: opts.subtitle ? tr(opts.subtitle) : undefined }).done;
+    } catch (err) {
+      console.warn("Celebration skipped:", err.message);
+    }
+  }
+  // The chat check (every 20 seconds, and at once when a push arrives) says when something new is waiting
+  async function checkCelebrations(count) {
+    if (onAdminPage || !player || !count || celebrateRun) return;
+    if (!waitingCelebrations().length) {
+      try { player.celebrations = (await call("celebrations_open")) || []; } catch { return; }
+    }
+    queueCelebrations(200);
+  }
+  document.addEventListener("levelup:change", () => {
+    if (!isReady) return;
+    // the first time after loading: let the loading screen and a promotion go first
+    queueCelebrations(celebratedOnce ? 400 : 1300);
+    celebratedOnce = true;
+  });
+
   // ---------- News (the bell): new group classes, products, sales and messages from LEVEL-UP ----------
   // The same items go out as notifications; here everyone sees them, also without notifications on.
   // What you've seen is remembered on this device.
@@ -3268,7 +3415,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, likeHtml, giveLike, openProfile, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, holdCelebrations, openProfile, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

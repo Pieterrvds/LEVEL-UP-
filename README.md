@@ -30,6 +30,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `admin.js`: admin dashboard
 - `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
+- `levelup-celebrate.js`: the celebration animation, loaded by `game.js` when one is due (see "Celebrations")
 - `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
 - `privacy.html`: privacy policy (NL + EN)
 - `style.css` (shared + home), `shop.css`, `profile.css`, `admin.css`, `chat.css`
@@ -404,6 +405,25 @@ you're unsure about anything legal.
   large brand-coloured cards (Instagram, WhatsApp community, Facebook) with Follow / Join / Like buttons.
 - **Link preview:** `img/og-image.jpg` (1200×630) with the Open Graph tags on every page, used by WhatsApp,
   Facebook, LinkedIn… WhatsApp keeps old previews for a while; new shares show the new image.
+
+## Celebrations (levelup-celebrate.js)
+A full-screen moment (a gymnast doing a muscle-up on the rings) for three things, each shown **exactly once**:
+- **Purchase:** when a payment is really in: a shop order paid with PayPal, a session pack (paid online or marked
+  paid at the desk), a session or group class paid online. The subtitle names the product. After a shop payment it
+  plays first and the order summary opens after it. A tab paid at the desk only gets the usual message.
+- **Ranking:** when the player's place on the all-time high scores is better than the last time they were told
+  (`profiles.rank_place`). A lower or equal place is only remembered; hidden players and trainers have no place.
+- **Like:** for the player who **gets** the like. Online: within the 20-second chat check (at once when a push
+  arrives); else at their next visit. Several likes become one: "3 new likes!" with the names.
+
+How it works: the server puts each one in the table `celebrations` (`_celebrate`); `my_data` and the chat check tell
+the website what is waiting. `game.js` loads `levelup-celebrate.js` the first time one is due (once, for every page),
+claims it (`celebrations_claim`: marks it seen and says whether this tab got it, so two tabs or phones never both
+play it) and plays them one after another, waiting for `.done`. Order: purchases, ranking, likes.
+It never plays over a dialog, the bag, the loading or promotion screen, while typing in a field or during a payment:
+then it waits. Not on `admin.html`. After 30 days a waiting one just counts as seen.
+`levelup-celebrate.js` is used as delivered (don't edit it): title and subtitle are passed in Dutch or English, and
+the accent is the site's own colour (which changes with the player's rank).
 
 ## Member pages (profiles of other members and coaches)
 Tap someone's photo or name and their page opens in a window: on the high scores (podium, rows, Player of the

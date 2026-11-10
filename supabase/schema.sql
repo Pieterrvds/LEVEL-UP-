@@ -169,6 +169,26 @@ create table if not exists public.news (
   created_at timestamptz not null default now()
 );
 alter table public.news enable row level security;  -- read through pricing_info only
+-- Celebrations (levelup-celebrate.js): a full-screen moment the player sees exactly once, on whatever device
+-- they open next: a purchase that was really paid, a higher place on the high scores, a like they got.
+-- The server puts them in this queue; the website claims each one just before it plays (see celebrations_claim).
+create table if not exists public.celebrations (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  kind text not null check (kind in ('purchase', 'rank', 'like')),
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  seen_at timestamptz
+);
+create index if not exists celebrations_open_idx on public.celebrations (user_id) where seen_at is null;
+alter table public.celebrations enable row level security;  -- only through the functions below
+-- The place on the all-time high scores the player was last told about (to notice when they climb)
+alter table public.profiles add column if not exists rank_place integer;
+create or replace function public._celebrate(p_user uuid, p_kind text, p_payload jsonb)
+returns void language sql security definer set search_path = public as $$
+  insert into public.celebrations (user_id, kind, payload) select p_user, p_kind, coalesce(p_payload, '{}'::jsonb) where p_user is not null;
+$$;
+
 -- A member's page for other members: a short text about themselves, photos, and whether others may see it at all
 alter table public.profiles add column if not exists bio text;
 alter table public.profiles add column if not exists profile_visible boolean not null default true;
@@ -865,6 +885,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     'pushNews', p.push_news,
     'bio', p.bio,
     'profileVisible', p.profile_visible,
+    'celebrations', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'payload', c.payload, 'date', c.created_at) order by c.id)
+                              from public.celebrations c where c.user_id = p.id and c.seen_at is null), '[]'::jsonb),
     'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
                         from public.profile_photos ph where ph.user_id = p.id), '[]'::jsonb),
     'avatarUrl', p.avatar_url,
@@ -909,6 +931,58 @@ returns jsonb language sql stable security definer set search_path = public as $
   where p.id = p_user;
 $$;
 
+-- Did the player climb on the all-time high scores since they were last told? Then a celebration with the old
+-- and the new place. A lower or equal place is only remembered. Hidden players and trainers have no place.
+create or replace function public._check_rank(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  place integer;
+begin
+  select * into p from public.profiles where id = p_user for update;
+  if not found then return; end if;
+  if not p.show_on_leaderboard
+     or exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email)) then
+    update public.profiles set rank_place = null where id = p_user and rank_place is not null;
+    return;
+  end if;
+  -- the same order as the high scores: most XP first, equal XP = who joined first
+  select count(*) + 1 into place from public.profiles o
+  where o.show_on_leaderboard and o.id <> p.id
+    and (o.xp > p.xp or (o.xp = p.xp and o.created_at < p.created_at))
+    and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(o.email));
+  if p.rank_place is not null and place < p.rank_place then
+    perform public._celebrate(p_user, 'rank', jsonb_build_object('from', p.rank_place, 'to', place));
+  end if;
+  if p.rank_place is distinct from place then
+    update public.profiles set rank_place = place where id = p_user;
+  end if;
+end $$;
+
+-- The celebrations still waiting for the logged-in player (the website asks when something may be new)
+create or replace function public.celebrations_open()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return '[]'::jsonb; end if;
+  perform public._check_rank(auth.uid());
+  -- old news is no party: after 30 days they just count as seen
+  update public.celebrations set seen_at = now() where user_id = auth.uid() and seen_at is null and created_at < now() - interval '30 days';
+  return coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'payload', c.payload, 'date', c.created_at) order by c.id)
+                   from public.celebrations c where c.user_id = auth.uid() and c.seen_at is null), '[]'::jsonb);
+end $$;
+
+-- Just before a celebration plays: mark it as seen. Returns the ids that were still open, so two tabs or two
+-- phones never both play the same one.
+create or replace function public.celebrations_claim(p_ids bigint[])
+returns bigint[] language sql security definer set search_path = public as $$
+  with done as (
+    update public.celebrations set seen_at = now()
+    where id = any (p_ids) and user_id = auth.uid() and seen_at is null
+    returning id
+  )
+  select coalesce(array_agg(id order by id), '{}'::bigint[]) from done;
+$$;
+
 create or replace function public.my_data()
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
@@ -921,6 +995,8 @@ begin
   from auth.users u where u.id = auth.uid()
   on conflict (id) do nothing;
   perform public._check_achievements(auth.uid());
+  perform public._check_rank(auth.uid());
+  update public.celebrations set seen_at = now() where user_id = auth.uid() and seen_at is null and created_at < now() - interval '30 days';
   return public._player_json(auth.uid());
 end $$;
 
@@ -1439,6 +1515,7 @@ begin
   get diagnostics added = row_count;
   select count(*)::int into total from public.player_likes where to_id = p_to;
   if added > 0 then  -- a second tap in the same week sends nothing
+    perform public._celebrate(p_to, 'like', jsonb_build_object('by', me.name));
     perform public._push(p_to, '❤️ ' || me.name || ' gave you a like', 'You have ' || total || ' like' || case when total = 1 then '' else 's' end || '. Keep it up!',
       'profile.html', 'like-' || auth.uid());
   end if;
@@ -1714,6 +1791,8 @@ begin
   perform public._shop_take_stock(basket -> 'items');
   if auth.uid() is not null then
     perform public._credit_order(p_id, auth.uid());
+    perform public._celebrate(auth.uid(), 'purchase', jsonb_build_object('what', 'order', 'order', p_id,
+      'items', (select jsonb_agg(i ->> 'name') from jsonb_array_elements(basket -> 'items') i), 'xp', (basket ->> 'xp')::int));
   end if;
   return jsonb_build_object('xp', (basket ->> 'xp')::int, 'total', (basket ->> 'total')::numeric, 'guest', auth.uid() is null);
 end $$;
@@ -2388,6 +2467,8 @@ begin
              request_at = case when status = 'awaiting_payment' then now() else request_at end,
              request_notice_sent = case when status = 'awaiting_payment' then false else request_notice_sent end
         where id = p_id;
+      perform public._celebrate(b.user_id, 'purchase', jsonb_build_object('what', 'session',
+        'trainer', (select split_part(name, ' ', 1) from public.trainers where id = b.trainer_id), 'slot', public._slot_label(b.day, b.hour)));
     elsif p_status in ('failed', 'canceled', 'expired') and b.status = 'awaiting_payment' and b.mollie_id = p_mollie then
       update public.bookings set status = 'expired', responded_at = now(), notice_sent_at = now() where id = p_id;
     end if;
@@ -2421,6 +2502,8 @@ begin
       update public.class_signups set mollie_id = p_mollie, pay_method = 'online', pay_status = 'paid', paid_at = now(),
              status = case when status = 'awaiting_payment' then 'booked' else status end
         where id = p_id;
+      perform public._celebrate(g.user_id, 'purchase', (select jsonb_build_object('what', 'class', 'title', cs.title,
+        'slot', to_char(cs.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI')) from public.class_sessions cs where cs.id = g.class_id));
       if g.status = 'awaiting_payment' then
         select * into c from public.class_sessions where id = g.class_id;
         perform public._push(public._trainer_user(c.trainer_id), 'New sign-up: ' || c.title,
@@ -2751,6 +2834,9 @@ begin
     perform public._push(new.user_id, 'Pack active', new.size || ' session credits are ready to use.'
       || case when new.gift is not null then ' · Your free ' || (select name from public.shop_items where id = new.gift) || ' is waiting at the desk' else '' end,
       'index.html#schedule', 'pack-' || new.id);
+    -- paid online or marked as paid at the desk: the player's purchase celebration
+    perform public._celebrate(new.user_id, 'purchase', jsonb_build_object('what', 'pack', 'size', new.size,
+      'gift', (select name from public.shop_items where id = new.gift)));
   end if;
   return new;
 end $$;
@@ -3576,7 +3662,9 @@ begin
   select (select count(*) from u), x.id, x.thread_id, left(x.body, 140), x.name
     into total, last_id, last_thread, last_body, last_name
   from (select 1) one left join lateral (select * from u order by u.id desc limit 1) x on true;
-  return jsonb_build_object('unread', total, 'lastId', last_id, 'thread', last_thread, 'body', last_body, 'name', last_name);
+  return jsonb_build_object('unread', total, 'lastId', last_id, 'thread', last_thread, 'body', last_body, 'name', last_name,
+    -- the website checks the chat every 20 seconds: celebrations that are waiting (a like, a purchase) ride along
+    'celebrations', (select count(*) from public.celebrations c where c.user_id = auth.uid() and c.seen_at is null));
 end $$;
 
 revoke execute on function public._my_trainer() from public, anon, authenticated;
@@ -4107,6 +4195,12 @@ revoke execute on function public.set_leaderboard_visibility(boolean) from publi
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
 revoke execute on function public.give_like(uuid) from public, anon;
+revoke execute on function public._celebrate(uuid, text, jsonb) from public, anon, authenticated;
+revoke execute on function public._check_rank(uuid) from public, anon, authenticated;
+revoke execute on function public.celebrations_open() from public, anon;
+revoke execute on function public.celebrations_claim(bigint[]) from public, anon;
+grant execute on function public.celebrations_open() to authenticated;
+grant execute on function public.celebrations_claim(bigint[]) to authenticated;
 revoke execute on function public.set_profile(jsonb) from public, anon;
 revoke execute on function public.photo_add(text, text) from public, anon;
 revoke execute on function public.photo_delete(uuid) from public, anon;

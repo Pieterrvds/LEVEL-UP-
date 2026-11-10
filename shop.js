@@ -453,11 +453,13 @@ function renderPayPal() {
     // The server checks the bag first (sold out, drop ended) and its prices are the ones charged
     createOrder: async (data, actions) => {
       bagStatus.textContent = "";
+      LevelUp.holdCelebrations("paypal", true); // nothing pops up while the payment window is open
       let check;
       try {
         check = await LevelUp.shopCheck(basket());
       } catch (err) {
         checkFailed = true;
+        LevelUp.holdCelebrations("paypal", false);
         await LevelUp.loadShopCatalog();
         renderAll();
         bagStatus.textContent = err.message;
@@ -513,10 +515,14 @@ function renderPayPal() {
       saveCart();
       closeBag();
       renderAll();
-      showLoot(order, reward);
+      LevelUp.holdCelebrations("paypal", false);
+      finishOrder(order, reward); // not awaited: PayPal can close its window
     },
 
+    onCancel: () => LevelUp.holdCelebrations("paypal", false),
+
     onError: (err) => {
+      LevelUp.holdCelebrations("paypal", false);
       if (checkFailed) { checkFailed = false; return; } // the message about the bag is already shown
       console.error("PayPal error:", err);
       bagStatus.textContent = "Something went wrong with the payment. Nothing was charged. Please try again.";
@@ -558,6 +564,18 @@ function notifyOwner(order, details, player) {
       player: player ? `${player.name} (LVL ${LevelUp.levelFromXp(player.xp)})` : "Guest"
     })
   }).catch((error) => console.error("Order email failed:", error));
+}
+
+// The payment is in: first the celebration (once), then the order summary.
+// With an account the server queued it (so it never plays twice); a visitor without one gets it right here.
+async function finishOrder(order, reward) {
+  if (reward.guest && !reward.failed) {
+    const first = order.items[0]?.name || "Your order";
+    await LevelUp.celebrateLocal("purchase", { subtitle: `${first}${order.items.length > 1 ? ` and ${order.items.length - 1} more` : ""}` });
+  } else if (!reward.failed) {
+    await LevelUp.celebrateNow("purchase"); // a higher place on the high scores plays after the summary is closed
+  }
+  showLoot(order, reward);
 }
 
 function showLoot(order, reward) {
