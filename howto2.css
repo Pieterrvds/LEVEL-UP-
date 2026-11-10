@@ -1,5 +1,6 @@
-/* PREVIEW: the new "How it works" demo (six scenes). Lives next to the current one until it is approved;
-   only howto-preview.html loads this file. Everything that moves is a transform or an opacity. */
+/* PREVIEW: the new "How it works" demo (six scenes and a mascot). Lives next to the current one until it is
+   approved; only howto-preview.html loads this file. The scenes move with transforms and opacity only; the
+   mascot is drawn on one canvas (howto2.js). */
 .hx { --hx-dur: 1.6s; --ease: cubic-bezier(0.2, 0.8, 0.2, 1); display: grid; gap: 14px; min-width: 0; }
 .hx-screen { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--frame); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px rgba(var(--green-bright-rgb), 0.08); }
 .hx-top { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); }
@@ -8,11 +9,20 @@
 .hx-top b { margin-left: 8px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
 .hx-top span { margin-left: auto; padding: 3px 9px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #000; background: var(--gold); border-radius: 99px; }
 
-.hx-stage { position: relative; height: 248px; overflow: hidden; background:
+.hx-stage { --mw: 0px; --mh: 0px; position: relative; height: 340px; overflow: hidden; background:
   radial-gradient(120% 90% at 50% 0%, rgba(var(--green-bright-rgb), 0.12), transparent 60%),
   repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 22px); }
+/* the mascot's zone: a column on the left (wide) or a band on top (narrow). --mw / --mh = what the scenes leave free */
+.hx.has-mascot .hx-stage { --mw: clamp(170px, 36%, 240px); }
+.hx-mascot { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mw); display: none; pointer-events: none;
+  background: radial-gradient(70% 55% at 50% 45%, rgba(var(--green-bright-rgb), 0.1), transparent 72%); border-right: 1px solid rgba(255, 255, 255, 0.06); }
+.hx.has-mascot .hx-mascot { display: block; }
+/* his canvas covers the whole stage, so the confetti and the rays of his burst reach over the scenes too */
+.hx-cv { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; display: none; pointer-events: none; }
+.hx.has-mascot .hx-cv { display: block; }
+.hx-cv.idle { animation: hx-sway 3.2s ease-in-out infinite; }
 /* a scene waits on the right, plays in the middle and leaves to the left */
-.hx-scene { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 14px; padding: 16px 18px;
+.hx-scene { position: absolute; inset: var(--mh) 0 0 var(--mw); display: grid; align-content: center; justify-items: center; gap: 14px; padding: 16px 18px;
   opacity: 0; visibility: hidden; transform: translate3d(34px, 0, 0) scale(0.97); transition: opacity 0.34s var(--ease), transform 0.34s var(--ease), visibility 0s 0.34s; }
 .hx-scene.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.34s var(--ease), transform 0.34s var(--ease); }
 .hx-scene.out { transform: translate3d(-34px, 0, 0) scale(0.97); }
@@ -54,7 +64,7 @@
 .hx-gains { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .hx-gain { display: grid; justify-items: center; gap: 5px; padding: 9px 12px; min-width: 104px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
 .hx-gain small { font-size: 0.72rem; color: var(--muted); }
-.hx-levelup { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; }
+.hx-levelup { position: absolute; inset: var(--mh) 0 0 var(--mw); z-index: 4; display: grid; place-items: center; pointer-events: none; opacity: 0; }
 .hx-levelup b { padding: 10px 22px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(1.5rem, 5vw, 2.1rem); text-transform: uppercase; color: #000; background: var(--gold); transform: skewX(-8deg); box-shadow: 0 0 0 4px #000, 0 0 44px rgba(255, 210, 63, 0.6); }
 
 /* 5 · the high scores: rows are stacked with transforms, so a climb is one smooth slide */
@@ -113,7 +123,9 @@
   .hx-steps { gap: 5px; }
   .hx-steps li.now { flex-grow: 3.6; }
   .hx-steps button { gap: 6px; padding: 8px 4px; }
-  .hx-stage { height: 236px; }
+  .hx-stage { height: 250px; }
+  .hx.has-mascot .hx-stage { --mw: 0px; --mh: 200px; height: 440px; }
+  .hx-mascot { right: 0; bottom: auto; width: auto; height: var(--mh); border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
   .hx-coach { min-width: 0; padding: 9px 9px; }
   .hx-coaches { gap: 8px; }
   .hx-slots { gap: 6px; flex-wrap: nowrap; }
@@ -121,6 +133,9 @@
   .hx-day { padding: 7px 4px; }
 }
 
+/* a short phone screen: a smaller mascot, so the whole demo still fits */
+@media (max-width: 700px) and (max-height: 720px) { .hx.has-mascot .hx-stage { --mh: 150px; height: 366px; } }
+@keyframes hx-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(1.1deg); } 75% { transform: rotate(-1.1deg); } }
 @keyframes hx-line { from { transform: scaleX(0); } to { transform: none; } }
 @keyframes hx-bump { 0%, 100% { transform: none; } 40% { transform: scale(1.7); } }
 @keyframes hx-flash { 0%, 100% { background: rgba(0, 0, 0, 0.45); } 35% { background: rgba(var(--green-bright-rgb), 0.3); } }
@@ -129,5 +144,5 @@
 /* no motion wanted: scenes simply swap, nothing flies */
 @media (prefers-reduced-motion: reduce) {
   .hx-scene, .hx-scene.on, .hx-scene [data-in], .hx-scene.on [data-in], .hx-pop.show, .hx-row, .hx-bar i, .hx-steps li { transition: none; }
-  .hx.up .hx-lvl b, .hx.up .hx-xp, .hx.hit .hx-bar { animation: none; }
+  .hx.up .hx-lvl b, .hx.up .hx-xp, .hx.hit .hx-bar, .hx-cv.idle { animation: none; }
 }
