@@ -216,6 +216,7 @@
   "Apply as trainer": "Solliciteer als trainer",
   "Swipe to meet the team ▸": "Swipe om het team te leren kennen ▸",
   "Open hours coming soon": "Openingsuren volgen binnenkort",
+  "🕒 Open hours coming soon": "🕒 Openingsuren volgen binnenkort",
   "High scores": "Klassement",
   "— Player ranking —": "— Spelersklassement —",
   "All time": "Aller tijden",
