@@ -82,6 +82,8 @@
   "Pick a trainer": "Kies een trainer",
   // the animated demo under "How it works"
   "▶ Demo": "▶ Demo",
+  "Example": "Voorbeeld",
+  "Example review": "Voorbeeldreview",
   "Create your profile and start at LVL 1": "Maak je profiel aan en start op LVL 1",
   "Pick the coach that fits your goal": "Kies de coach die bij je doel past",
   "Session booked": "Sessie geboekt",

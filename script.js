@@ -305,12 +305,12 @@ renderAboutCta();
 (function howItWorks() {
   const root = document.getElementById("howto");
   if (!root) return;
-  const SCENES = [3600, 3600, 4000, 6200];             // how long each scene shows (ms)
+  const SCENES = [2600, 2600, 2900, 4500];             // how long each scene shows (ms)
   const XP = {                                          // [moment in the scene (ms), total XP of the demo player]
-    1: [[0, 0], [900, 50]],                             // profile made: +50
+    1: [[0, 0], [650, 50]],                             // profile made: +50
     2: [[0, 50]],
     3: [[0, 50]],
-    4: [[0, 50], [750, 125], [2700, 175], [3900, 200]]  // session +75 (level up), group class +50, check-in +25
+    4: [[0, 50], [550, 125], [1950, 175], [2850, 200]]  // session +75 (level up), group class +50, check-in +25
   };
   const bar = root.querySelector("[data-hw-bar]");
   const lvl = root.querySelector("[data-hw-lvl]");
@@ -345,8 +345,8 @@ renderAboutCta();
         void bar.offsetWidth;
         bar.classList.remove("jump");
         write();
-        timers.push(setTimeout(() => root.classList.remove("up"), 800));
-      }, 620));
+        timers.push(setTimeout(() => root.classList.remove("up"), 700));
+      }, 470));
     } else {
       if (instant || p.level < level) { bar.classList.add("jump"); write(); void bar.offsetWidth; bar.classList.remove("jump"); }
       else write();
@@ -384,16 +384,18 @@ renderAboutCta();
   play(1, false);
 })();
 
-// ===== Phones: the swipe rows (classes, team) glide to the left in an endless loop =====
+// ===== The swipe rows glide to the left in an endless loop: classes and team on phones, =====
+// ===== the reviews on every screen where the cards don't fit next to each other =====
 // Each row gets one copy of its cards at the end. When the first set has fully passed, the row jumps
 // back by exactly one set, which looks the same, so it never ends. Touching a row pauses it (you can
 // swipe freely, also backwards); it starts again 3 seconds after you let go.
 (function loopRows() {
   const SPEED = 26; // pixels per second
   const phone = window.matchMedia("(max-width: 640px)");
-  const rows = ["#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
+  const rows = [["#classGrid", "phone"], ["#team .team-grid", "phone"], ["#reviewGrid", "overflow"]]
+    .map(([s, mode]) => [document.querySelector(s), mode]).filter(([el]) => el);
 
-  rows.forEach((row) => {
+  rows.forEach(([row, mode]) => {
     let originals = [];
     let clones = [];
     let period = 0;       // width of one set of cards (incl. the gap to the copies)
@@ -410,7 +412,9 @@ renderAboutCta();
       clones = [];
       originals = [...row.children].filter((c) => !isClone(c));
       row.classList.remove("looping");
-      if (!phone.matches || originals.length < 2) { period = 0; return; }
+      // "overflow": only when the cards are wider than the row (measured without the copies)
+      const wanted = mode === "overflow" ? row.scrollWidth > row.clientWidth + 4 : phone.matches;
+      if (!wanted || originals.length < 2) { period = 0; row.scrollLeft = 0; return; }
       originals.forEach((card) => {
         const copy = card.cloneNode(true);
         copy.dataset.loopClone = "1";
@@ -465,15 +469,22 @@ renderAboutCta();
       if (real) build();
     }).observe(row, { childList: true });
     phone.addEventListener("change", build);
-    window.addEventListener("resize", measure);
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => {
+      measure();
+      if (mode === "overflow") { clearTimeout(resizeTimer); resizeTimer = setTimeout(build, 200); } // fits now, or no longer
+    });
 
     build();
     requestAnimationFrame((t) => { last = t; tick(t); });
   });
 })();
 
-// ---------- Reviews: approved reviews from real clients (hidden until there is one) ----------
+// ---------- Reviews: approved reviews (hidden until there is one) ----------
+// One row of cards; when they don't all fit next to each other it glides to the left like the trainings and
+// the coaches (loopRows below). A review marked as an example says so, and doesn't count in the average.
 const stars = (n) => `<span class="stars" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
+let reviewsHtml = "";
 function renderReviews() {
   const section = document.getElementById("reviews");
   if (!section || !LevelUp.isReady()) return;
@@ -481,18 +492,22 @@ function renderReviews() {
   section.hidden = !list.length;
   if (!list.length) return;
   const esc = LevelUp.esc;
-  const avg = list.reduce((sum, r) => sum + Number(r.rating), 0) / list.length;
-  document.getElementById("reviewSummary").innerHTML = list.length >= 3
-    ? `${stars(Math.round(avg))}<b>${avg.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b><span>from ${list.length} players</span>` : "";
-  document.getElementById("reviewGrid").innerHTML = list.map((r) => `
-    <figure class="review-card">
-      ${stars(Number(r.rating))}
-      <blockquote>“${esc(r.quote)}”</blockquote>
+  const real = list.filter((r) => !r.sample);
+  const avg = real.reduce((sum, r) => sum + Number(r.rating), 0) / (real.length || 1);
+  document.getElementById("reviewSummary").innerHTML = real.length >= 3
+    ? `${stars(Math.round(avg))}<b>${avg.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b><span>from ${real.length} players</span>` : "";
+  const html = list.map((r) => `
+    <figure class="review-card ${r.sample ? "sample" : ""}">
+      <div class="review-top">${stars(Number(r.rating))}${r.sample ? `<span class="review-sample">Example</span>` : ""}</div>
+      <blockquote data-no-i18n>“${esc(r.quote)}”</blockquote>
       <figcaption>
         <span class="review-face">${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="" loading="lazy" decoding="async">` : esc(r.name.trim().charAt(0).toUpperCase())}</span>
-        <span><b>${esc(r.name)}</b><small>LEVEL-UP player</small></span>
+        <span><b data-no-i18n>${esc(r.name)}</b><small>${r.sample ? "Example review" : "LEVEL-UP player"}</small></span>
       </figcaption>
     </figure>`).join("");
+  if (html === reviewsHtml) return; // unchanged: the gliding row keeps its place
+  reviewsHtml = html;
+  document.getElementById("reviewGrid").innerHTML = html;
 }
 document.addEventListener("levelup:change", renderReviews);
 LevelUp.ready.then(renderReviews);

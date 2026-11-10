@@ -1529,7 +1529,7 @@ function reviewsPanelInner() {
     ${list.length ? `<ul class="review-admin-list">${list.map((r) => `
       <li class="review-admin ${r.status}">
         <div><span class="review-admin-face">${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="">` : esc(r.name.trim().charAt(0).toUpperCase())}</span>
-          ${stars(Number(r.rating))} <b>${esc(r.name)}</b> <span class="muted small-text">${r.byAdmin ? "added by you" : esc(r.email || "")} · ${fmtDate(r.createdAt)}</span>
+          ${stars(Number(r.rating))} <b>${esc(r.name)}</b> <span class="muted small-text">${r.sample ? "example (marked as such on the site: delete it once real reviews are in)" : r.byAdmin ? "added by you" : esc(r.email || "")} · ${fmtDate(r.createdAt)}</span>
           <span class="status-chip ${r.status === "approved" ? "confirmed" : "pending"}">${label[r.status]}</span></div>
         <p>“${esc(r.quote)}”</p>
         ${r.byAdmin ? `<label class="review-photo-pick">Photo of member

@@ -114,14 +114,17 @@
 .dot { display: inline-block; width: 10px; height: 10px; margin-right: 8px; background: var(--c); vertical-align: -1px; }
 
 /* Trainer cards */
-.trainer-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+.trainer-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 18px; }
 .trainer-admin { display: grid; gap: 16px; padding: 18px; background: #000; border: 1px solid var(--line); border-top: 6px solid var(--c); }
 .trainer-admin-head { display: flex; gap: 14px; align-items: center; }
 .trainer-admin-head img { width: 64px; height: 64px; object-fit: cover; object-position: center 20%; }
 .trainer-admin-head h3 { font-family: var(--display); font-size: 0.65rem; margin-bottom: 6px; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .trainer-admin-head p { margin: 0 0 8px; font-size: 0.85rem; }
-.trainer-admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.trainer-admin-stats div { display: grid; gap: 6px; padding: 10px; background: var(--panel); }
+.trainer-admin-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.trainer-admin-stats div { display: grid; gap: 6px; padding: 10px; min-width: 0; background: var(--panel); }
+.trainer-admin-stats .kpi-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trainer-admin { min-width: 0; }
+@media (max-width: 420px) { .trainer-admin-stats { gap: 6px; } .trainer-admin-stats div { padding: 8px 6px; } .trainer-admin-stats .kpi-label { font-size: 0.5rem; } }
 .trainer-admin-stats strong { font-size: 1.4rem; }
 .meter-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
 .meter { display: block; height: 10px; background: color-mix(in srgb, var(--c) 22%, #000); }

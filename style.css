@@ -449,33 +449,31 @@ a { color: inherit; }
     linear-gradient(115deg, transparent 0 58%, rgba(255, 255, 255, 0.035) 58% 64%, transparent 64% 70%, rgba(255, 255, 255, 0.025) 70% 72%, transparent 72%),
     var(--bg);
 }
-/* Home page: a CrossFit box behind the hero, black and white and faded towards the text (left) and the page (bottom).
-   Photo: Unsplash (free licence), see README.md. The rank colour glow underneath still shows through. */
-#home .hero-bg::before {
+/* Home page and shop: a photo that hangs still behind the whole page. The hero text and every section after it
+   slide over it as a second layer: the sections are dark glass (you keep seeing the photo through them), the
+   cards on them are solid. The photo is a layer fixed to the screen (works on iPhones too, where
+   background-attachment: fixed doesn't). Home: a CrossFit box; shop: shelves full of supplements.
+   Photos: Unsplash (free licence), see README.md. The rank colour glow of .hero-bg stays underneath. */
+#home.hero, .shop-hero { isolation: auto; }
+#home .hero-bg, .shop-hero .hero-bg { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
+#home .hero-bg::before, .shop-hero .hero-bg::before {
   content: "";
   position: absolute;
   inset: 0;
   background: url(img/hero-box.jpg) center / cover no-repeat;
   opacity: 0.5;
-  -webkit-mask-image: linear-gradient(90deg, transparent 10%, rgba(0, 0, 0, 0.6) 45%, #000 75%), linear-gradient(0deg, transparent 0%, #000 30%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(90deg, transparent 10%, rgba(0, 0, 0, 0.6) 45%, #000 75%), linear-gradient(0deg, transparent 0%, #000 30%);
-  mask-composite: intersect;
 }
-/* The photo hangs still behind the page: the hero text scrolls away over it and every section after it slides
-   over it like a layer. The background is fixed to the screen (a separate layer, so it also works on iPhones,
-   where background-attachment: fixed doesn't); the sections get a solid background so nothing shines through. */
-#home.hero { isolation: auto; }
-#home .hero-bg { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
-#home ~ .section:not(.section-alt), #home ~ .vine-divider { background-color: var(--bg); }
-#home ~ .vine-divider { position: relative; box-shadow: 0 -28px 46px rgba(0, 0, 0, 0.55); }
+.shop-hero .hero-bg::before { background-image: url(img/shop-bg.jpg); opacity: 0.42; }
+/* the hero's own shade: dark behind the text (left), the photo clear on the right; it scrolls away with the hero */
+#home.hero, .shop-hero { background: linear-gradient(90deg, rgba(var(--bg-rgb), 0.94) 8%, rgba(var(--bg-rgb), 0.6) 46%, rgba(var(--bg-rgb), 0.12) 78%); }
+/* the second layer */
+#home ~ .section, .shop-hero ~ .section { background-color: rgba(var(--bg-rgb), 0.74); }
+#home ~ .section.section-alt, .shop-hero ~ .section.section-alt { background-color: rgba(var(--bg-rgb), 0.86); background-color: color-mix(in srgb, var(--bg-alt) 84%, transparent); }
+#home ~ .vine-divider, .shop-hero ~ .vine-divider { position: relative; opacity: 1; box-shadow: 0 -28px 46px rgba(0, 0, 0, 0.5); }
 @media (max-width: 700px) {
-  #home .hero-bg::before {
-    background-image: url(img/hero-box-small.jpg);
-    opacity: 0.32;
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 55%, transparent 90%);
-    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 55%, transparent 90%);
-  }
+  #home .hero-bg::before { background-image: url(img/hero-box-small.jpg); opacity: 0.4; }
+  .shop-hero .hero-bg::before { background-image: url(img/shop-bg-small.jpg); opacity: 0.36; }
+  #home.hero, .shop-hero { background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.72) 60%, rgba(var(--bg-rgb), 0.82)); }
 }
 
 
@@ -758,7 +756,7 @@ a { color: inherit; }
 /* A screen with four scenes (sign up, pick a trainer, book, level up) and the XP bar under it; the four steps
    below show where you are. script.js sets data-scene; each scene's parts animate in when it becomes active.
    Without motion (prefers-reduced-motion) everything just shows in its final state. */
-.howto { --hw-dur: 3.6s; display: grid; gap: 14px; min-width: 0; }
+.howto { --hw-dur: 2.6s; display: grid; gap: 14px; min-width: 0; }
 .howto-screen { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--frame); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px rgba(var(--green-bright-rgb), 0.08); }
 .howto-top { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); }
 .howto-top i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
@@ -769,9 +767,9 @@ a { color: inherit; }
     repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 44px),
     radial-gradient(ellipse at 80% 0%, rgba(var(--green-rgb), 0.16), transparent 60%); }
 .howto-scene { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 14px; padding: 18px;
-  opacity: 0; visibility: hidden; transform: translateX(22px); transition: opacity 0.45s, transform 0.45s, visibility 0s 0.45s; }
+  opacity: 0; visibility: hidden; transform: translateX(22px); transition: opacity 0.35s, transform 0.35s, visibility 0s 0.35s; }
 .howto[data-scene="1"] [data-s="1"], .howto[data-scene="2"] [data-s="2"], .howto[data-scene="3"] [data-s="3"], .howto[data-scene="4"] [data-s="4"] {
-  opacity: 1; visibility: visible; transform: none; transition: opacity 0.45s, transform 0.45s; }
+  opacity: 1; visibility: visible; transform: none; transition: opacity 0.35s, transform 0.35s; }
 .hw-cap { margin: 0; max-width: 34ch; text-align: center; font-size: 0.92rem; font-weight: 600; color: var(--text); }
 /* 1 · your profile, +50 XP */
 .hw-profile { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #000; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
@@ -779,7 +777,9 @@ a { color: inherit; }
 .hw-who { display: grid; line-height: 1.25; }
 .hw-who small { color: var(--muted); font-size: 0.78rem; }
 .hw-chip, .hw-gain b { font-family: var(--display); font-style: italic; font-weight: 800; color: #000; background: var(--green-bright); border-radius: 6px; }
-.hw-chip { margin-left: 6px; padding: 6px 10px; font-size: 0.9rem; transform-origin: center; }
+.hw-chip { flex: none; margin-left: 6px; padding: 6px 10px; font-size: 0.9rem; white-space: nowrap; transform-origin: center; }
+.hw-who { min-width: 0; }
+.hw-who small { white-space: nowrap; }
 /* 2 · pick a coach */
 .hw-coaches { display: flex; gap: 12px; }
 .hw-coach { position: relative; display: grid; justify-items: center; gap: 6px; padding: 10px 12px; min-width: 84px; background: #000; border: 2px solid var(--line); border-radius: 14px; }
@@ -806,7 +806,7 @@ a { color: inherit; }
 .hw-lvl { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.95rem; }
 .hw-lvl b { display: inline-block; color: var(--gold); }
 .hw-bar { height: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); border-radius: 99px; }
-.hw-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; box-shadow: 0 0 12px rgba(var(--green-bright-rgb), 0.5); transition: width 0.6s ease-out; }
+.hw-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; box-shadow: 0 0 12px rgba(var(--green-bright-rgb), 0.5); transition: width 0.45s ease-out; }
 .hw-bar i.jump { transition: none; }
 .hw-num { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .howto.up .hw-lvl b { animation: hw-bump 0.6s; }
@@ -823,23 +823,23 @@ a { color: inherit; }
 .howto-steps button[aria-current="step"] > i { width: 100%; }
 @media (prefers-reduced-motion: no-preference) {
   .howto.playing .howto-steps button[aria-current="step"] > i { animation: hw-line var(--hw-dur) linear both; }
-  .howto[data-scene="1"] .hw-profile { animation: hw-rise 0.5s 0.1s both; }
-  .howto[data-scene="1"] .hw-chip { animation: hw-pop 0.5s 0.8s both; }
-  .howto[data-scene="2"] .hw-coach { animation: hw-rise 0.45s both; }
-  .howto[data-scene="2"] .hw-coach:nth-child(2) { animation-delay: 0.12s; }
-  .howto[data-scene="2"] .hw-coach:nth-child(3) { animation-delay: 0.24s; }
-  .howto[data-scene="2"] .hw-coach.pick { animation: hw-rise 0.45s both, hw-pick 0.6s 1.3s both; }
-  .howto[data-scene="2"] .hw-coach.pick::after { animation: hw-pop 0.4s 1.5s both; }
-  .howto[data-scene="3"] .hw-slots span { animation: hw-rise 0.4s both; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(2) { animation-delay: 0.08s; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(3) { animation-delay: 0.16s; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(4) { animation-delay: 0.24s; }
-  .howto[data-scene="3"] .hw-slots .hw-pick { animation: hw-rise 0.4s 0.16s both, hw-choose 0.7s 1.1s both; }
-  .howto[data-scene="3"] .hw-booked { animation: hw-pop 0.5s 1.8s both; }
-  .howto[data-scene="4"] .hw-gain.g1 { animation: hw-drop 0.55s 0.3s both; }
-  .howto[data-scene="4"] .hw-gain.g2 { animation: hw-drop 0.55s 2.3s both; }
-  .howto[data-scene="4"] .hw-gain.g3 { animation: hw-drop 0.55s 3.5s both; }
-  .howto[data-scene="4"] .hw-levelup { animation: hw-burst 1.5s 1.25s both; }
+  .howto[data-scene="1"] .hw-profile { animation: hw-rise 0.4s 0.05s both; }
+  .howto[data-scene="1"] .hw-chip { animation: hw-pop 0.4s 0.55s both; }
+  .howto[data-scene="2"] .hw-coach { animation: hw-rise 0.35s both; }
+  .howto[data-scene="2"] .hw-coach:nth-child(2) { animation-delay: 0.09s; }
+  .howto[data-scene="2"] .hw-coach:nth-child(3) { animation-delay: 0.18s; }
+  .howto[data-scene="2"] .hw-coach.pick { animation: hw-rise 0.35s both, hw-pick 0.45s 0.9s both; }
+  .howto[data-scene="2"] .hw-coach.pick::after { animation: hw-pop 0.35s 1.05s both; }
+  .howto[data-scene="3"] .hw-slots span { animation: hw-rise 0.3s both; }
+  .howto[data-scene="3"] .hw-slots span:nth-of-type(2) { animation-delay: 0.06s; }
+  .howto[data-scene="3"] .hw-slots span:nth-of-type(3) { animation-delay: 0.12s; }
+  .howto[data-scene="3"] .hw-slots span:nth-of-type(4) { animation-delay: 0.18s; }
+  .howto[data-scene="3"] .hw-slots .hw-pick { animation: hw-rise 0.3s 0.12s both, hw-choose 0.5s 0.8s both; }
+  .howto[data-scene="3"] .hw-booked { animation: hw-pop 0.4s 1.3s both; }
+  .howto[data-scene="4"] .hw-gain.g1 { animation: hw-drop 0.4s 0.2s both; }
+  .howto[data-scene="4"] .hw-gain.g2 { animation: hw-drop 0.4s 1.65s both; }
+  .howto[data-scene="4"] .hw-gain.g3 { animation: hw-drop 0.4s 2.55s both; }
+  .howto[data-scene="4"] .hw-levelup { animation: hw-burst 1.15s 0.9s both; }
 }
 @keyframes hw-line { from { width: 0; } to { width: 100%; } }
 @keyframes hw-rise { from { opacity: 0; transform: translateY(14px); } }
@@ -852,6 +852,9 @@ a { color: inherit; }
 @keyframes hw-flash { 30% { background: rgba(255, 210, 63, 0.28); } }
 @media (max-width: 640px) {
   .howto-stage { height: 216px; }
+  .hw-profile { gap: 10px; padding: 10px 12px; }
+  .hw-avatar { width: 42px; height: 42px; font-size: 1.2rem; }
+  .hw-who small { font-size: 0.72rem; }
   .hw-coach { min-width: 0; padding: 8px 9px; }
   .hw-coach img { width: 48px; height: 48px; }
   .hw-gains { flex-wrap: nowrap; align-items: stretch; gap: 6px; }
@@ -871,7 +874,7 @@ a { color: inherit; }
 /* Classes */
 .class-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 28px;
 }
 .class-card {
@@ -1413,7 +1416,7 @@ textarea { resize: vertical; min-height: 130px; }
 /* Team */
 .team-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   gap: 28px;
 }
 .team-card {
@@ -2463,7 +2466,16 @@ input, select, textarea { border-radius: 8px; }
 .review-summary:empty { display: none; }
 .review-summary b { font-family: var(--display); font-size: 1rem; color: var(--text); line-height: 1.9;
   font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
-.review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+/* one row of cards; when they don't fit it scrolls sideways and glides by itself (loopRows in script.js) */
+.review-grid { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.review-grid::-webkit-scrollbar { display: none; }
+.review-grid > .review-card { flex: 0 0 min(340px, 82%); }
+@media (min-width: 641px) { /* gliding on a wide screen: the cards fade in and out at the edges instead of being cut */
+  .review-grid.looping { -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent); mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent); }
+}
+.review-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.review-sample { padding: 3px 9px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px dashed var(--line); border-radius: 99px; }
+.review-card.sample { border-style: dashed; }
 .review-card { margin: 0; display: flex; flex-direction: column; gap: 12px; padding: 22px; border-radius: 12px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 70%), var(--panel); border: 1px solid var(--frame); }
 .review-card blockquote { margin: 0; flex: 1; font-size: 1.02rem; line-height: 1.6; }
@@ -2474,9 +2486,8 @@ input, select, textarea { border-radius: 8px; }
   background: var(--green-bright); color: #000; font-weight: 800; }
 .review-face img { width: 100%; height: 100%; object-fit: cover; }
 @media (max-width: 640px) {
-  .review-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin: 0 -16px; padding: 0 16px 8px; scrollbar-width: none; }
-  .review-grid::-webkit-scrollbar { display: none; }
-  .review-card { flex: 0 0 82%; scroll-snap-align: center; }
+  .review-grid { scroll-snap-type: x mandatory; gap: 12px; margin: 0 -20px; padding: 0 20px 8px; scroll-padding: 0 20px; }
+  .review-grid > .review-card { flex: 0 0 82%; scroll-snap-align: start; }
 }
 
 /* ---------- Q&A ---------- */
@@ -2852,7 +2863,11 @@ dialog[open] { touch-action: pan-y; }
 .slot.class-slot, .class-chip { position: relative; overflow: hidden; }
 .class-slot .class-fill { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--fill); background: var(--c); opacity: 0.9; }
 .slot.class-slot { background: color-mix(in srgb, var(--c) 22%, #000); border-style: solid; }
-.slot.class-slot .slot-name { white-space: normal; line-height: 1.25; }
+/* the name of a class may take two lines in its hour of the week board; a longer one ends in "…" instead of being cut */
+.slot.class-slot { gap: 2px; padding-block: 3px; }
+.slot.class-slot .slot-name { flex: none; white-space: normal; font-size: 0.78rem; line-height: 1.16; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.slot.class-slot .slot-state { flex: none; line-height: 1.5; }
 .slot.class-open:hover, .slot.class-full:hover { background: var(--c); color: #000; transform: translateY(-2px); }
 .slot.class-open:hover .slot-state, .slot.class-full:hover .slot-state { color: #000; }
 .slot.class-mine { background: var(--green-bright); color: #000; border-color: var(--green-bright); }
@@ -2932,6 +2947,12 @@ dialog[open] { touch-action: pan-y; }
 @media (max-width: 640px) {
   .gc-form .field-row, .gc-form .field-row.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gc-form .field-row > label:only-child { grid-column: 1 / -1; }
+  /* narrow phones: the date gets a whole row (a date field needs the room), and the form uses the full card width */
+  .gc-form .field-row.four > label:first-child { grid-column: 1 / -1; }
+  .gc-form.gc-edit { margin: 0 0 4px; padding: 12px; border-inline: 0; border-radius: 0; }
+  .gc-form { padding: 12px; gap: 10px; }
+  .gc-form .field-row { gap: 10px; }
+  .gc-form input, .gc-form select { padding-inline: 10px; }
 }
 @media (max-width: 640px) {
   .gc-top { grid-template-columns: 52px 1fr; }

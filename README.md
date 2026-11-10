@@ -165,9 +165,11 @@ so browsers and the installed app fetch the new files instead of a saved copy (G
 for 10 minutes).
 
 ## Phones: looping rows
-**Home page extras.** The photo behind the hero hangs still (`#home .hero-bg` is fixed to the screen): the hero
-text scrolls away over it and every section after it slides over it like a layer, so each section has a solid
-background. Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
+**Home page extras.** The photo behind the hero hangs still behind the whole page (`.hero-bg` is fixed to the
+screen): the hero text and every section after it slide over it as a second layer. The sections are dark glass
+(a see-through background), the cards on them are solid. The shop works the same way, with shelves full of
+supplements behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplash by Angel
+Sinigersky, made black and white). Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
 four scenes (sign up +50 XP, pick a trainer, book an hour, train and level up) with an XP bar that follows the
 real XP rules. It plays only while it is on screen, a tap on a step jumps to that scene, and with "reduce motion"
 on it doesn't play by itself.
@@ -431,9 +433,17 @@ you're unsure about anything legal.
 - **Reviews** (home page, above the schedule): only real clients. Players with at least one completed session write
   one under My account → Overview ("How is your training going?": 1–5 stars + max. 300 characters). Pieter gets an
   email and approves, hides or deletes it under Admin → Overview → Reviews. A review a client sent another way
-  (WhatsApp, Google…) can be added there too, with their permission; pick the member under it ("Photo of
-  member") to show their profile photo with it (`reviews.photo_user`, `admin_review_photo`), otherwise it shows
-  their first letter. The section stays hidden until there is an
+  (WhatsApp, Google…) can be added there too, with their permission. Their profile photo shows with it when a
+  member has that first name ("Hilke VdB" → the member Hilke; with two of that name, the one whose last name
+  starts with the same letter): looked up once (`_review_member`, `reviews.photo_user`). Wrong person or nobody
+  found: pick the member yourself under the review ("Photo of member", `admin_review_photo`), or "No photo".
+- **One row that glides:** the reviews are one row of cards; when they don't fit next to each other (a phone,
+  or many reviews) the row glides to the left in a loop like the trainings and the coaches (`loopRows` in
+  `script.js`), and you can swipe it.
+- **Example reviews:** `supabase/schema.sql` adds four example reviews once (`reviews.sample`), so the row is
+  filled while there are few real ones. They are marked **Example** on the site (an invented review must never
+  pass for a real client's: that is misleading and not allowed) and don't count in the average. Delete them under
+  Admin → Reviews once real reviews are in; they are not added again. The section stays hidden until there is an
   approved review; it shows the first name and current profile photo. Editing a review sends it back for approval.
 - **Q&A** (`#faq`, home page): the answers are built in `script.js` (`renderFaq`) with the live prices and rules,
   so they change along when prices change in admin.

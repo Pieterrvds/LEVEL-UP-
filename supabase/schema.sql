@@ -261,6 +261,21 @@ create table if not exists public.reviews (
 alter table public.reviews enable row level security;
 -- A review the admin added for a client has no account behind it: photo_user is the member whose profile photo shows with it
 alter table public.reviews add column if not exists photo_user uuid references public.profiles (id) on delete set null;
+-- photo_checked: the member was looked up by name once (or the admin chose); "no photo" then stays no photo
+alter table public.reviews add column if not exists photo_checked boolean not null default false;
+-- sample: an example review to fill the row while there are few real ones. The site marks it "Example";
+-- delete them under Admin > Reviews once real reviews are in. Added once (app_config: sample_reviews_added).
+alter table public.reviews add column if not exists sample boolean not null default false;
+do $$ begin
+  if not exists (select 1 from public.app_config where key = 'sample_reviews_added') then
+    insert into public.reviews (user_id, name, quote, rating, status, approved_at, sample, photo_checked) values
+      (null, 'Lotte', 'Na drie maanden doe ik mijn eerste pull-up. De sessies zijn pittig, maar ik kijk er elke week naar uit.', 5, 'approved', now() - interval '1 day', true, true),
+      (null, 'Bram', 'De social run club is de reden dat ik op woensdag mijn loopschoenen aantrek. Topsfeer, niemand blijft achter.', 5, 'approved', now() - interval '2 days', true, true),
+      (null, 'Sofie', 'Duidelijke uitleg en een schema op mijn maat. Een sessie boeken gaat heel vlot.', 4, 'approved', now() - interval '3 days', true, true),
+      (null, 'Thomas', 'XP verdienen per sessie klinkt als een spelletje, maar het werkt: ik heb nog geen training overgeslagen.', 5, 'approved', now() - interval '4 days', true, true);
+    insert into public.app_config (key, value) values ('sample_reviews_added', '1') on conflict (key) do nothing;
+  end if;
+end $$;
 
 create table if not exists public.workouts (
   id bigint generated always as identity primary key,
@@ -3057,8 +3072,8 @@ end $$;
 create or replace function public.public_reviews()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object('name', r.name, 'quote', r.quote, 'rating', r.rating,
-                  'avatarUrl', p.avatar_url, 'date', r.approved_at) order by r.approved_at desc), '[]'::jsonb)
-  from (select * from public.reviews where status = 'approved' order by approved_at desc limit 8) r
+                  'avatarUrl', p.avatar_url, 'date', r.approved_at, 'sample', r.sample) order by r.sample, r.approved_at desc), '[]'::jsonb)
+  from (select * from public.reviews where status = 'approved' order by sample, approved_at desc limit 12) r
   left join public.profiles p on p.id = coalesce(r.user_id, r.photo_user);
 $$;
 
@@ -3069,7 +3084,7 @@ begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   return coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name, 'quote', r.quote, 'rating', r.rating,
             'status', r.status, 'createdAt', r.created_at, 'byAdmin', r.user_id is null,
-            'photoUser', r.photo_user,
+            'photoUser', r.photo_user, 'sample', r.sample,
             'avatarUrl', (select avatar_url from public.profiles where id = coalesce(r.user_id, r.photo_user)),
             'email', (select email from public.profiles where id = r.user_id))
           order by (r.status = 'pending') desc, r.created_at desc) from public.reviews r), '[]'::jsonb);
@@ -3086,12 +3101,35 @@ begin
   where id = p_id;
 end $$;
 
+-- Whose photo goes with a review the admin added: the one member with that first name ("Hilke VdB" -> Hilke).
+-- Two members with the same first name: the one whose last name starts with the same letter. Otherwise nobody.
+create or replace function public._review_member(p_name text)
+returns uuid language plpgsql stable security definer set search_path = public as $$
+declare
+  first text := lower(split_part(btrim(coalesce(p_name, '')), ' ', 1));
+  rest text := lower(left(split_part(btrim(coalesce(p_name, '')), ' ', 2), 1));
+  ids uuid[];
+begin
+  if first = '' then return null; end if;
+  select array_agg(id) into ids from public.profiles where lower(split_part(btrim(name), ' ', 1)) = first;
+  if coalesce(array_length(ids, 1), 0) = 1 then return ids[1]; end if;
+  if coalesce(array_length(ids, 1), 0) > 1 and rest <> '' then
+    select array_agg(id) into ids from public.profiles
+    where lower(split_part(btrim(name), ' ', 1)) = first and lower(left(split_part(btrim(name), ' ', 2), 1)) = rest;
+    if coalesce(array_length(ids, 1), 0) = 1 then return ids[1]; end if;
+  end if;
+  return null;
+end $$;
+-- Reviews added before this existed: look their member up once
+update public.reviews set photo_user = public._review_member(name), photo_checked = true
+where user_id is null and photo_user is null and not photo_checked;
+
 -- Show a member's profile photo with a review the admin added for them (null = just their first letter)
 create or replace function public.admin_review_photo(p_id uuid, p_user uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
-  update public.reviews set photo_user = p_user where id = p_id and user_id is null;
+  update public.reviews set photo_user = p_user, photo_checked = true where id = p_id and user_id is null;
   if not found then raise exception 'Only for a review you added yourself.'; end if;
 end $$;
 
@@ -3101,8 +3139,9 @@ begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   if char_length(trim(coalesce(p_name, ''))) < 1 then raise exception 'Add the client''s first name.'; end if;
   if char_length(trim(coalesce(p_quote, ''))) not between 10 and 300 then raise exception 'The quote needs 10 to 300 characters.'; end if;
-  insert into public.reviews (user_id, name, quote, rating, status, approved_at)
-  values (null, left(trim(p_name), 24), trim(p_quote), greatest(1, least(5, coalesce(p_rating, 5))), 'approved', now());
+  insert into public.reviews (user_id, name, quote, rating, status, approved_at, photo_user, photo_checked)
+  values (null, left(trim(p_name), 24), trim(p_quote), greatest(1, least(5, coalesce(p_rating, 5))), 'approved', now(),
+          public._review_member(p_name), true);
 end $$;
 
 -- On the 1st of the month (the first time anyone loads their profile, or the 10-minute push job runs):
@@ -4562,6 +4601,7 @@ revoke execute on function public.delete_my_review() from public, anon;
 revoke execute on function public.admin_reviews() from public, anon;
 revoke execute on function public.admin_set_review(uuid, text) from public, anon;
 revoke execute on function public.admin_add_review(text, text, integer) from public, anon;
+revoke execute on function public._review_member(text) from public, anon, authenticated;
 revoke execute on function public.admin_review_photo(uuid, uuid) from public, anon;
 grant execute on function public.admin_review_photo(uuid, uuid) to authenticated;
 grant execute on function public.submit_review(text, integer) to authenticated;
