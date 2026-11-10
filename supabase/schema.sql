@@ -58,7 +58,11 @@ insert into public.app_config (key, value) values
   ('class_reminder_minutes', '90'), -- group class: the "starts soon" push goes out this long before
   ('class_chat_hours', '24'),     -- (no longer used: group chats are per kind of class now, see class_chat_days)
   ('class_chat_days', '60'),      -- group chat: you stay in a group's chat this many days after your last class of it
-  ('tab_limit', '30')             -- shop: most a member can have open "on their tab" (drinks and bars at the gym)
+  ('tab_limit', '30'),            -- shop: most a member can have open "on their tab" (drinks and bars at the gym)
+  ('room_places', '2'),           -- the gym room: how many 1:1 sessions (own coaches and renters) fit at the same time
+  ('rent_shared_price', '15'),    -- room rental per hour: a renter who shares the room (takes one place)
+  ('rent_full_price', '25'),      -- room rental per hour: the whole room, weekdays before 17:00
+  ('rent_full_peak_price', '35')  -- room rental per hour: the whole room, from 17:00 and in the weekend
 on conflict (key) do nothing;
 
 create or replace function public._config(p_key text)
@@ -1208,6 +1212,11 @@ begin
              and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
     raise exception 'You already have a session at this time.';
   end if;
+  -- the gym room itself: a class or a rental can take it whole, and it has a set number of places
+  perform pg_advisory_xact_lock(hashtext('room-' || p_day::text));
+  if public._room_blocker(public._slot_start(p_day, p_hour), public._slot_start(p_day, p_hour) + interval '1 hour', false) is not null then
+    raise exception 'The gym is full at that time. Pick another hour.';
+  end if;
 
   -- one booking at a time per player, so two tabs can't spend the same pack credit
   perform 1 from public.profiles where id = uid for update;
@@ -1471,6 +1480,128 @@ begin
   return jsonb_build_object('trainerId', p_trainer, 'sessions', n, 'amount', total);
 end $$;
 
+-- ---------------------------------------------------------
+-- The gym room: places, group classes that take it whole, and rentals
+-- ---------------------------------------------------------
+-- One room (12 m x 12 m). A 1:1 session takes one place, own coach or renter alike; the room has room_places
+-- places (app_config). A group class in the room and a "whole room" rental take all of it. A class that is not
+-- in the room (the run club) has uses_room off and takes nothing.
+alter table public.class_sessions add column if not exists uses_room boolean not null default true;
+-- classes that were planned before this existed: the outdoor ones don't take the room (once)
+do $$ begin
+  if not exists (select 1 from public.app_config where key = 'room_backfill') then
+    update public.class_sessions set uses_room = false where title ~* '(run|loop|outdoor|buiten|walk|wandel|bike|fiets)';
+    insert into public.app_config (key, value) values ('room_backfill', '1') on conflict (key) do nothing;
+  end if;
+end $$;
+
+-- A rental: someone from outside uses the room for whole hours on one day. The admin enters it; nothing is
+-- booked or paid online. Not public: only the admin functions further down read and write it.
+create table if not exists public.room_rentals (
+  id uuid primary key default gen_random_uuid(),
+  renter text not null check (char_length(renter) between 2 and 60),
+  contact text not null default '',
+  kind text not null default 'shared' check (kind in ('shared', 'full')),  -- shared = one place, full = the whole room
+  day date not null,
+  start_hour smallint not null check (start_hour between 0 and 23),
+  end_hour smallint not null check (end_hour between 1 and 24),
+  price_hour numeric(8, 2) not null check (price_hour >= 0),
+  note text not null default '',
+  series_id uuid,                     -- rentals made together with "repeat weekly"
+  status text not null default 'booked' check (status in ('booked', 'cancelled')),
+  paid_at timestamptz,
+  created_at timestamptz not null default now(),
+  created_by uuid references public.profiles (id) on delete set null,
+  check (end_hour > start_hour)
+);
+create index if not exists room_rentals_day_idx on public.room_rentals (day);
+alter table public.room_rentals enable row level security;
+revoke all on public.room_rentals from anon, authenticated;
+
+-- Does this booking hold its hour? (confirmed, a request that can still be answered, an online payment in progress)
+create or replace function public._booking_holds(b public.bookings)
+returns boolean language sql stable security definer set search_path = public as $$
+  select b.status = 'confirmed'
+      or (b.status = 'pending' and public._confirm_deadline(coalesce(b.request_at, b.created_at), b.day, b.hour) > now())
+      or (b.status = 'awaiting_payment' and b.created_at + make_interval(mins => public._config('payment_hold_minutes')::int) > now());
+$$;
+
+-- The room per hour: places in use, and whether something takes it whole
+create or replace function public._room_load(p_from date, p_to date)
+returns table (day date, hour integer, used integer, whole boolean)
+language sql stable security definer set search_path = public as $$
+  select x.day, x.hour, sum(x.used)::int, bool_or(x.whole)
+  from (
+    select b.day, b.hour::int as hour, 1 as used, false as whole
+    from public.bookings b
+    where b.day between p_from and p_to and (b.status = 'completed' or public._booking_holds(b))
+    union all
+    select r.day, h, case when r.kind = 'shared' then 1 else 0 end, r.kind = 'full'
+    from public.room_rentals r cross join lateral generate_series(r.start_hour::int, r.end_hour::int - 1) h
+    where r.status = 'booked' and r.day between p_from and p_to
+    union all
+    select h.day, h.hour, 0, true
+    from public.class_sessions c
+    cross join lateral (
+      select (t at time zone 'Europe/Brussels')::date as day, extract(hour from t at time zone 'Europe/Brussels')::int as hour
+      from generate_series(date_trunc('hour', c.starts_at), c.starts_at + make_interval(mins => c.minutes) - interval '1 minute', interval '1 hour') t
+    ) h
+    where c.status = 'scheduled' and c.uses_room and h.day between p_from and p_to
+  ) x
+  group by x.day, x.hour;
+$$;
+
+-- What stands in the way of using the room from p_start to p_end, or null when it is free.
+-- p_whole: the whole room is needed (a group class, a "whole room" rental); otherwise one place.
+create or replace function public._room_blocker(p_start timestamptz, p_end timestamptz, p_whole boolean,
+                                                p_skip_class uuid default null, p_skip_rental uuid default null)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare
+  places integer := greatest(coalesce(nullif(public._config('room_places'), '')::int, 2), 1);
+  what text;
+  h timestamptz;
+  used integer;
+begin
+  -- something that takes the whole room in that time
+  select 'the group class ' || c.title into what from public.class_sessions c
+  where c.status = 'scheduled' and c.uses_room and c.id is distinct from p_skip_class
+    and tstzrange(c.starts_at, c.starts_at + make_interval(mins => c.minutes)) && tstzrange(p_start, p_end)
+  order by c.starts_at limit 1;
+  if what is not null then return what; end if;
+  select 'it is rented out (' || r.renter || ')' into what from public.room_rentals r
+  where r.status = 'booked' and r.id is distinct from p_skip_rental and (r.kind = 'full' or p_whole)
+    and tstzrange(public._slot_start(r.day, r.start_hour::int), public._slot_start(r.day, r.start_hour::int) + make_interval(hours => r.end_hour - r.start_hour))
+        && tstzrange(p_start, p_end)
+  order by r.day, r.start_hour limit 1;
+  if what is not null then return what; end if;
+  if p_whole then
+    select 'a 1:1 session of ' || split_part(t.name, ' ', 1) || ' at ' || to_char(public._slot_start(b.day, b.hour) at time zone 'Europe/Brussels', 'HH24:MI')
+      into what
+    from public.bookings b join public.trainers t on t.id = b.trainer_id
+    where b.day between (p_start at time zone 'Europe/Brussels')::date - 1 and (p_end at time zone 'Europe/Brussels')::date + 1
+      and public._booking_holds(b)
+      and tstzrange(public._slot_start(b.day, b.hour), public._slot_start(b.day, b.hour) + interval '1 hour') && tstzrange(p_start, p_end)
+    order by b.day, b.hour limit 1;
+    return what;
+  end if;
+  -- one place is needed: count hour by hour
+  for h in select generate_series(date_trunc('hour', p_start), p_end - interval '1 minute', interval '1 hour') loop
+    used := (select count(*) from public.bookings b
+             where b.day = (h at time zone 'Europe/Brussels')::date and b.hour = extract(hour from h at time zone 'Europe/Brussels')::int
+               and public._booking_holds(b))
+          + (select count(*) from public.room_rentals r
+             where r.status = 'booked' and r.kind = 'shared' and r.id is distinct from p_skip_rental
+               and r.day = (h at time zone 'Europe/Brussels')::date
+               and extract(hour from h at time zone 'Europe/Brussels')::int >= r.start_hour
+               and extract(hour from h at time zone 'Europe/Brussels')::int < r.end_hour);
+    if used >= places then return 'all ' || places || ' places are taken'; end if;
+  end loop;
+  return null;
+end $$;
+revoke execute on function public._booking_holds(public.bookings) from public, anon, authenticated;
+revoke execute on function public._room_load(date, date) from public, anon, authenticated;
+revoke execute on function public._room_blocker(timestamptz, timestamptz, boolean, uuid, uuid) from public, anon, authenticated;
+
 -- Which hours are taken (no names), for the public schedule
 drop function if exists public.slot_status(date, date);
 create or replace function public.slot_status(p_from date, p_to date)
@@ -1493,7 +1624,13 @@ language sql stable security definer set search_path = public as $$
     select (t at time zone 'Europe/Brussels')::date as day, extract(hour from t at time zone 'Europe/Brussels')::int as hour
     from generate_series(date_trunc('hour', c.starts_at), c.starts_at + make_interval(mins => c.minutes) - interval '1 minute', interval '1 hour') t
   ) h
-  where c.status = 'scheduled' and h.day between p_from and least(p_to, p_from + 70);
+  where c.status = 'scheduled' and h.day between p_from and least(p_to, p_from + 70)
+  union all
+  -- every hour the gym room has no place left (a class or a rental takes it whole, or all places are in use):
+  -- trainer '*' = it counts for every trainer
+  select '*', l.day, l.hour::smallint, null::uuid, 'room'
+  from public._room_load(p_from, least(p_to, p_from + 70)) l
+  where l.whole or l.used >= greatest(coalesce(nullif(public._config('room_places'), '')::int, 2), 1);
 $$;
 
 -- Trainer levels count completed sessions only
@@ -4061,7 +4198,7 @@ begin
     'capacity', c.capacity, 'taken', public._class_taken(c.id),
     'waitlist', (select count(*) from public.class_signups w where w.class_id = c.id and w.status = 'waitlist'),
     'price', c.price, 'xp', c.xp, 'location', c.location, 'note', c.note,
-    'status', c.status, 'cancelReason', c.cancel_reason, 'seriesId', c.series_id,
+    'status', c.status, 'cancelReason', c.cancel_reason, 'seriesId', c.series_id, 'usesRoom', c.uses_room,
     'freeCancelUntil', c.starts_at - make_interval(hours => public._config('class_cancel_hours')::int),
     'chatId', (select th.id from public.chat_threads th where th.group_key = public._group_key(c.title)),
     'chatOpen', c.status <> 'cancelled' and now() < ends + make_interval(days => public._config('class_chat_days')::int),
@@ -4246,6 +4383,8 @@ declare
   loc text := left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80);
   remark text := left(btrim(coalesce(p ->> 'note', '')), 300);
   series uuid := case when weeks > 1 then gen_random_uuid() end;
+  room boolean := coalesce((p ->> 'usesRoom')::boolean, true); -- off for a class outside the gym room
+  blocker text;
   start timestamptz;
   c public.class_sessions;
   made jsonb := '[]'::jsonb;
@@ -4278,8 +4417,17 @@ begin
       if i = 0 then raise exception 'This trainer has a 1:1 session at that time.'; end if;
       skipped := skipped + 1; continue;
     end if;
-    insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by)
-    values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid)
+    if room then
+      -- a class in the gym takes the whole room: no other class, 1:1 session or rental at that time
+      perform pg_advisory_xact_lock(hashtext('room-' || (d + 7 * i)::text));
+      blocker := public._room_blocker(start, start + make_interval(mins => mins), true);
+      if blocker is not null then
+        if i = 0 then raise exception 'The gym is not free at that time: %.', blocker; end if;
+        skipped := skipped + 1; continue;
+      end if;
+    end if;
+    insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by, uses_room)
+    values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid, room)
     returning * into c;
     insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
     insert into public.class_kinds (key, title) values (public._group_key(ttl), ttl) on conflict do nothing;
@@ -4357,6 +4505,8 @@ declare
   taken integer;
   changed text := '';
   g record;
+  room boolean;
+  blocker text;
 begin
   if uid is null then raise exception 'Log in first.'; end if;
   select * into c from public.class_sessions where id = p_class for update;
@@ -4373,6 +4523,7 @@ begin
   loc := case when p ? 'location' then left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80) else c.location end;
   remark := case when p ? 'note' then left(btrim(coalesce(p ->> 'note', '')), 300) else c.note end;
   start := (d + tm) at time zone 'Europe/Brussels';
+  room := case when p ? 'usesRoom' then coalesce((p ->> 'usesRoom')::boolean, true) else c.uses_room end;
   if not exists (select 1 from public.trainers where id = trainer and active) then raise exception 'Unknown trainer.'; end if;
   if char_length(ttl) < 2 or char_length(ttl) > 40 then raise exception 'Give the class a name (2 to 40 characters).'; end if;
   if mins < 15 or mins > 240 then raise exception 'A class lasts between 15 and 240 minutes.'; end if;
@@ -4392,6 +4543,12 @@ begin
       raise exception 'This trainer has a 1:1 session at that time.';
     end if;
   end if;
+  -- a class in the gym takes the whole room (checked when its time changes or when it moves into the room)
+  if room and (start <> c.starts_at or mins <> c.minutes or not c.uses_room) then
+    perform pg_advisory_xact_lock(hashtext('room-' || d::text));
+    blocker := public._room_blocker(start, start + make_interval(mins => mins), true, c.id);
+    if blocker is not null then raise exception 'The gym is not free at that time: %.', blocker; end if;
+  end if;
   -- what the players need to hear
   if start <> c.starts_at then changed := 'New time: ' || to_char(start at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI'); end if;
   if loc <> c.location then changed := changed || case when changed <> '' then ' · ' else '' end || 'New place: ' || loc; end if;
@@ -4400,7 +4557,7 @@ begin
   end if;
   if ttl <> c.title and changed = '' then changed := 'Now called ' || ttl; end if;
   update public.class_sessions set title = ttl, trainer_id = trainer, starts_at = start, minutes = mins, capacity = cap,
-    price = cost, trainer_fee = fee, location = loc, note = remark,
+    price = cost, trainer_fee = fee, location = loc, note = remark, uses_room = room,
     reminder_pushed_at = case when start <> c.starts_at then null else reminder_pushed_at end
   where id = c.id returning * into c;
   insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
@@ -4792,6 +4949,183 @@ grant execute on function public.mark_pack_gift_given(uuid) to authenticated;
 
 -- Hand out the free session vouchers members already earned before rewards existed
 do $$ begin perform public._check_rewards(id) from public.profiles; end $$;
+
+-- ---------------------------------------------------------
+-- Gym room for the admin: how busy it is, and the rentals
+-- ---------------------------------------------------------
+create or replace function public._rental_json(r public.room_rentals)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', r.id, 'renter', r.renter, 'contact', r.contact, 'kind', r.kind,
+    'date', to_char(r.day, 'YYYY-MM-DD'), 'start', r.start_hour, 'end', r.end_hour, 'hours', r.end_hour - r.start_hour,
+    'price', r.price_hour, 'total', r.price_hour * (r.end_hour - r.start_hour),
+    'note', r.note, 'seriesId', r.series_id, 'status', r.status, 'paidAt', r.paid_at,
+    'past', public._slot_start(r.day, r.start_hour::int) + make_interval(hours => r.end_hour - r.start_hour) <= now());
+$$;
+
+-- Everything the "Gym room" tab shows: the settings, how the room was used per weekday and hour over the last
+-- p_weeks full weeks (1:1 sessions, group classes in the room, rentals), and the rentals.
+create or replace function public.admin_room(p_weeks integer default 8)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  weeks integer := least(greatest(coalesce(p_weeks, 8), 1), 26);
+  this_week date := date_trunc('week', now() at time zone 'Europe/Brussels')::date;
+  d0 date;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  d0 := this_week - 7 * weeks;
+  return jsonb_build_object(
+    'places', greatest(coalesce(nullif(public._config('room_places'), '')::int, 2), 1),
+    'prices', jsonb_build_object('shared', public._config('rent_shared_price')::numeric,
+                                 'full', public._config('rent_full_price')::numeric,
+                                 'fullPeak', public._config('rent_full_peak_price')::numeric),
+    'weeks', weeks, 'from', to_char(d0, 'YYYY-MM-DD'), 'to', to_char(this_week - 1, 'YYYY-MM-DD'),
+    'usage', coalesce((
+      select jsonb_agg(jsonb_build_object('dow', x.dow, 'hour', x.hour, 'weeks', x.wk, 'sessions', x.s, 'classes', x.c, 'rentals', x.r)
+                       order by x.dow, x.hour)
+      from (
+        select extract(isodow from u.day)::int as dow, u.hour, count(distinct date_trunc('week', u.day)) as wk,
+               sum(u.s) as s, sum(u.c) as c, sum(u.r) as r
+        from (
+          select b.day, b.hour::int as hour, 1 as s, 0 as c, 0 as r
+          from public.bookings b where b.day >= d0 and b.day < this_week and b.status in ('confirmed', 'completed')
+          union all
+          select h.day, h.hour, 0, 1, 0
+          from public.class_sessions cs
+          cross join lateral (
+            select (t at time zone 'Europe/Brussels')::date as day, extract(hour from t at time zone 'Europe/Brussels')::int as hour
+            from generate_series(date_trunc('hour', cs.starts_at), cs.starts_at + make_interval(mins => cs.minutes) - interval '1 minute', interval '1 hour') t
+          ) h
+          where cs.status in ('scheduled', 'done') and cs.uses_room and h.day >= d0 and h.day < this_week
+          union all
+          select r.day, g, 0, 0, 1
+          from public.room_rentals r cross join lateral generate_series(r.start_hour::int, r.end_hour::int - 1) g
+          where r.status = 'booked' and r.day >= d0 and r.day < this_week
+        ) u
+        group by 1, 2
+      ) x), '[]'::jsonb),
+    'rentals', coalesce((
+      select jsonb_agg(public._rental_json(r) order by r.day, r.start_hour, r.created_at)
+      from public.room_rentals r
+      where r.day >= (now() at time zone 'Europe/Brussels')::date - 62 or (r.status = 'booked' and r.paid_at is null)), '[]'::jsonb));
+end $$;
+
+-- Add a rental (or the same hours every week for a number of weeks). The room has to be free: a "whole room"
+-- rental needs it empty, a shared one needs a place. In a weekly series a week that clashes is skipped.
+create or replace function public.admin_rental_add(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  who text := btrim(coalesce(p ->> 'renter', ''));
+  k text := coalesce(nullif(p ->> 'kind', ''), 'shared');
+  d date := nullif(p ->> 'date', '')::date;
+  h1 integer := nullif(p ->> 'start', '')::int;
+  h2 integer := nullif(p ->> 'end', '')::int;
+  weeks integer := least(greatest(coalesce(nullif(p ->> 'repeatWeeks', '')::int, 1), 1), 26);
+  cost numeric;
+  series uuid;
+  made integer := 0;
+  skipped integer := 0;
+  blocker text;
+  dd date;
+  s timestamptz;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  if char_length(who) < 2 or char_length(who) > 60 then raise exception 'Fill in who rents the room (2 to 60 characters).'; end if;
+  if k not in ('shared', 'full') then raise exception 'Choose shared or the whole room.'; end if;
+  if d is null or h1 is null or h2 is null then raise exception 'Pick a date, a start hour and an end hour.'; end if;
+  if h1 < 0 or h2 > 24 or h2 <= h1 then raise exception 'The end hour has to be after the start hour.'; end if;
+  if d < (now() at time zone 'Europe/Brussels')::date - 62 then raise exception 'That date is too long ago.'; end if;
+  cost := coalesce(nullif(p ->> 'price', '')::numeric,
+                   case when k = 'shared' then public._config('rent_shared_price')::numeric
+                        when h2 > 17 or extract(isodow from d) in (6, 7) then public._config('rent_full_peak_price')::numeric
+                        else public._config('rent_full_price')::numeric end);
+  if cost < 0 or cost > 1000 then raise exception 'Check the price per hour.'; end if;
+  series := case when weeks > 1 then gen_random_uuid() end;
+  for i in 0 .. weeks - 1 loop
+    dd := d + 7 * i;
+    s := public._slot_start(dd, h1);
+    perform pg_advisory_xact_lock(hashtext('room-' || dd::text));
+    blocker := public._room_blocker(s, s + make_interval(hours => h2 - h1), k = 'full');
+    if blocker is not null then
+      if i = 0 then raise exception 'The gym is not free at that time: %.', blocker; end if;
+      skipped := skipped + 1; continue;
+    end if;
+    insert into public.room_rentals (renter, contact, kind, day, start_hour, end_hour, price_hour, note, series_id, created_by)
+    values (who, left(btrim(coalesce(p ->> 'contact', '')), 80), k, dd, h1, h2, cost, left(btrim(coalesce(p ->> 'note', '')), 200), series, auth.uid());
+    made := made + 1;
+  end loop;
+  return jsonb_build_object('created', made, 'skipped', skipped);
+end $$;
+
+-- Cancel one rental, or (p_series) this one and every later one of the same weekly series
+create or replace function public.admin_rental_cancel(p_id uuid, p_series boolean default false)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  r public.room_rentals;
+  n integer;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  select * into r from public.room_rentals where id = p_id;
+  if not found then raise exception 'Rental not found.'; end if;
+  update public.room_rentals set status = 'cancelled'
+  where status = 'booked' and (id = r.id or (coalesce(p_series, false) and r.series_id is not null and series_id = r.series_id and day >= r.day));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Paid or not: one rental, or (p_all) every rental of that renter that is over and still open
+create or replace function public.admin_rental_paid(p_id uuid, p_paid boolean default true, p_all boolean default false)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  r public.room_rentals;
+  n integer;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  select * into r from public.room_rentals where id = p_id;
+  if not found then raise exception 'Rental not found.'; end if;
+  update public.room_rentals x set paid_at = case when coalesce(p_paid, true) then coalesce(x.paid_at, now()) end
+  where x.status = 'booked'
+    and (x.id = r.id or (coalesce(p_all, false) and lower(x.renter) = lower(r.renter) and x.paid_at is null
+                         and public._slot_start(x.day, x.start_hour::int) <= now()));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- The room's settings: places at the same time and the standard prices per hour
+create or replace function public.admin_room_settings(p jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  places integer := nullif(p ->> 'places', '')::int;
+  v numeric;
+  k text;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  if places is not null then
+    if places < 1 or places > 10 then raise exception 'The room has between 1 and 10 places.'; end if;
+    insert into public.app_config (key, value) values ('room_places', places::text) on conflict (key) do update set value = excluded.value;
+  end if;
+  foreach k in array array['shared', 'full', 'fullPeak'] loop
+    v := nullif(p ->> k, '')::numeric;
+    if v is not null then
+      if v < 0 or v > 1000 then raise exception 'Check the prices.'; end if;
+      insert into public.app_config (key, value)
+      values (case k when 'shared' then 'rent_shared_price' when 'full' then 'rent_full_price' else 'rent_full_peak_price' end, v::text)
+      on conflict (key) do update set value = excluded.value;
+    end if;
+  end loop;
+end $$;
+
+revoke execute on function public._rental_json(public.room_rentals) from public, anon, authenticated;
+revoke execute on function public.admin_room(integer) from public, anon;
+revoke execute on function public.admin_rental_add(jsonb) from public, anon;
+revoke execute on function public.admin_rental_cancel(uuid, boolean) from public, anon;
+revoke execute on function public.admin_rental_paid(uuid, boolean, boolean) from public, anon;
+revoke execute on function public.admin_room_settings(jsonb) from public, anon;
+grant execute on function public.admin_room(integer) to authenticated;
+grant execute on function public.admin_rental_add(jsonb) to authenticated;
+grant execute on function public.admin_rental_cancel(uuid, boolean) to authenticated;
+grant execute on function public.admin_rental_paid(uuid, boolean, boolean) to authenticated;
+grant execute on function public.admin_room_settings(jsonb) to authenticated;
 
 -- ---------------------------------------------------------
 -- Welcome in the chat: the head coach says hello to every member

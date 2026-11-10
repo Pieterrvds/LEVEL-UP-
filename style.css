@@ -3061,6 +3061,8 @@ button.like-badge:focus-visible { outline: 2px solid #ff5c86; outline-offset: 2p
 .gc-announce { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px dashed var(--gold); cursor: pointer;
   font-family: var(--sans); font-size: 0.9rem; font-style: normal; font-weight: 600; text-transform: none; color: var(--text); font-size-adjust: none; line-height: 1.4; }
 .gc-form .gc-announce input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--green-bright); }
+.gc-form .gc-room { border-style: solid; border-color: var(--line); }
+.gc-room small { display: block; font-weight: 400; }
 
 /* ---------- Member pages (member.html): anything that opens someone's page looks clickable ---------- */
 [data-profile], [data-profile-trainer], .team-card[id^="team-"] .team-photo-wrap, .team-card[id^="team-"] h3, img[data-coach] { cursor: pointer; }

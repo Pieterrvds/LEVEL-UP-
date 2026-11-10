@@ -594,6 +594,12 @@ const LevelUp = (() => {
   const classFinish = (id) => call("class_finish", { p_class: id });
   const classManageList = (days = 35) => call("class_manage_list", { p_days: days }).then((rows) => (rows || []).map(normaliseClass));
   const classMarkRefunded = (signupId) => call("class_mark_refunded", { p_signup: signupId });
+  // The gym room (admin): how busy it is, the rentals and the settings
+  const adminRoom = (weeks = 8) => call("admin_room", { p_weeks: weeks });
+  const adminRentalAdd = async (p) => { const r = await call("admin_rental_add", { p }); await loadSlots(); emit(); return r; };
+  const adminRentalCancel = async (id, series = false) => { const r = await call("admin_rental_cancel", { p_id: id, p_series: series }); await loadSlots(); emit(); return r; };
+  const adminRentalPaid = (id, paid = true, all = false) => call("admin_rental_paid", { p_id: id, p_paid: paid, p_all: all });
+  const adminRoomSettings = async (p) => { await call("admin_room_settings", { p }); await loadSlots(); emit(); };
   async function classCreate(p) {
     const r = await call("class_create", { p });
     await afterClassChange();
@@ -1079,7 +1085,11 @@ const LevelUp = (() => {
   // null when free, otherwise { id, status (only when it's yours), mine }
   function findBooking(trainerId, key, hour) {
     const k = `${trainerId}|${key}|${hour}`;
-    if (!slots.has(k)) return null;
+    if (!slots.has(k)) {
+      // the gym room has no place left that hour (a group class or a rental takes it whole, or all places are
+      // in use): taken for every trainer. room: true tells it apart from the trainer's own bookings.
+      return slots.has(`*|${key}|${hour}`) ? { id: null, status: "room", mine: false, room: true } : null;
+    }
     const { id, status } = slots.get(k);
     return { id, status, mine: Boolean(id) };
   }
@@ -3373,7 +3383,7 @@ const LevelUp = (() => {
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, holdCelebrations, openProfile,
-    publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,

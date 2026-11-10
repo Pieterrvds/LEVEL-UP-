@@ -140,6 +140,7 @@ window.LevelUpClasses = (() => {
             <label>Trainer fee per class (€)<input type="number" name="trainerFee" min="0" max="1000" step="1" value="${c ? Number(c.trainerFee) : pricing.classTrainerFee}"></label>
           </div>` : c ? "" : `<p class="muted small">Players pay ${euro(pricing.classPrice)} per class; you get ${euro(pricing.classTrainerFee)} per class you lead.</p>`}
           <label>Note for the players (optional)<input name="note" maxlength="300" placeholder="Bring a towel and water · level: everyone welcome" value="${esc(c?.note || "")}"></label>
+          <label class="gc-announce gc-room"><input type="checkbox" name="usesRoom" ${(c ? c.usesRoom !== false : true) ? "checked" : ""}> <span>This class is in the gym room and needs all of it <small class="muted">(untick for a class outside, like a run: the room then stays free for 1:1 sessions)</small></span></label>
           ${c ? `<p class="muted small">${c.taken ? `${c.taken} signed up: they get a message when the day, hour, place, name or trainer changes.` : "Nobody signed up yet."}${admin ? " A new price counts for who signs up from now on." : ""}</p>`
             : `<label class="gc-announce"><input type="checkbox" name="announce" checked> <span>📣 Tell all members: news behind the bell and a notification, with your note in it</span></label>
           <p class="muted small">Classes with the same name share one group chat (e.g. every "Hyrox" class uses the Hyrox chat).</p>`}
@@ -184,7 +185,7 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        await LevelUp.classUpdate(form.dataset.gcEditForm, Object.fromEntries(new FormData(form)));
+        await LevelUp.classUpdate(form.dataset.gcEditForm, { ...Object.fromEntries(new FormData(form)), usesRoom: form.elements.usesRoom.checked });
         LevelUp.toast({ title: "Class changed", text: "Who signed up got a message if the day, hour or place changed", icon: "✎", tone: "green" });
         st.editing = null;
         await load();
@@ -203,7 +204,7 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        const r = await LevelUp.classCreate({ ...Object.fromEntries(new FormData(form)), announce: form.elements.announce.checked });
+        const r = await LevelUp.classCreate({ ...Object.fromEntries(new FormData(form)), announce: form.elements.announce.checked, usesRoom: form.elements.usesRoom.checked });
         const n = r.created.length;
         LevelUp.toast({ title: n === 1 ? "Class planned" : `${n} classes planned`,
           text: r.skipped ? `${r.skipped} week${r.skipped === 1 ? "" : "s"} skipped (clash or too soon)`

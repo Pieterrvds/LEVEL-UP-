@@ -30,6 +30,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `schedule.js`: weekly booking board and the "Up next" card on the home page
 - `admin.js`: admin dashboard
 - `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
+- `room.js`: the admin's Gym room tab: how busy the room is, rentals, the room's settings
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
 - `levelup-celebrate.js`: the celebration animation, loaded by `game.js` when one is due (see "Celebrations")
 - `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
@@ -215,6 +216,30 @@ Supabase sends them. Its built-in sender only delivers to the addresses of the S
 (e.g. Brevo, free: 300 emails a day). Also check Authentication → URL Configuration: Site URL
 `https://pieterrvds.github.io/LEVEL-UP-/` and redirect URL `https://pieterrvds.github.io/LEVEL-UP-/**`.
 The log-in form has "Resend the confirmation email"; send limits show a clear message.
+
+## The gym room: places and rentals
+There is one room (12 m × 12 m), and the app now knows it. Rules, all checked on the server:
+- **Places.** A 1:1 session takes one place, whoever the coach is. The room has `room_places` places (2 to start
+  with; Admin → Gym room → Room settings). When they are all taken, that hour shows as taken for every coach and
+  `book_session` answers "The gym is full at that time". Hours that already had more sessions stay as they are.
+- **Group classes.** A class in the room takes all of it: no other class, 1:1 session or rental at that time, and
+  the other way round a class can't be planned (or moved) on top of them; the message says what is in the way.
+  A class outside (a run) has "This class is in the gym room" unticked in the class form (`uses_room` off) and
+  takes nothing. Existing classes with run / loop / outdoor / walk / bike in the name were set to "outside" once.
+- **Rentals** (Admin → Gym room). The admin enters them: who, a place in the room (a renter with their own PT
+  client: 1 place, your coaches can train next to them) or the whole room (yoga, dance, a team building), the
+  date, from–to in whole hours, once or weekly for 4 to 26 weeks, and a price per hour. The standard prices are
+  in the settings: 15 for a place, 25 for the whole room in the daytime, 35 from 17:00 and in the weekend. In a
+  weekly series a week where the room isn't free is skipped. The list shows what is coming, what each renter
+  still has to pay for hours that are over ("All paid"), and cancelling (one, or this and every later week).
+  Renters don't book or pay in the app; that is a possible next step.
+- **How busy.** The same tab shows, per weekday and hour, in how many of the last 8 full weeks the room was used
+  (1:1 sessions, classes in the room, rentals), the hours used and empty per week (of 07:00–22:00, 7 days) and
+  the quiet blocks of 2 hours or more with what one renter would bring in. Only what is in the app counts.
+- **Server:** table `room_rentals` (no direct access), column `class_sessions.uses_room`, `_room_load` (per hour:
+  places used, whole room or not; feeds `slot_status` as trainer `*`), `_room_blocker` (what stands in the way),
+  `admin_room`, `admin_rental_add`, `admin_rental_cancel`, `admin_rental_paid`, `admin_room_settings`.
+  Rental income is not in the Finances tab yet.
 
 ## Chat
 Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js`, `chat.css`).

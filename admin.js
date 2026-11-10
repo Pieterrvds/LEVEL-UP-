@@ -200,6 +200,8 @@ async function render() {
     <section class="panel admin-panel gc-wrap" data-pane="classes" id="adminClasses"></section>
     <section class="panel admin-panel" data-pane="classes" id="adminKinds"></section>
 
+    <div data-pane="room" id="adminRoom"></div>
+
     <div data-pane="shop">
     <section class="panel admin-panel" id="tabsPanel"></section>
     <section class="panel admin-panel" id="shopPanel"></section>
@@ -268,6 +270,7 @@ async function render() {
   renderShopAdmin();
   renderNewsPanel();
   LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
+  window.LevelUpRoom?.mount(document.getElementById("adminRoom"));
   renderKinds();
 }
 
@@ -338,6 +341,7 @@ const ADMIN_TABS = [
   { id: "overview", label: "Overview" },
   { id: "bookings", label: "Bookings" },
   { id: "classes", label: "Group classes" },
+  { id: "room", label: "Gym room" },
   { id: "finances", label: "Finances" },
   { id: "shop", label: "Shop" },
   { id: "team", label: "Team" },
@@ -1108,7 +1112,8 @@ function occupancy(trainer) {
     LevelUp.trainerHours(trainer.id, key).forEach((hour) => {
       if (LevelUp.slotStart(key, hour) <= now) return;
       open++;
-      if (LevelUp.findBooking(trainer.id, key, hour)) booked++;
+      const b = LevelUp.findBooking(trainer.id, key, hour);
+      if (b && !b.room) booked++; // an hour the room is full for another reason is not this trainer's booking
     });
   }
   return { open, booked, pct: open ? (booked / open) * 100 : 0 };
