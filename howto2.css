@@ -1,0 +1,133 @@
+/* PREVIEW: the new "How it works" demo (six scenes). Lives next to the current one until it is approved;
+   only howto-preview.html loads this file. Everything that moves is a transform or an opacity. */
+.hx { --hx-dur: 1.6s; --ease: cubic-bezier(0.2, 0.8, 0.2, 1); display: grid; gap: 14px; min-width: 0; }
+.hx-screen { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--frame); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px rgba(var(--green-bright-rgb), 0.08); }
+.hx-top { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); }
+.hx-top i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.hx-top i:first-child { background: var(--green-bright); }
+.hx-top b { margin-left: 8px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
+.hx-top span { margin-left: auto; padding: 3px 9px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #000; background: var(--gold); border-radius: 99px; }
+
+.hx-stage { position: relative; height: 248px; overflow: hidden; background:
+  radial-gradient(120% 90% at 50% 0%, rgba(var(--green-bright-rgb), 0.12), transparent 60%),
+  repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 22px); }
+/* a scene waits on the right, plays in the middle and leaves to the left */
+.hx-scene { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 14px; padding: 16px 18px;
+  opacity: 0; visibility: hidden; transform: translate3d(34px, 0, 0) scale(0.97); transition: opacity 0.34s var(--ease), transform 0.34s var(--ease), visibility 0s 0.34s; }
+.hx-scene.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.34s var(--ease), transform 0.34s var(--ease); }
+.hx-scene.out { transform: translate3d(-34px, 0, 0) scale(0.97); }
+.hx-cap { margin: 0; max-width: 36ch; text-align: center; font-size: 0.92rem; font-weight: 600; color: var(--text); }
+
+/* things inside a scene come in one after the other (--i = their turn) */
+/* (a scene that is leaving keeps its things in place, so the two scenes cross-fade without an empty moment) */
+.hx-scene:not(.on):not(.out) [data-in] { opacity: 0; transform: translate3d(0, 14px, 0); }
+.hx-scene.on [data-in] { opacity: 1; transform: none; transition: opacity 0.3s var(--ease) calc(0.08s + var(--i, 0) * 0.07s), transform 0.38s var(--ease) calc(0.08s + var(--i, 0) * 0.07s); }
+
+.hx-chip { display: inline-block; padding: 6px 10px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; white-space: nowrap; color: #000; background: var(--green-bright); border-radius: 6px; }
+.hx-chip.gold { background: var(--gold); }
+.hx-pop { opacity: 0; transform: scale(0.3); }
+.hx-pop.show { opacity: 1; transform: none; transition: opacity 0.18s, transform 0.42s cubic-bezier(0.3, 1.7, 0.5, 1); }
+
+/* 1 · profile */
+.hx-profile { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #000; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
+.hx-avatar { width: 48px; height: 48px; flex: none; display: grid; place-items: center; font: italic 800 1.4rem/1 var(--display); color: #000; background: var(--green-bright); border-radius: 12px; }
+.hx-who { display: grid; min-width: 0; line-height: 1.25; }
+.hx-who small { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+
+/* 2 · coaches */
+.hx-coaches { display: flex; gap: 12px; }
+.hx-coach { position: relative; display: grid; justify-items: center; gap: 6px; padding: 10px 12px; min-width: 84px; background: #000; border: 2px solid var(--line); border-radius: 14px; }
+.hx-coach img { width: 56px; height: 56px; object-fit: cover; object-position: center 20%; border-radius: 50%; }
+.hx-coach b { font-size: 0.8rem; }
+.hx-coach::after { content: "✓"; position: absolute; top: -9px; right: -9px; width: 24px; height: 24px; display: grid; place-items: center; font-size: 0.8rem; font-weight: 800; color: #000; background: var(--green-bright); border-radius: 50%; opacity: 0; transform: scale(0.3); transition: opacity 0.15s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); }
+.hx-coach.picked { border-color: var(--green-bright); box-shadow: 0 0 22px rgba(var(--green-bright-rgb), 0.35); transition: border-color 0.2s, box-shadow 0.3s; }
+.hx-coach.picked::after { opacity: 1; transform: none; }
+
+/* 3 · booking */
+.hx-slots { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.hx-day { padding: 8px 10px; font-family: var(--display); font-style: italic; font-size: 0.85rem; text-transform: uppercase; color: var(--muted); }
+.hx-slots span { padding: 8px 12px; font-weight: 700; font-size: 0.9rem; color: var(--green-bright); background: #000; border: 1px solid rgba(var(--green-bright-rgb), 0.45); border-radius: 8px; }
+.hx-slots span.picked { color: #000; background: var(--green-bright); border-color: var(--green-bright); box-shadow: 0 0 20px rgba(var(--green-bright-rgb), 0.45); transition: background 0.2s, color 0.2s, box-shadow 0.3s; }
+.hx-ticket { padding: 8px 14px; font-weight: 700; color: #000; background: var(--gold); border-radius: 99px; }
+
+/* 4 · train and level up */
+.hx-gains { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.hx-gain { display: grid; justify-items: center; gap: 5px; padding: 9px 12px; min-width: 104px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
+.hx-gain small { font-size: 0.72rem; color: var(--muted); }
+.hx-levelup { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; }
+.hx-levelup b { padding: 10px 22px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(1.5rem, 5vw, 2.1rem); text-transform: uppercase; color: #000; background: var(--gold); transform: skewX(-8deg); box-shadow: 0 0 0 4px #000, 0 0 44px rgba(255, 210, 63, 0.6); }
+
+/* 5 · the high scores: rows are stacked with transforms, so a climb is one smooth slide */
+.hx-board { position: relative; width: min(100%, 300px); height: 132px; }
+.hx-row { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 0 10px; font-size: 0.85rem; background: #000; border: 1px solid var(--line); border-radius: 8px;
+  transform: translate3d(0, calc(var(--pos) * 34px), 0); transition: transform 0.6s cubic-bezier(0.3, 1.25, 0.5, 1), border-color 0.3s, box-shadow 0.3s; }
+.hx-board.jump .hx-row { transition: none; }
+.hx-row i { font: italic 800 0.9rem/1 var(--display); color: var(--muted); }
+.hx-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-row em { font: italic 800 0.8rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.hx-row.me { z-index: 2; border-color: var(--green-bright); box-shadow: 0 0 18px rgba(var(--green-bright-rgb), 0.35); }
+.hx-row.me b { color: var(--green-bright); }
+.hx-row .hx-heart { position: absolute; right: -8px; top: -10px; width: 22px; height: 22px; display: grid; place-items: center; font-size: 0.72rem; color: #fff; background: #ff4d6d; border-radius: 50%; }
+.hx-up { position: absolute; right: 24px; top: -13px; padding: 2px 7px; font: italic 800 0.72rem/1.4 var(--display); color: #000; background: var(--green-bright); border-radius: 6px; }
+
+/* 6 · the shop */
+.hx-shop { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #000; border: 1px solid var(--line); border-radius: 14px; }
+.hx-shop-ico { width: 52px; height: 52px; flex: none; display: grid; place-items: center; font-size: 1.7rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; }
+.hx-shop div { display: grid; gap: 2px; min-width: 0; line-height: 1.25; }
+.hx-shop small { color: var(--muted); font-size: 0.78rem; }
+.hx-buy { flex: none; padding: 7px 12px; font: italic 800 0.8rem/1.3 var(--display); text-transform: uppercase; color: #000; background: var(--green-bright); border-radius: 8px; transition: background 0.2s; }
+.hx-buy.done { background: var(--gold); }
+
+/* the finger: a ring where the demo "taps" */
+.hx-tap { position: absolute; left: 0; top: 0; z-index: 5; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid #fff; border-radius: 50%; background: rgba(255, 255, 255, 0.18); opacity: 0; pointer-events: none; }
+/* an XP chip on its way to the bar */
+.hx-fly { position: absolute; left: 0; top: 0; z-index: 6; opacity: 0; pointer-events: none; will-change: transform; }
+
+.hx-xp { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); background: rgba(0, 0, 0, 0.45); }
+.hx-lvl { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.95rem; }
+.hx-lvl b { display: inline-block; color: var(--gold); }
+.hx-bar { height: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); border-radius: 99px; }
+.hx-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; transform-origin: left center; transform: scaleX(0); transition: transform 0.5s var(--ease); }
+.hx-bar i.jump { transition: none; }
+.hx-num { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hx.up .hx-lvl b { animation: hx-bump 0.6s; }
+.hx.up .hx-xp { animation: hx-flash 0.7s; }
+.hx.hit .hx-bar { animation: hx-hit 0.3s; }
+
+.hx-steps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hx-steps li { flex: 1 1 0; min-width: 0; transition: flex-grow 0.35s var(--ease); }
+.hx-steps button { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 100%; min-height: 46px; padding: 8px 6px; overflow: hidden; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+.hx-steps .step-no { flex: none; width: 28px; height: 28px; font-size: 0.7rem; }
+.hx-steps li:last-child .step-no { background: var(--gold); }
+.hx-steps b { overflow: hidden; white-space: nowrap; font-family: var(--display); font-size: 0.62rem; font-style: italic; font-weight: 800; text-transform: uppercase; line-height: 1.5; font-size-adjust: cap-height 1.24; }
+.hx-steps button > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--green-bright); transform-origin: left center; transform: scaleX(0); }
+.hx-steps button[aria-current="step"] { color: var(--text); border-color: var(--green-bright); }
+.hx-steps button[aria-current="step"] > i { transform: none; }
+.hx.playing .hx-steps button[aria-current="step"] > i { animation: hx-line var(--hx-dur) linear both; }
+@media (hover: hover) { .hx-steps button:hover { border-color: var(--green); } }
+/* only the step that plays shows its name: it grows, the others are their number */
+.hx-steps b { display: none; }
+.hx-steps li.now { flex-grow: 2.4; }
+.hx-steps li.now b { display: block; }
+@media (max-width: 700px) {
+  .hx-steps { gap: 5px; }
+  .hx-steps li.now { flex-grow: 3.6; }
+  .hx-steps button { gap: 6px; padding: 8px 4px; }
+  .hx-stage { height: 236px; }
+  .hx-coach { min-width: 0; padding: 9px 9px; }
+  .hx-coaches { gap: 8px; }
+  .hx-slots { gap: 6px; flex-wrap: nowrap; }
+  .hx-slots span { padding: 7px 8px; font-size: 0.84rem; }
+  .hx-day { padding: 7px 4px; }
+}
+
+@keyframes hx-line { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes hx-bump { 0%, 100% { transform: none; } 40% { transform: scale(1.7); } }
+@keyframes hx-flash { 0%, 100% { background: rgba(0, 0, 0, 0.45); } 35% { background: rgba(var(--green-bright-rgb), 0.3); } }
+@keyframes hx-hit { 0%, 100% { transform: none; } 40% { transform: scaleY(1.5); } }
+
+/* no motion wanted: scenes simply swap, nothing flies */
+@media (prefers-reduced-motion: reduce) {
+  .hx-scene, .hx-scene.on, .hx-scene [data-in], .hx-scene.on [data-in], .hx-pop.show, .hx-row, .hx-bar i, .hx-steps li { transition: none; }
+  .hx.up .hx-lvl b, .hx.up .hx-xp, .hx.hit .hx-bar { animation: none; }
+}
