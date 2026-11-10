@@ -765,120 +765,189 @@ a { color: inherit; }
   line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .quest-steps li:last-child .step-no { background: var(--gold); }
-/* ---------- Level 1: how it works, as a small animated demo on a loop ---------- */
-/* A screen with four scenes (sign up, pick a trainer, book, level up) and the XP bar under it; the four steps
-   below show where you are. script.js sets data-scene; each scene's parts animate in when it becomes active.
-   Without motion (prefers-reduced-motion) everything just shows in its final state. */
-.howto { --hw-dur: 2.6s; display: grid; gap: 14px; min-width: 0; }
-.howto-screen { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--frame); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px rgba(var(--green-bright-rgb), 0.08); }
-.howto-top { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); }
-.howto-top i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
-.howto-top i:first-child { background: var(--green-bright); }
-.howto-top b { margin-left: 8px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
-.howto-top span { margin-left: auto; padding: 3px 9px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #000; background: var(--gold); border-radius: 99px; }
-.howto-stage { position: relative; height: 230px; background:
-    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 44px),
-    radial-gradient(ellipse at 80% 0%, rgba(var(--green-rgb), 0.16), transparent 60%); }
-.howto-scene { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 14px; padding: 18px;
-  opacity: 0; visibility: hidden; transform: translateX(22px); transition: opacity 0.35s, transform 0.35s, visibility 0s 0.35s; }
-.howto[data-scene="1"] [data-s="1"], .howto[data-scene="2"] [data-s="2"], .howto[data-scene="3"] [data-s="3"], .howto[data-scene="4"] [data-s="4"] {
-  opacity: 1; visibility: visible; transform: none; transition: opacity 0.35s, transform 0.35s; }
-.hw-cap { margin: 0; max-width: 34ch; text-align: center; font-size: 0.92rem; font-weight: 600; color: var(--text); }
-/* 1 · your profile, +50 XP */
-.hw-profile { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #000; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
-.hw-avatar { width: 48px; height: 48px; display: grid; place-items: center; font: italic 800 1.4rem/1 var(--display); color: #000; background: var(--green-bright); border-radius: 12px; }
-.hw-who { display: grid; line-height: 1.25; }
-.hw-who small { color: var(--muted); font-size: 0.78rem; }
-.hw-chip, .hw-gain b { font-family: var(--display); font-style: italic; font-weight: 800; color: #000; background: var(--green-bright); border-radius: 6px; }
-.hw-chip { flex: none; margin-left: 6px; padding: 6px 10px; font-size: 0.9rem; white-space: nowrap; transform-origin: center; }
-.hw-who { min-width: 0; }
-.hw-who small { white-space: nowrap; }
-/* 2 · pick a coach */
-.hw-coaches { display: flex; gap: 12px; }
-.hw-coach { position: relative; display: grid; justify-items: center; gap: 6px; padding: 10px 12px; min-width: 84px; background: #000; border: 2px solid var(--line); border-radius: 14px; }
-.hw-coach img { width: 56px; height: 56px; object-fit: cover; object-position: center 20%; border-radius: 50%; }
-.hw-coach b { font-size: 0.8rem; }
-.hw-coach::after { content: "✓"; position: absolute; top: -9px; right: -9px; width: 24px; height: 24px; display: grid; place-items: center; font-size: 0.8rem; font-weight: 800; color: #000; background: var(--green-bright); border-radius: 50%; opacity: 0; transform: scale(0.4); }
-.hw-coach.pick { border-color: var(--green-bright); box-shadow: 0 0 22px rgba(var(--green-bright-rgb), 0.35); }
-.hw-coach.pick::after { opacity: 1; transform: none; }
-/* 3 · book an hour */
-.hw-slots { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
-.hw-day { padding: 8px 10px; font-family: var(--display); font-style: italic; font-size: 0.85rem; text-transform: uppercase; color: var(--muted); }
-.hw-slots span { padding: 8px 12px; font-weight: 700; font-size: 0.9rem; color: var(--green-bright); background: #000; border: 1px solid rgba(var(--green-bright-rgb), 0.45); border-radius: 8px; }
-.hw-slots .hw-pick { color: #000; background: var(--green-bright); border-color: var(--green-bright); box-shadow: 0 0 20px rgba(var(--green-bright-rgb), 0.45); }
-.hw-booked { padding: 8px 14px; font-weight: 700; color: #000; background: var(--gold); border-radius: 99px; }
-/* 4 · XP comes in, level up */
-.hw-gains { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.hw-gain { display: grid; justify-items: center; gap: 4px; padding: 8px 10px; min-width: 92px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
-.hw-gain b { padding: 4px 8px; font-size: 0.85rem; }
-.hw-gain small { font-size: 0.72rem; color: var(--muted); }
-.hw-levelup { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; }
-.hw-levelup b { padding: 10px 22px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(1.5rem, 5vw, 2.1rem); text-transform: uppercase; color: #000; background: var(--gold); transform: skewX(-8deg); box-shadow: 0 0 0 4px #000, 0 0 44px rgba(255, 210, 63, 0.6); }
-/* the XP bar under the screen */
-.howto-xp { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); background: rgba(0, 0, 0, 0.45); }
-.hw-lvl { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.95rem; }
-.hw-lvl b { display: inline-block; color: var(--gold); }
-.hw-bar { height: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); border-radius: 99px; }
-.hw-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; box-shadow: 0 0 12px rgba(var(--green-bright-rgb), 0.5); transition: width 0.45s ease-out; }
-.hw-bar i.jump { transition: none; }
-.hw-num { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.howto.up .hw-lvl b { animation: hw-bump 0.6s; }
-.howto.up .howto-xp { animation: hw-flash 0.7s; }
-/* the four steps: tap one to jump there; the line under the active one fills while its scene plays */
-.howto-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.howto-steps button { position: relative; display: grid; justify-items: center; gap: 8px; width: 100%; height: 100%; padding: 12px 6px 14px; overflow: hidden; text-align: center; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 0.2s, color 0.2s, transform 0.2s; }
-@media (hover: hover) { .howto-steps button:hover { border-color: var(--green); } }
-.howto-steps .step-no { width: 34px; height: 34px; font-size: 0.75rem; }
-.howto-steps li:last-child .step-no { background: var(--gold); }
-.howto-steps b { font-family: var(--display); font-size: 0.62rem; font-style: italic; font-weight: 800; text-transform: uppercase; line-height: 1.5; font-size-adjust: cap-height 1.24; }
-.howto-steps button > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--green-bright); }
-.howto-steps button[aria-current="step"] { color: var(--text); border-color: var(--green-bright); transform: translateY(-2px); }
-.howto-steps button[aria-current="step"] > i { width: 100%; }
-@media (prefers-reduced-motion: no-preference) {
-  .howto.playing .howto-steps button[aria-current="step"] > i { animation: hw-line var(--hw-dur) linear both; }
-  .howto[data-scene="1"] .hw-profile { animation: hw-rise 0.4s 0.05s both; }
-  .howto[data-scene="1"] .hw-chip { animation: hw-pop 0.4s 0.55s both; }
-  .howto[data-scene="2"] .hw-coach { animation: hw-rise 0.35s both; }
-  .howto[data-scene="2"] .hw-coach:nth-child(2) { animation-delay: 0.09s; }
-  .howto[data-scene="2"] .hw-coach:nth-child(3) { animation-delay: 0.18s; }
-  .howto[data-scene="2"] .hw-coach.pick { animation: hw-rise 0.35s both, hw-pick 0.45s 0.9s both; }
-  .howto[data-scene="2"] .hw-coach.pick::after { animation: hw-pop 0.35s 1.05s both; }
-  .howto[data-scene="3"] .hw-slots span { animation: hw-rise 0.3s both; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(2) { animation-delay: 0.06s; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(3) { animation-delay: 0.12s; }
-  .howto[data-scene="3"] .hw-slots span:nth-of-type(4) { animation-delay: 0.18s; }
-  .howto[data-scene="3"] .hw-slots .hw-pick { animation: hw-rise 0.3s 0.12s both, hw-choose 0.5s 0.8s both; }
-  .howto[data-scene="3"] .hw-booked { animation: hw-pop 0.4s 1.3s both; }
-  .howto[data-scene="4"] .hw-gain.g1 { animation: hw-drop 0.4s 0.2s both; }
-  .howto[data-scene="4"] .hw-gain.g2 { animation: hw-drop 0.4s 1.65s both; }
-  .howto[data-scene="4"] .hw-gain.g3 { animation: hw-drop 0.4s 2.55s both; }
-  .howto[data-scene="4"] .hw-levelup { animation: hw-burst 1.15s 0.9s both; }
+/* ---------- Level 1: how it works, as an animated demo on a loop ---------- */
+/* A screen with six scenes (profile, coach, booking, training, high scores, shop), the XP bar under it and the
+   steps below. script.js (howItWorks) plays it: a mouse clicks what gets clicked, XP flies into the bar, and the
+   mascot (the gymnast of the celebration, drawn on one canvas) hangs next to the scenes, does a rep when
+   something good happens and his muscle-up with confetti at the level-up. The scenes move with transforms and
+   opacity only. Without motion (prefers-reduced-motion) nothing plays by itself. */
+.hx { --hx-dur: 1.6s; --ease: cubic-bezier(0.2, 0.8, 0.2, 1); display: grid; gap: 14px; min-width: 0; container: hx / inline-size; }
+.hx-screen { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--frame); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px rgba(var(--green-bright-rgb), 0.08); }
+.hx-top { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); }
+.hx-top i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.hx-top i:first-child { background: var(--green-bright); }
+.hx-top b { margin-left: 8px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
+.hx-top span { margin-left: auto; padding: 3px 9px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #000; background: var(--gold); border-radius: 99px; }
+
+.hx-stage { --mw: 0px; --mh: 0px; position: relative; height: 340px; overflow: hidden; background:
+  radial-gradient(120% 90% at 50% 0%, rgba(var(--green-bright-rgb), 0.12), transparent 60%),
+  repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 22px); }
+/* the mascot's zone: a column on the left (wide) or a band on top (narrow). --mw / --mh = what the scenes leave free */
+.hx.has-mascot .hx-stage { --mw: clamp(170px, 36%, 240px); }
+.hx-mascot { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mw); display: none; pointer-events: none;
+  background: radial-gradient(70% 55% at 50% 45%, rgba(var(--green-bright-rgb), 0.1), transparent 72%); border-right: 1px solid rgba(255, 255, 255, 0.06); }
+.hx.has-mascot .hx-mascot { display: block; }
+/* his canvas covers the whole stage, so the confetti and the rays of his burst reach over the scenes too */
+.hx-cv { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; display: none; pointer-events: none; }
+.hx.has-mascot .hx-cv { display: block; }
+.hx-cv.idle { animation: hx-sway 3.2s ease-in-out infinite; }
+/* a scene waits on the right, plays in the middle and leaves to the left */
+.hx-scene { position: absolute; inset: var(--mh) 0 0 var(--mw); display: grid; align-content: center; justify-items: center; gap: 14px; padding: 16px 18px;
+  opacity: 0; visibility: hidden; transform: translate3d(34px, 0, 0) scale(0.97); transition: opacity 0.34s var(--ease), transform 0.34s var(--ease), visibility 0s 0.34s; }
+.hx-scene.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.34s var(--ease), transform 0.34s var(--ease); }
+.hx-scene.out { transform: translate3d(-34px, 0, 0) scale(0.97); }
+.hx-cap { margin: 0; max-width: 36ch; text-align: center; font-size: 0.92rem; font-weight: 600; color: var(--text); }
+
+/* things inside a scene come in one after the other (--i = their turn) */
+/* (a scene that is leaving keeps its things in place, so the two scenes cross-fade without an empty moment) */
+.hx-scene:not(.on):not(.out) [data-in] { opacity: 0; transform: translate3d(0, 14px, 0); }
+.hx-scene.on [data-in] { opacity: 1; transform: none; transition: opacity 0.3s var(--ease) calc(0.08s + var(--i, 0) * 0.07s), transform 0.38s var(--ease) calc(0.08s + var(--i, 0) * 0.07s); }
+
+.hx-chip { display: inline-block; padding: 6px 10px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.9rem; white-space: nowrap; color: #000; background: var(--green-bright); border-radius: 6px; }
+.hx-chip.gold { background: var(--gold); }
+.hx-pop { opacity: 0; transform: scale(0.3); }
+.hx-pop.show { opacity: 1; transform: none; transition: opacity 0.18s, transform 0.42s cubic-bezier(0.3, 1.7, 0.5, 1); }
+
+/* 1 · profile */
+.hx-profile { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #000; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
+.hx-avatar { width: 48px; height: 48px; flex: none; display: grid; place-items: center; font: italic 800 1.4rem/1 var(--display); color: #000; background: var(--green-bright); border-radius: 12px; }
+.hx-who { display: grid; min-width: 0; line-height: 1.25; }
+.hx-who small { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+
+/* 2 · coaches */
+.hx-coaches { display: flex; gap: 12px; }
+.hx-coach { position: relative; display: grid; justify-items: center; gap: 6px; padding: 10px 12px; min-width: 84px; background: #000; border: 2px solid var(--line); border-radius: 14px; }
+.hx-coach img { width: 56px; height: 56px; object-fit: cover; object-position: center 20%; border-radius: 50%; }
+.hx-coach b { font-size: 0.8rem; }
+.hx-coach::after { content: "✓"; position: absolute; top: -9px; right: -9px; width: 24px; height: 24px; display: grid; place-items: center; font-size: 0.8rem; font-weight: 800; color: #000; background: var(--green-bright); border-radius: 50%; opacity: 0; transform: scale(0.3); transition: opacity 0.15s, transform 0.4s cubic-bezier(0.3, 1.7, 0.5, 1); }
+.hx-coach.picked { border-color: var(--green-bright); box-shadow: 0 0 22px rgba(var(--green-bright-rgb), 0.35); transition: border-color 0.2s, box-shadow 0.3s; }
+.hx-coach.picked::after { opacity: 1; transform: none; }
+
+/* 3 · booking */
+.hx-slots { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.hx-day { padding: 8px 10px; font-family: var(--display); font-style: italic; font-size: 0.85rem; text-transform: uppercase; color: var(--muted); }
+.hx-slots span { padding: 8px 12px; font-weight: 700; font-size: 0.9rem; color: var(--green-bright); background: #000; border: 1px solid rgba(var(--green-bright-rgb), 0.45); border-radius: 8px; }
+.hx-slots span.picked { color: #000; background: var(--green-bright); border-color: var(--green-bright); box-shadow: 0 0 20px rgba(var(--green-bright-rgb), 0.45); transition: background 0.2s, color 0.2s, box-shadow 0.3s; }
+.hx-ticket { padding: 8px 14px; font-weight: 700; color: #000; background: var(--gold); border-radius: 99px; }
+
+/* 4 · train and level up */
+.hx-gains { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.hx-gain { display: grid; justify-items: center; gap: 5px; padding: 9px 12px; min-width: 104px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
+.hx-gain small { font-size: 0.72rem; color: var(--muted); }
+.hx-levelup { position: absolute; inset: var(--mh) 0 0 var(--mw); z-index: 4; display: grid; place-items: center; pointer-events: none; opacity: 0; }
+.hx-levelup b { padding: 10px 22px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(1.5rem, 5vw, 2.1rem); text-transform: uppercase; color: #000; background: var(--gold); transform: skewX(-8deg); box-shadow: 0 0 0 4px #000, 0 0 44px rgba(255, 210, 63, 0.6); }
+
+/* 5 · the high scores: rows are stacked with transforms, so a climb is one smooth slide */
+.hx-board { position: relative; width: min(100%, 300px); height: 132px; }
+.hx-row { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 0 10px; font-size: 0.85rem; background: #000; border: 1px solid var(--line); border-radius: 8px;
+  transform: translate3d(0, calc(var(--pos) * var(--pitch, 34px)), 0); transition: transform 0.6s cubic-bezier(0.3, 1.25, 0.5, 1), border-color 0.3s, box-shadow 0.3s; }
+.hx-board.jump .hx-row { transition: none; }
+.hx-row i { font: italic 800 0.9rem/1 var(--display); color: var(--muted); }
+.hx-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-row em { font: italic 800 0.8rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.hx-row.me { z-index: 2; border-color: var(--green-bright); box-shadow: 0 0 18px rgba(var(--green-bright-rgb), 0.35); }
+.hx-row.me b { color: var(--green-bright); }
+.hx-row .hx-heart { position: absolute; right: -8px; top: -10px; width: 22px; height: 22px; display: grid; place-items: center; font-size: 0.72rem; color: #fff; background: #ff4d6d; border-radius: 50%; }
+.hx-up { position: absolute; right: 24px; top: -13px; padding: 2px 7px; font: italic 800 0.72rem/1.4 var(--display); color: #000; background: var(--green-bright); border-radius: 6px; }
+
+/* 6 · the shop */
+.hx-shop { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #000; border: 1px solid var(--line); border-radius: 14px; }
+.hx-shop-ico { width: 52px; height: 52px; flex: none; display: grid; place-items: center; font-size: 1.7rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; }
+.hx-shop div { display: grid; gap: 2px; min-width: 0; line-height: 1.25; }
+.hx-shop small { color: var(--muted); font-size: 0.78rem; }
+.hx-buy { flex: none; padding: 7px 12px; font: italic 800 0.8rem/1.3 var(--display); text-transform: uppercase; color: #000; background: var(--green-bright); border-radius: 8px; transition: background 0.2s; }
+.hx-buy.done { background: var(--gold); }
+
+/* the finger: a ring where the demo "taps" */
+.hx-tap { position: absolute; left: 0; top: 0; z-index: 5; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid #fff; border-radius: 50%; background: rgba(255, 255, 255, 0.18); opacity: 0; pointer-events: none; }
+/* the mouse: an arrow whose tip is the spot (wide), or a round touch dot (narrow) */
+.hx-cursor { position: absolute; left: 0; top: 0; z-index: 7; width: 0; height: 0; opacity: 0; pointer-events: none; will-change: transform;
+  transition: transform 0ms cubic-bezier(0.45, 0.05, 0.25, 1), opacity 220ms; }
+.hx-cursor.on { opacity: 1; }
+.hx-cursor svg { position: absolute; left: -3px; top: -2px; width: 24px; height: 28px; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); transform-origin: 3px 2px; transition: transform 0.1s; }
+.hx-cursor i { display: none; position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border: 2px solid #fff; border-radius: 50%; background: rgba(255, 255, 255, 0.3); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); transition: transform 0.1s; }
+.hx-cursor.press svg { transform: scale(0.8); }
+.hx-cursor.press i { transform: scale(0.72); }
+/* an XP chip on its way to the bar */
+.hx-fly { position: absolute; left: 0; top: 0; z-index: 6; opacity: 0; pointer-events: none; will-change: transform; }
+
+.hx-xp { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); background: rgba(0, 0, 0, 0.45); }
+.hx-lvl { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.95rem; }
+.hx-lvl b { display: inline-block; color: var(--gold); }
+.hx-bar { height: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); border-radius: 99px; }
+.hx-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; transform-origin: left center; transform: scaleX(0); transition: transform 0.5s var(--ease); }
+.hx-bar i.jump { transition: none; }
+.hx-num { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hx.up .hx-lvl b { animation: hx-bump 0.6s; }
+.hx.up .hx-xp { animation: hx-flash 0.7s; }
+.hx.hit .hx-bar { animation: hx-hit 0.3s; }
+
+.hx-steps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hx-steps li { flex: 1 1 0; min-width: 0; }
+.hx-steps button { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 100%; min-height: 46px; padding: 8px 6px; overflow: hidden; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+.hx-steps .step-no { flex: none; width: 28px; height: 28px; font-size: 0.7rem; }
+.hx-steps li:last-child .step-no { background: var(--gold); }
+.hx-steps b { white-space: nowrap; font-family: var(--display); font-size: 0.62rem; font-style: italic; font-weight: 800; text-transform: uppercase; line-height: 1.5; font-size-adjust: cap-height 1.24; }
+.hx-steps button > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--green-bright); transform-origin: left center; transform: scaleX(0); }
+.hx-steps button[aria-current="step"] { color: var(--text); border-color: var(--green-bright); }
+.hx-steps button[aria-current="step"] > i { transform: none; }
+.hx.playing .hx-steps button[aria-current="step"] > i { animation: hx-line var(--hx-dur) linear both; }
+@media (hover: hover) { .hx-steps button:hover { border-color: var(--green); } }
+/* only the step that plays shows its name: it grows, the others are their number */
+.hx-steps b { display: none; }
+.hx-steps li.now { flex-grow: 2.4; }
+.hx-steps li.now b { display: block; }
+/* (the step that plays takes its room at once and pops: its name is never cut off halfway) */
+.hx.playing .hx-steps li.now button { animation: hx-step 0.32s var(--ease); }
+/* The layout follows the demo's own width (a container query), not the screen's: on a computer it sits in half
+   the page. Tight: the things in the scenes get a little smaller. Narrow: the mascot moves from the left of the
+   scenes to a band above them. */
+@container hx (max-width: 620px) {
+  .hx-scene { padding: 14px 12px; }
+  .hx-profile { gap: 10px; padding: 10px 12px; max-width: 100%; }
+  .hx-avatar { width: 42px; height: 42px; font-size: 1.2rem; }
+  .hx-who small { font-size: 0.72rem; }
+  .hx-profile .hx-chip { padding: 5px 8px; font-size: 0.82rem; }
+  .hx-shop { gap: 10px; max-width: 100%; }
+  .hx-coach { min-width: 0; padding: 9px 9px; }
+  .hx-coaches { gap: 8px; }
+  .hx-slots { gap: 6px; flex-wrap: nowrap; }
+  .hx-slots span { padding: 7px 8px; font-size: 0.84rem; }
+  .hx-day { padding: 7px 4px; }
 }
-@keyframes hw-line { from { width: 0; } to { width: 100%; } }
-@keyframes hw-rise { from { opacity: 0; transform: translateY(14px); } }
-@keyframes hw-pop { 0% { opacity: 0; transform: scale(0.3); } 70% { opacity: 1; transform: scale(1.18); } 100% { opacity: 1; transform: none; } }
-@keyframes hw-pick { 0% { border-color: var(--line); box-shadow: none; transform: none; } 50% { transform: scale(1.08); } 100% { transform: none; } }
-@keyframes hw-choose { 0% { color: var(--green-bright); background: #000; box-shadow: none; transform: none; } 45% { transform: scale(1.16); } 100% { transform: none; } }
-@keyframes hw-drop { 0% { opacity: 0; transform: translateY(-18px) scale(0.9); } 60% { opacity: 1; transform: translateY(3px); } 100% { opacity: 1; transform: none; } }
-@keyframes hw-burst { 0% { opacity: 0; transform: scale(0.5); } 18% { opacity: 1; transform: scale(1.08); } 30% { transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: scale(1.04); } }
-@keyframes hw-bump { 40% { transform: scale(1.7); } }
-@keyframes hw-flash { 30% { background: rgba(255, 210, 63, 0.28); } }
-@media (max-width: 640px) {
-  .howto-stage { height: 216px; }
-  .hw-profile { gap: 10px; padding: 10px 12px; }
-  .hw-avatar { width: 42px; height: 42px; font-size: 1.2rem; }
-  .hw-who small { font-size: 0.72rem; }
-  .hw-coach { min-width: 0; padding: 8px 9px; }
-  .hw-coach img { width: 48px; height: 48px; }
-  .hw-gains { flex-wrap: nowrap; align-items: stretch; gap: 6px; }
-  .hw-gain { flex: 1 1 0; min-width: 0; padding: 7px 5px; text-align: center; }
-  .hw-gain small { font-size: 0.66rem; line-height: 1.25; }
-  .hw-slots { flex-wrap: nowrap; gap: 6px; }
-  .hw-slots span { padding: 7px 8px; font-size: 0.82rem; }
-  .hw-day { padding: 7px 4px; }
-  .howto-steps { gap: 6px; }
-  .howto-steps button { padding: 10px 4px 12px; }
-  .howto-steps b { font-size: 0.55rem; }
+@container hx (max-width: 460px) {
+  .hx-scene { gap: 10px; }
+  .hx-board { --pitch: 30px; height: 116px; }
+  .hx-row { height: 26px; font-size: 0.8rem; }
+  .hx-cap { font-size: 0.88rem; }
+  .hx-steps { gap: 5px; }
+  .hx-steps li.now { flex-grow: 3.6; }
+  .hx-steps button { gap: 6px; padding: 8px 4px; }
+  .hx-stage { height: 250px; }
+  .hx.has-mascot .hx-stage { --mw: 0px; --mh: 264px; height: 490px; }
+  .hx-mascot { right: 0; bottom: auto; width: auto; height: var(--mh); border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+}
+/* a shorter phone screen: a smaller mascot, so the whole demo still fits on it */
+@media (max-height: 790px) { @container hx (max-width: 460px) { .hx.has-mascot .hx-stage { --mh: 222px; height: 446px; } } }
+@media (max-height: 720px) { @container hx (max-width: 460px) { .hx.has-mascot .hx-stage { --mh: 160px; height: 374px; } } }
+/* a touch screen: the mouse is a round touch dot */
+@media (pointer: coarse) {
+  .hx-cursor svg { display: none; }
+  .hx-cursor i { display: block; }
+}
+
+@keyframes hx-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(1.1deg); } 75% { transform: rotate(-1.1deg); } }
+@keyframes hx-step { from { transform: scale(0.9); opacity: 0.6; } }
+@keyframes hx-line { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes hx-bump { 0%, 100% { transform: none; } 40% { transform: scale(1.7); } }
+@keyframes hx-flash { 0%, 100% { background: rgba(0, 0, 0, 0.45); } 35% { background: rgba(var(--green-bright-rgb), 0.3); } }
+@keyframes hx-hit { 0%, 100% { transform: none; } 40% { transform: scaleY(1.5); } }
+
+/* no motion wanted: scenes simply swap, nothing flies */
+@media (prefers-reduced-motion: reduce) {
+  .hx-scene, .hx-scene.on, .hx-scene [data-in], .hx-scene.on [data-in], .hx-pop.show, .hx-row, .hx-bar i { transition: none; }
+  .hx.up .hx-lvl b, .hx.up .hx-xp, .hx.hit .hx-bar, .hx-cv.idle { animation: none; }
+  .hx-cursor { display: none; }
 }
 
 .quest-steps h3 { font-family: var(--display); font-size: 0.72rem; margin-bottom: 8px; text-transform: uppercase; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
@@ -1219,6 +1288,26 @@ textarea { resize: vertical; min-height: 130px; }
   line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
 }
 .xp-chip.gold { background: var(--gold); }
+/* The XP table comes alive when it shows (script.js, xpTable): the rows slide in one after the other, the numbers
+   count up, the ranks light up from Rookie to Legend, and after that one row at a time gives off its XP.
+   (translate / scale as their own properties, so the chips keep their slant.) */
+.xp-rules li { transition: border-color 0.2s, translate 0.2s; }
+.xp-rules .xp-chip { position: relative; }
+@media (hover: hover) { .xp-rules li:hover { border-color: var(--green-bright); translate: 0 -2px; } }
+@media (prefers-reduced-motion: no-preference) {
+  .xp-board.play .xp-rules li { animation: xp-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .xp-board.play .xp-rules .xp-chip { animation: xp-pop 0.45s cubic-bezier(0.3, 1.7, 0.5, 1) both; animation-delay: calc(var(--i, 0) * 70ms + 160ms); }
+  .xp-board.play .rank-strip li { animation: xp-rank 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(560ms + var(--i, 0) * 90ms); }
+  .xp-rules li.hit { border-color: var(--green-bright); }
+  .xp-board.play .xp-rules li.hit .xp-chip { animation: xp-bounce 0.6s; }
+  .xp-rules li.hit .xp-chip::after { content: attr(data-gain); position: absolute; left: 50%; bottom: 100%; padding: 0 4px; white-space: nowrap; color: var(--green-bright); text-shadow: 0 1px 0 #000, 0 0 10px rgba(0, 0, 0, 0.9); pointer-events: none; animation: xp-float 0.95s ease-out both; }
+  .xp-rules li.hit .xp-chip.gold::after { color: var(--gold); }
+}
+@keyframes xp-in { from { opacity: 0; translate: -18px 0; } }
+@keyframes xp-pop { 0% { scale: 0.3; } 70% { scale: 1.15; } 100% { scale: 1; } }
+@keyframes xp-rank { from { opacity: 0; translate: 0 10px; } 60% { filter: brightness(1.7); } }
+@keyframes xp-bounce { 30% { scale: 1.18; } 60% { scale: 0.96; } }
+@keyframes xp-float { from { opacity: 0; translate: -50% 4px; } 25% { opacity: 1; } to { opacity: 0; translate: -50% -22px; } }
 
 .save-stats {
   display: flex;

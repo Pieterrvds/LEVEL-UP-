@@ -173,10 +173,20 @@ behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplas
 Studio, made black and white). The chat page has one too: a running track in a stadium (`img/chat-bg.jpg`,
 `img/chat-bg-small.jpg`: a free photo from Unsplash by Anisa Ryanda Putri, made black and white), with the chat as the see-through layer.
 How dark it all is sits in one place, at the top of that block in `style.css`: `--photo-o` (how strong the photo
-shows) and `--layer-o` / `--layer-alt-o` (how solid the sections over it are). Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
-four scenes (sign up +50 XP, pick a trainer, book an hour, train and level up) with an XP bar that follows the
-real XP rules. It plays only while it is on screen, a tap on a step jumps to that scene, and with "reduce motion"
-on it doesn't play by itself.
+shows) and `--layer-o` / `--layer-alt-o` (how solid the sections over it are). Level 1 · How it works is an animated demo on a loop (`#howto`, `howItWorks` in `script.js`, `.hx-…` in `style.css`):
+six scenes (profile +50 XP, pick a coach, book an hour, train and level up, climb the high scores, the shop) in
+14 seconds, with an XP bar that follows the real XP rules, a mouse that clicks what gets clicked (a touch dot on
+touch screens) and a mascot: the gymnast of the celebration (`levelup-celebrate.js`, loaded the first time the
+demo is on screen and not changed) hangs on his rings next to the scenes, does a rep when something good happens,
+does his muscle-up with the celebration's own confetti and rays at the moment of the level-up, and drops into
+the cross while the demo player climbs the high scores. The pace is one number (`SLOW` in `howItWorks`). The
+layout follows the demo's own width (a container query): mascot left of the scenes, or in a band above them
+when it is narrow. It plays only while it is on screen, a tap on a step jumps to that scene, with "reduce motion"
+nothing plays by itself (the mascot hangs still), and without the celebration file the demo plays without him.
+
+The XP table under it comes alive when it shows (`xpTable` in `script.js`): the rows slide in one after the other,
+the numbers count up, the ranks light up from Rookie to Legend, and after that one row at a time gives off its XP
+while the table is on screen. Not with "reduce motion".
 
 On phones the classes (Level 2) and team (Level 3) are swipe rows that glide to the left in an
 endless loop (`loopRows` in `script.js`): each row gets one copy of its cards, and when the first set has passed it
