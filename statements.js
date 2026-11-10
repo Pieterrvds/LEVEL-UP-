@@ -96,8 +96,16 @@ window.LevelUpStatements = (() => {
   // The week/month overview table (admin export)
   function overviewCsv(filename, rows) {
     download(filename,
-      ["Period", "From", "To", "Charged sessions", "Session revenue", "Trainer fees", "Your share", "Packs sold"],
-      rows.map((r) => [r.label, r.from, r.to, r.sessions, csvNumber(r.revenue), csvNumber(r.fees), csvNumber(r.share), csvNumber(r.packs)]));
+      ["Period", "From", "To", "Charged sessions", "Session revenue", "Trainer fees", "Room rental", "Your share", "Packs sold"],
+      rows.map((r) => [r.label, r.from, r.to, r.sessions, csvNumber(r.revenue), csvNumber(r.fees), csvNumber(r.rent || 0), csvNumber(r.share), csvNumber(r.packs)]));
+  }
+
+  // The room rentals of a period (admin export)
+  function rentalsCsv(filename, rentals) {
+    download(filename,
+      ["Date", "From", "To", "Renter", "Contact", "What", "Hours", "Price per hour", "Total", "Paid on", "Note"],
+      rentals.map((r) => [r.date, `${pad(r.start)}:00`, `${pad(r.end)}:00`, r.renter, r.contact || "", r.kind === "full" ? "Whole room" : "A place in the room",
+        r.hours, csvNumber(r.price), csvNumber(r.total), r.paidAt ? String(r.paidAt).slice(0, 10) : "", r.note || ""]));
   }
 
   // ---------- Printable statement (the browser's "Save as PDF") ----------
@@ -174,5 +182,5 @@ window.LevelUpStatements = (() => {
     overlay.querySelector("[data-stmt-print]").focus();
   }
 
-  return { monthRange, recentMonths, build, statementCsv, statementPdf, sessionsCsv, overviewCsv, BILLABLE };
+  return { monthRange, recentMonths, build, statementCsv, statementPdf, sessionsCsv, overviewCsv, rentalsCsv, BILLABLE };
 })();

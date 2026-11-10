@@ -4964,7 +4964,8 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 
 -- Everything the "Gym room" tab shows: the settings, how the room was used per weekday and hour over the last
--- p_weeks full weeks (1:1 sessions, group classes in the room, rentals), and the rentals.
+-- p_weeks full weeks (1:1 sessions, group classes in the room, rentals), and the rentals (the last two years and
+-- everything unpaid: the Finances tab counts them per week and month).
 create or replace function public.admin_room(p_weeks integer default 8)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
@@ -5007,7 +5008,7 @@ begin
     'rentals', coalesce((
       select jsonb_agg(public._rental_json(r) order by r.day, r.start_hour, r.created_at)
       from public.room_rentals r
-      where r.day >= (now() at time zone 'Europe/Brussels')::date - 62 or (r.status = 'booked' and r.paid_at is null)), '[]'::jsonb));
+      where r.day >= (now() at time zone 'Europe/Brussels')::date - 800 or (r.status = 'booked' and r.paid_at is null)), '[]'::jsonb));
 end $$;
 
 -- Add a rental (or the same hours every week for a number of weeks). The room has to be free: a "whole room"

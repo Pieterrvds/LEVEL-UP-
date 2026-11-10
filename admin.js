@@ -42,12 +42,13 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop, room] = await Promise.all([
     LevelUp.adminData(),
     LevelUp.pushServerReady(),
     LevelUp.adminReviews().catch(() => []),
     LevelUp.classManageList(800).catch(() => []),
-    LevelUp.adminShop().catch(() => null)
+    LevelUp.adminShop().catch(() => null),
+    LevelUp.adminRoom().catch(() => null) // the room rentals, for the finances (null: database not updated yet)
   ]);
   // Finished group classes count in the finances as one line each: what the players were charged and the trainer's fee
   const classLines = classes.filter((c) => c.status === "done").map((c) => ({
@@ -79,6 +80,8 @@ async function loadData() {
     classes,
     shop: shop || { items: [], tabs: [], packs: [], gifts: [] },
     finLines: [...bookings, ...classLines],
+    // room rentals that stand (not cancelled); "past" = over, so it counts as income
+    rentals: (room?.rentals || []).filter((x) => x.status === "booked").map((x) => ({ ...x, hours: Number(x.hours), price: Number(x.price), total: Number(x.total) })),
     players: rows,
     members: rows.filter((p) => !p.admin),
     active: bookings.filter((b) => ["pending", "confirmed", "completed"].includes(b.status)),
@@ -364,9 +367,10 @@ function adminTabs() {
 }
 
 root.addEventListener("click", (event) => {
-  const tab = event.target.closest("[data-page-tab]");
+  // a tab, or a button elsewhere on the page that jumps to one (data-go-tab)
+  const tab = event.target.closest("[data-page-tab], [data-go-tab]");
   if (!tab) return;
-  state.tab = tab.dataset.pageTab;
+  state.tab = tab.dataset.pageTab || tab.dataset.goTab;
   LevelUp.showPageTab(root, state.tab);
   history.replaceState(null, "", `#${state.tab}`);
   if (state.tab === "overview") renderCharts(); // charts measure their width, which is 0 while hidden
@@ -463,7 +467,10 @@ function periodTotals(r) {
   const fees = done.filter((b) => b.trainerId !== owner).reduce((s, b) => s + b.trainerFee, 0);
   const packs = data.packs.filter((pk) => pk.status === "paid" && inRange(packDay(pk), r)).reduce((s, pk) => s + pk.price, 0);
   const free = done.filter((b) => b.priceType === "reward").length;
-  return { ...r, done, sessions: done.length, free, revenue, fees, share: revenue - fees, packs };
+  // room rental: the rentals that are over, by their date. All of it is yours.
+  const rented = data.rentals.filter((x) => x.past && inRange(x.date, r));
+  const rent = rented.reduce((s, x) => s + x.total, 0);
+  return { ...r, done, sessions: done.length, free, revenue, fees, rented, rent, rentHours: rented.reduce((s, x) => s + x.hours, 0), share: revenue - fees + rent, packs };
 }
 
 // Per trainer: the period's sessions, plus what is owed right now (all time)
@@ -499,7 +506,7 @@ function financeRows(r) {
 // Rows of the overview table: the 12 weeks/months up to the selected one (all time: every month)
 function overviewRows() {
   const { mode, offset } = state.fin;
-  const first = [...data.finLines.map((b) => b.date), ...data.packs.map(packDay)].filter(Boolean).sort()[0] || LevelUp.dateKey();
+  const first = [...data.finLines.map((b) => b.date), ...data.packs.map(packDay), ...data.rentals.map((x) => x.date)].filter(Boolean).sort()[0] || LevelUp.dateKey();
   // no rows before LEVEL-UP's first booking (the selected period always shows)
   const keep = (rows) => rows.filter((o, i) => i === 0 || o.to >= first);
   if (mode === "week") return keep(Array.from({ length: 12 }, (_, i) => periodTotals(periodRange("week", offset - i))));
@@ -523,6 +530,16 @@ function renderFinances() {
   const unusedCredits = paidPacks.reduce((n, pk) => n + pk.remaining, 0);
   const collect = data.rawBookings.filter(toCollect);
   const refundsOpen = data.rawBookings.filter((b) => b.refundStatus === "manual");
+  const rentOpen = data.rentals.filter((x) => x.past && !x.paidAt);                 // rented hours that are over and not paid
+  const rentOpenTotal = rentOpen.reduce((s, x) => s + x.total, 0);
+  const rentAhead = data.rentals.filter((x) => !x.past).reduce((s, x) => s + x.total, 0);
+  const collectTotal = collect.reduce((s, b) => s + b.price, 0) + rentOpenTotal;
+  // per renter: this period, and what is open right now
+  const renters = [...new Set([...period.rented, ...rentOpen].map((x) => x.renter))].sort((a, b) => a.localeCompare(b)).map((name) => {
+    const mine = period.rented.filter((x) => x.renter === name);
+    return { name, hours: mine.reduce((s, x) => s + x.hours, 0), total: mine.reduce((s, x) => s + x.total, 0),
+      paid: mine.filter((x) => x.paidAt).reduce((s, x) => s + x.total, 0), open: rentOpen.filter((x) => x.renter === name).reduce((s, x) => s + x.total, 0) };
+  });
   const overview = overviewRows();
   const months = LevelUpStatements.recentMonths(13);
   const statementMonth = state.fin.statementMonth || (mode === "month" ? period.from.slice(0, 7) : months[0]);
@@ -551,14 +568,15 @@ function renderFinances() {
     <div class="finance-kpis">
       ${tile("Session revenue", money(period.revenue), `${plural(period.sessions, "charged session")}${period.free ? ` · ${period.free} free (reward)` : ""}`)}
       ${tile("Trainer fees", money(period.fees), "Earned by the trainers")}
-      ${tile("Your share", money(period.share), "Venue share + your own sessions", "good")}
+      ${tile("Room rental", money(period.rent), period.rentHours ? `${plural(period.rentHours, "hour")} rented out` : "No rental in this period")}
+      ${tile("Your share", money(period.share), "Venue share + your own sessions + room rental", "good")}
       ${tile("Packs sold", money(period.packs), "Paid up front (their sessions count at pack price)")}
     </div>
     <p class="kpi-caption">Right now</p>
     <div class="finance-kpis">
       ${tile("Owed to trainers", money(owed), owed ? "Pay out below" : "All trainers are paid", owed ? "warn" : "")}
-      ${tile("To collect", money(collect.reduce((s, b) => s + b.price, 0)), collect.length ? `${plural(collect.length, "session")} not paid yet (HQ)` : "Everything is paid", collect.length ? "warn" : "")}
-      ${tile("Booked ahead", money(pipeline), "Pending + confirmed upcoming sessions")}
+      ${tile("To collect", money(collectTotal), [collect.length ? `${plural(collect.length, "session")} not paid yet (HQ)` : "", rentOpenTotal ? `${money(rentOpenTotal)} room rental` : ""].filter(Boolean).join(" · ") || "Everything is paid", collectTotal ? "warn" : "")}
+      ${tile("Booked ahead", money(pipeline + rentAhead), `Pending + confirmed upcoming sessions${rentAhead ? ` · ${money(rentAhead)} room rental` : ""}`)}
       ${tile("Unused credits", String(unusedCredits), `${plural(paidPacks.length, "pack")} sold in total`)}
     </div>
 
@@ -588,18 +606,38 @@ function renderFinances() {
     })()}
 
     <div class="fin-sub-head">
+      <h3 class="panel-sub">Room rental</h3>
+      <span class="btn-row">
+        ${period.rented.length ? `<button type="button" class="btn btn-small btn-ghost" data-export="rentals">Download rentals (CSV)</button>` : ""}
+        <button type="button" class="btn btn-small btn-ghost" data-go-tab="room">Manage in Gym room ▸</button>
+      </span>
+    </div>
+    ${renters.length ? `<div class="table-wrap">
+      <table class="data-table rent-table">
+        <thead><tr><th>Renter</th><th class="num">Hours</th><th class="num">Rental</th><th class="num">Paid</th><th class="num">Open now</th></tr></thead>
+        <tbody>${renters.map((x) => `
+          <tr><td>${esc(x.name)}</td><td class="num">${x.hours || `<span class="muted">0</span>`}</td><td class="num">${money(x.total)}</td><td class="num">${money(x.paid)}</td><td class="num ${x.open ? "owed" : ""}">${money(x.open)}</td></tr>`).join("")}
+          <tr class="total-row"><td>Total</td><td class="num">${period.rentHours}</td><td class="num">${money(period.rent)}</td><td class="num">${money(renters.reduce((t, x) => t + x.paid, 0))}</td><td class="num">${money(rentOpenTotal)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Hours, rental and paid are the rented hours that are over in ${esc(period.label.toLowerCase() === "all time" ? "all time" : period.label)}; "Open now" is everything that renter still has to pay. Mark payments in the Gym room tab.</p>`
+      : `<p class="muted">No room rental in this period${rentAhead ? ` (${money(rentAhead)} is planned ahead)` : ""}.</p>`}
+
+    <div class="fin-sub-head">
       <h3 class="panel-sub">Overview per ${mode === "week" ? "week" : "month"}</h3>
       <button type="button" class="btn btn-small btn-ghost" data-export="overview">Download overview (CSV)</button>
     </div>
     <div class="table-wrap">
       <table class="data-table overview-table">
-        <thead><tr><th>${mode === "week" ? "Week" : "Month"}</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer fees</th><th class="num">Your share</th><th class="num">Packs sold</th></tr></thead>
+        <thead><tr><th>${mode === "week" ? "Week" : "Month"}</th><th class="num">Sessions</th><th class="num">Revenue</th><th class="num">Trainer fees</th><th class="num">Room rental</th><th class="num">Your share</th><th class="num">Packs sold</th></tr></thead>
         <tbody>${overview.map((o, i) => `
           <tr class="${i === 0 && mode !== "all" ? "current" : ""}">
             <td class="nowrap">${esc(mode === "week" ? o.label.split(" · ")[0] + " · " + o.label.split(" · ")[1] : o.label)}</td>
             <td class="num">${o.sessions || `<span class="muted">0</span>`}</td>
             <td class="num">${money(o.revenue)}</td>
             <td class="num">${money(o.fees)}</td>
+            <td class="num">${money(o.rent)}</td>
             <td class="num">${money(o.share)}</td>
             <td class="num">${money(o.packs)}</td>
           </tr>`).join("")}
@@ -608,6 +646,7 @@ function renderFinances() {
             <td class="num">${overview.reduce((s, o) => s + o.sessions, 0)}</td>
             <td class="num">${money(overview.reduce((s, o) => s + o.revenue, 0))}</td>
             <td class="num">${money(overview.reduce((s, o) => s + o.fees, 0))}</td>
+            <td class="num">${money(overview.reduce((s, o) => s + o.rent, 0))}</td>
             <td class="num">${money(overview.reduce((s, o) => s + o.share, 0))}</td>
             <td class="num">${money(overview.reduce((s, o) => s + o.packs, 0))}</td>
           </tr>
@@ -1385,6 +1424,8 @@ root.addEventListener("click", (event) => {
     if (exportBtn.dataset.export === "sessions") {
       LevelUpStatements.sessionsCsv(`level-up-sessions-${tag}.csv`,
         [...period.done].sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour)), data.pricing.ownerTrainerId);
+    } else if (exportBtn.dataset.export === "rentals") {
+      LevelUpStatements.rentalsCsv(`level-up-room-rental-${tag}.csv`, [...period.rented].sort((a, b) => (a.date + String(a.start).padStart(2, "0")).localeCompare(b.date + String(b.start).padStart(2, "0"))));
     } else {
       LevelUpStatements.overviewCsv(`level-up-overview-per-${state.fin.mode === "week" ? "week" : "month"}.csv`,
         overviewRows().map((o) => ({ ...o, label: o.label })));

@@ -598,7 +598,7 @@ const LevelUp = (() => {
   const adminRoom = (weeks = 8) => call("admin_room", { p_weeks: weeks });
   const adminRentalAdd = async (p) => { const r = await call("admin_rental_add", { p }); await loadSlots(); emit(); return r; };
   const adminRentalCancel = async (id, series = false) => { const r = await call("admin_rental_cancel", { p_id: id, p_series: series }); await loadSlots(); emit(); return r; };
-  const adminRentalPaid = (id, paid = true, all = false) => call("admin_rental_paid", { p_id: id, p_paid: paid, p_all: all });
+  const adminRentalPaid = async (id, paid = true, all = false) => { const r = await call("admin_rental_paid", { p_id: id, p_paid: paid, p_all: all }); emit(); return r; };
   const adminRoomSettings = async (p) => { await call("admin_room_settings", { p }); await loadSlots(); emit(); };
   async function classCreate(p) {
     const r = await call("class_create", { p });

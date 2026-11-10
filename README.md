@@ -239,7 +239,9 @@ There is one room (12 m × 12 m), and the app now knows it. Rules, all checked o
 - **Server:** table `room_rentals` (no direct access), column `class_sessions.uses_room`, `_room_load` (per hour:
   places used, whole room or not; feeds `slot_status` as trainer `*`), `_room_blocker` (what stands in the way),
   `admin_room`, `admin_rental_add`, `admin_rental_cancel`, `admin_rental_paid`, `admin_room_settings`.
-  Rental income is not in the Finances tab yet.
+- **In the Finances tab:** rentals that are over count as income on their date. A tile "Room rental" (and it is
+  part of "Your share"), a table per renter (hours, rental, paid, open now), a column in the week/month overview
+  and its CSV, "Download rentals (CSV)", unpaid rental in "To collect" and planned rental in "Booked ahead".
 
 ## Chat
 Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js`, `chat.css`).

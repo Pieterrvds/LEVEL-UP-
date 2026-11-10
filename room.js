@@ -119,7 +119,9 @@
   function listPanel() {
     const live = data.rentals.filter((r) => r.status === "booked");
     const coming = live.filter((r) => !r.past);
-    const done = live.filter((r) => r.past).reverse();
+    // over: the last two months and everything that is not paid yet (older paid ones are in Finances)
+    const recent = LevelUp.dateKey(new Date(Date.now() - 62 * 864e5));
+    const done = live.filter((r) => r.past && (r.date >= recent || !r.paidAt)).reverse();
     // what is still to collect, per renter (rentals that are over and not paid)
     const open = new Map();
     done.filter((r) => !r.paidAt).forEach((r) => { const o = open.get(r.renter) || { total: 0, hours: 0, id: r.id }; o.total += Number(r.total); o.hours += Number(r.hours); open.set(r.renter, o); });
