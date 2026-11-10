@@ -81,12 +81,13 @@ function classButton(c, cls = "slot") {
 // ---------- Trainer filter ----------
 function renderFilter() {
   const tabs = [{ id: "all", short: "All trainers" }, ...TRAINERS];
-  // Phones show the round photo; bigger screens the colour dot and name
+  // The coach's photo with a ring in their colour (the colour of their hours on the board) and their name;
+  // on phones the photo is bigger and the name sits under it
   trainerFilter.innerHTML = tabs.map((t) => `
     <button type="button" role="tab" data-trainer="${t.id}" aria-selected="${t.id === activeTrainer}"
       ${t.color ? `style="--c:${t.color}"` : ""}>
       <span class="filter-face" aria-hidden="true">${t.img ? `<img src="${t.img}" alt="">` : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.6-3.6 3-5.4 6-5.4s5.4 1.8 6 5.4M15 14.6c2.6 0 4.6 1.4 5.2 4.4"/></svg>`}</span>
-      ${t.color ? `<span class="dot" aria-hidden="true"></span>` : ""}<span class="filter-name">${esc(t.id === "all" ? "All" : t.short)}</span><span class="filter-name-long">${esc(t.short)}</span>
+      <span class="filter-name">${esc(t.id === "all" ? "All" : t.short)}</span><span class="filter-name-long">${esc(t.short)}</span>
     </button>`).join("");
 }
 
@@ -949,7 +950,9 @@ function renderDynamicTeam() {
     card.style.setProperty("--c", t.color);
     const chips = String(t.specialties || "").split(/[,·]/).map((x) => x.trim()).filter(Boolean).slice(0, 4);
     card.innerHTML = `
-      <div class="team-photo-wrap"><div class="team-photo team-photo-new" aria-hidden="true"><span>${esc(t.short.charAt(0).toUpperCase())}</span></div><span class="team-spots" data-team-spots="${t.id}" hidden></span></div>
+      <div class="team-photo-wrap">${t.img && t.img !== t.defaultImg
+        ? `<img src="${esc(t.img)}" alt="${esc(t.name)}" class="team-photo" loading="lazy">`
+        : `<div class="team-photo team-photo-new" aria-hidden="true"><span>${esc(t.short.charAt(0).toUpperCase())}</span></div>`}<span class="team-spots" data-team-spots="${t.id}" hidden></span></div>
       <div class="team-body">
         <p class="team-role">${esc(t.role)}</p>
         <h3>${esc(t.name)}</h3>

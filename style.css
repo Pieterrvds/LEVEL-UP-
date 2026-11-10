@@ -452,7 +452,7 @@ a { color: inherit; }
 /* Home page and shop: a photo that hangs still behind the whole page. The hero text and every section after it
    slide over it as a second layer: the sections are dark glass (you keep seeing the photo through them), the
    cards on them are solid. The photo is a layer fixed to the screen (works on iPhones too, where
-   background-attachment: fixed doesn't). Home: a CrossFit box; shop: shelves full of supplements.
+   background-attachment: fixed doesn't). Home: a CrossFit box; shop: racks full of dumbbells.
    Photos: Unsplash (free licence), see README.md. The rank colour glow of .hero-bg stays underneath. */
 #home.hero, .shop-hero { isolation: auto; }
 #home .hero-bg, .shop-hero .hero-bg { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
@@ -463,7 +463,7 @@ a { color: inherit; }
   background: url(img/hero-box.jpg) center / cover no-repeat;
   opacity: 0.5;
 }
-.shop-hero .hero-bg::before { background-image: url(img/shop-bg.jpg); opacity: 0.42; }
+.shop-hero .hero-bg::before { background-image: url(img/shop-bg.jpg?v=2); opacity: 0.62; }
 /* the hero's own shade: dark behind the text (left), the photo clear on the right; it scrolls away with the hero */
 #home.hero, .shop-hero { background: linear-gradient(90deg, rgba(var(--bg-rgb), 0.94) 8%, rgba(var(--bg-rgb), 0.6) 46%, rgba(var(--bg-rgb), 0.12) 78%); }
 /* the second layer */
@@ -472,7 +472,7 @@ a { color: inherit; }
 #home ~ .vine-divider, .shop-hero ~ .vine-divider { position: relative; opacity: 1; box-shadow: 0 -28px 46px rgba(0, 0, 0, 0.5); }
 @media (max-width: 700px) {
   #home .hero-bg::before { background-image: url(img/hero-box-small.jpg); opacity: 0.4; }
-  .shop-hero .hero-bg::before { background-image: url(img/shop-bg-small.jpg); opacity: 0.36; }
+  .shop-hero .hero-bg::before { background-image: url(img/shop-bg-small.jpg?v=2); opacity: 0.52; }
   #home.hero, .shop-hero { background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.72) 60%, rgba(var(--bg-rgb), 0.82)); }
 }
 
@@ -716,7 +716,17 @@ a { color: inherit; }
   gap: clamp(32px, 6vw, 80px);
   align-items: center;
 }
-.about-grid > div > p { color: var(--muted); }
+.about-grid > div > p, .about-more > p { color: var(--muted); }
+.about-more .section-title { margin-bottom: 14px; }
+.about-points { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; color: var(--muted); }
+.about-points li { position: relative; padding-left: 24px; }
+.about-points li::before { content: "▸"; position: absolute; left: 2px; color: var(--green-bright); }
+.about-points b { color: var(--text); }
+@media (max-width: 700px) { /* phones: just the demo under the section label */
+  .about-more { display: none; }
+  .about-copy .section-kicker { margin-bottom: 0; }
+  .about-grid { gap: 14px; }
+}
 .about-grid strong { color: var(--text); }
 
 .quest-steps {
@@ -945,6 +955,27 @@ a { color: inherit; }
 .coach-faces { display: flex; flex-shrink: 0; }
 .coach-faces img { width: 30px; height: 30px; object-fit: cover; object-position: center 20%; border: 1px solid var(--frame); margin-left: -8px; box-shadow: var(--shadow-sm); }
 .coach-faces img:first-child { margin-left: 0; }
+/* Training cards and coach cards: the photo fills the whole card and fades to dark from about halfway down;
+   the text sits on the dark part. The photo layer lies behind the text (z-index -1 inside the card). */
+.class-card, .team-card { position: relative; isolation: isolate; justify-content: flex-end; }
+/* (the photo layer takes the top 70% and has faded into the card's own dark by its end: that keeps the middle
+   of the photo, where the people are, in the clear part) */
+.class-media { position: absolute; inset: 0 0 auto; z-index: -1; width: 100%; height: 70%; aspect-ratio: auto; border-bottom: 0; background-position: center var(--pos, 40%); }
+.class-media::after, .team-photo-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(8, 8, 8, 0) 34%, rgba(8, 8, 8, 0.6) 62%, rgba(8, 8, 8, 0.9) 82%, #0b0b0b 98%);
+  background: linear-gradient(180deg, transparent 34%, color-mix(in srgb, var(--panel) 60%, transparent) 62%, color-mix(in srgb, var(--panel) 90%, transparent) 82%, var(--panel) 98%); }
+.class-body { flex: none; margin-top: 190px; padding-top: 8px; }
+.class-card .class-media { filter: none; }
+.class-flag { z-index: 1; }
+.team-photo-wrap { position: absolute; inset: 0 0 auto; height: 72%; z-index: -1; }
+.team-photo-wrap .team-photo { display: block; width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; object-position: center 18%; border-bottom: 0; }
+.team-photo-wrap .team-spots { z-index: 1; }
+.team-body { flex: none; margin-top: 218px; padding-top: 8px; }
+.team-photo-new { place-items: start center; padding-top: 56px; }
+/* the free place in the team has no photo: its icon on top, the text right under it */
+.team-card-recruit { justify-content: flex-start; }
+.team-card-recruit .team-body { margin-top: 0; }
+
 /* Trainings: filters above the cards, a card per kind of group training first, and a window with more info */
 .class-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 24px; }
 .class-filters .filter-tabs { flex-wrap: wrap; border-radius: 10px; overflow: hidden; }
@@ -1701,7 +1732,6 @@ textarea { resize: vertical; min-height: 130px; }
   }
   .team-grid::-webkit-scrollbar { display: none; }
   .team-grid > * { flex: 0 0 84%; scroll-snap-align: start; }
-  .class-media { aspect-ratio: 16 / 8; }
   .see-more .btn { width: 100%; }
   .class-card:hover, .team-card:hover { transform: none; box-shadow: none; }
   .team-photo { aspect-ratio: 4 / 3; }
@@ -1914,6 +1944,13 @@ textarea { resize: vertical; min-height: 130px; }
 
 /* ---------- Schedule on phones: a list per day, one row per trainer ---------- */
 .week-list, .list-hint, .filter-face, .filter-name { display: none; }
+@media (min-width: 641px) {
+  .schedule-toolbar .filter-tabs { border-radius: 10px; overflow: hidden; }
+  .schedule-toolbar .filter-tabs button { display: inline-flex; align-items: center; gap: 9px; min-height: 46px; }
+  .schedule-toolbar .filter-face { display: block; flex: none; width: 28px; height: 28px; overflow: hidden; border-radius: 50%; background: var(--panel); border: 2px solid var(--c, var(--line)); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); }
+  .schedule-toolbar .filter-face img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+  .schedule-toolbar [data-trainer="all"] .filter-face { display: none; }
+}
 @media (max-width: 640px) {
   .week-board, .board-legend { display: none; }
   .week-list { display: grid; gap: 14px; }
@@ -2801,8 +2838,6 @@ dialog[open] { touch-action: pan-y; }
    swipe row, and a compact contact block.
    ===================================================================== */
 /* Coach cards: bigger photo, free spots on it, specialties as chips */
-.team-photo-wrap { position: relative; }
-.team-photo-wrap .team-photo { display: block; aspect-ratio: 4 / 4.4; }
 .team-spots {
   position: absolute; left: 12px; top: 12px; padding: 5px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
   color: #fff; background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.18);

@@ -6,7 +6,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
-- `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs: My page (what others see), Overview (sessions, group classes, likes), Coach (trainers only), Rewards, Packs & shop, Body stats, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab. Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
+- `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs: My page (what others see), Overview (sessions, group classes, likes), Coach (trainers only), Rewards, Packs & shop, Body stats, Settings; `profile.html#rewards` (or any section id such as `#packs`) opens that tab. Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
 - `chat.html`: private chat between a player and a coach (see "Chat")
 - `member.html`: only sends old links on to `profile.html` (the member pages used to live here)
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
@@ -167,9 +167,9 @@ for 10 minutes).
 ## Phones: looping rows
 **Home page extras.** The photo behind the hero hangs still behind the whole page (`.hero-bg` is fixed to the
 screen): the hero text and every section after it slide over it as a second layer. The sections are dark glass
-(a see-through background), the cards on them are solid. The shop works the same way, with shelves full of
-supplements behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplash by Angel
-Sinigersky, made black and white). Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
+(a see-through background), the cards on them are solid. The shop works the same way, with a rack of dumbbells
+behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplash by Rick Barrett / Ambitious
+Studio, made black and white). Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
 four scenes (sign up +50 XP, pick a trainer, book an hour, train and level up) with an XP bar that follows the
 real XP rules. It plays only while it is on screen, a tap on a step jumps to that scene, and with "reduce motion"
 on it doesn't play by itself.
@@ -203,7 +203,7 @@ The site is a progressive web app: people can install it on their phone like an 
 - Install: Chrome on Android / computers can install with one tap ("Get the app"); every other phone browser gets the
   steps for that browser (Safari, Chrome or Firefox on iPhone; Samsung Internet, Firefox, Chrome on Android). A link
   opened inside WhatsApp, Instagram, Facebook, Messenger… can't install: the pop-up says so, with "Open in Chrome"
-  (Android) and "Copy link". Banner on phones at most once every 3 weeks after "Not now"; My account → Me has a
+  (Android) and "Copy link". Banner on phones at most once every 3 weeks after "Not now"; My page → Settings has a
   "LEVEL-UP app" panel.
 
 ### Sign-up emails (confirmation, new password)
@@ -243,7 +243,7 @@ e.g. for helping LEVEL-UP; a negative number takes XP back (a correction). The p
 
 ## Push notifications
 
-Players and trainers can turn on notifications (My account → Me, after booking, or in the coach panel). They get:
+Players and trainers can turn on notifications (My page → Settings, after booking, or in the coach panel). They get:
 
 - **Players:** session confirmed, request declined or expired, reminder the day before, +XP after a session,
   no-show, free session earned, pack active, cancelled by LEVEL-UP.
@@ -268,7 +268,7 @@ On iPhone, notifications only work in the home-screen app (iOS 16.4 or newer).
    `push`, replace the example code with everything in `supabase/functions/push/index.ts`, deploy.
 2. **Turn off JWT verification** (Edge Functions → push → *Details* → "Enforce JWT verification" off → Save).
    The function only ever sends what the database queued, so anyone may ask it to send.
-3. **Turn it on yourself:** My account → Me → *Turn on notifications*. The first time, the function makes its own
+3. **Turn it on yourself:** My page → Settings → *Turn on notifications*. The first time, the function makes its own
    key pair (`push_keys`, readable only by the server): there is no key to copy or keep secret. You get a test message.
 4. **Reminders and expired requests** (recommended): these happen without anyone clicking, so let Supabase call the
    function every 10 minutes. SQL Editor:
@@ -292,7 +292,7 @@ So it never feels like spam:
 - at most **2 news notifications per person per 24 hours** (more news still shows behind the bell);
 - **nothing at night**: news and reminders queued between 22:00 and 8:00 go out at 8:00 (`push_outbox.send_after`);
 - a weekly class series is one message; a product is "new" once and gets at most one discount message every 3 days;
-- players switch news off under My account → Me → **News notifications** (their own sessions, chat and XP always
+- players switch news off under My page → Settings → **News notifications** (their own sessions, chat and XP always
   come through); the person who made the news gets a copy too, so they see what their members see;
 - news about a class that started, a cancelled class or a discount that ended disappears by itself.
 
@@ -477,7 +477,7 @@ chat (the header, or a name in a group chat), in the likes on your own profile, 
 card ("Meet the team": the photo or name, and the small coach faces on the training cards).
 `profile.html?u=<user id>` is a member, `profile.html?trainer=<trainer id>` a coach, without either your own page.
 - **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (Overview,
-  Coach, Rewards, Packs & shop, Body stats, Me). The first tab, **My page**, is exactly what others see, with your
+  Coach, Rewards, Packs & shop, Body stats, Settings). The first tab, **My page**, is exactly what others see, with your
   own buttons in it: 📷 on your photo, the text about yourself, "Add a photo" and Remove under your photos. `member.js` draws the top block and the My page tab, `profile.js` the
   other tabs; on someone else's page `profile.js` draws nothing.
 - **One photo:** your profile photo is changed in one place (📷 on the photo at the top) and shows everywhere.
@@ -500,10 +500,10 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
   At most 300 characters and 6 comments a minute.
 - **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
 - **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
-  see the photos and counts but not the comments. A member can make their page private (Me → Account →
+  see the photos and counts but not the comments. A member can make their page private (Settings → Account →
   "Other members can see my page"): others then only see name and photo, and can't react to the photos.
 - **Your own text and photos:** a line about yourself (160 characters), up to 12 photos with a caption, and
-  on the My page tab; the private switch is under Me → Account. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
+  on the My page tab; the private switch is under Settings → Account. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
 - **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
 - Files: `profile.html`, `member.js`, `member.css` (the page), `profile.js`, `profile.css` (the account tabs). Server: `public_profile`, `set_profile`, `photo_add`,
@@ -559,7 +559,7 @@ blue, Athlete purple, Warrior orange, Champion red, Legend gold (see "Rank colou
 Visitors, logged-out people and Rookies see green. Under Account, "Always use Carbon green" keeps the green look on that device. Rank badges and avatars keep their own rank colour.
 
 ## Profile photos
-Players upload a photo with the 📷 button on their photo at the top of their own page (the only place; Me → Account
+Players upload a photo with the 📷 button on their photo at the top of their own page (the only place; Settings → Account
 has "Remove my photo"). The photo is cropped square and shrunk to 640 px in the browser before upload (so it stays small and fast), then
 stored in the Supabase Storage bucket `avatars`, in a folder named after the player's id. Everyone can only upload,
 change or delete files in their own folder. The photo shows on the high scores (podium and rows), the page header,

@@ -285,19 +285,6 @@ foldToggle("xpToggle", "levels", "Hide the XP table ▲", "How does XP work? ▼
 foldToggle("mapToggle", "hqMap", "📍 Hide map", "📍 Show map");
 foldToggle("formToggle", "contactForm", "✉ Hide the form ▲", "✉ Send us a message ▼");
 
-// ===== Level 01: one call to action, depending on who is visiting =====
-const aboutCta = document.getElementById("aboutCta");
-
-function renderAboutCta() {
-  const player = LevelUp.getPlayer();
-  aboutCta.innerHTML = player
-    ? `<a href="#schedule" class="btn btn-primary">▶ Book a trainer</a>`
-    : `<button type="button" class="btn btn-primary" data-auth-open="signup">▶ Create your profile</button>`;
-}
-
-document.addEventListener("levelup:change", renderAboutCta);
-renderAboutCta();
-
 // ===== Level 1: how it works, as a looping demo =====
 // Four scenes: sign up (+50 XP), pick a trainer, book an hour, train and level up. The XP bar under the screen
 // follows the real XP rules (LevelUp.progress). It plays while the section is on screen; a tap on a step jumps

@@ -1,6 +1,6 @@
 // LEVEL-UP: your account, as tabs on your own page (profile.html).
 // member.js draws the top block (photo, name, level) and the "My page" tab: what other members see.
-// This file adds the tabs only you see (Overview, Coach, Rewards, Packs & shop, Body stats, Me) and what is
+// This file adds the tabs only you see (Overview, Coach, Rewards, Packs & shop, Body stats, Settings) and what is
 // in them. On someone else's page it draws nothing.
 
 (() => {
@@ -32,7 +32,7 @@ function renderLikes(player) {
         <ul class="liked-by">${player.likedBy.map((f) => `
           <li data-profile="${esc(f.userId || "")}">${LevelUp.avatarHtml({ name: f.name, avatarUrl: f.avatarUrl })}<span><b>${esc(f.name)}</b> liked you</span><small class="muted">${formatDate(f.date)}</small></li>`).join("")}
         </ul>` : `<p class="muted">No likes yet. Players give each other a heart on the high scores: tap the ♥ on someone's photo.</p>`}
-      ${player.showOnLeaderboard === false ? `<p class="muted small">You're hidden from the high scores, so nobody can like you right now. Change this under Me → Account.</p>` : ""}
+      ${player.showOnLeaderboard === false ? `<p class="muted small">You're hidden from the high scores, so nobody can like you right now. Change this under Settings → Account.</p>` : ""}
       <a href="index.html#highScores" class="text-link">♥ Give someone a like on the high scores →</a>
     </section>`;
 }
@@ -879,7 +879,7 @@ function profileTabs(player) {
     { id: "rewards", label: "Rewards", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
     { id: "shop", label: "Packs & shop" },
     { id: "body", label: "Body stats", badge: player.bodyStats.length ? 0 : "!" },
-    { id: "me", label: "Me", badge: needsSetup ? "!" : 0 }
+    { id: "me", label: "Settings", badge: needsSetup ? "!" : 0 }
   ].filter(Boolean);
 }
 

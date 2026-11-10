@@ -2853,7 +2853,7 @@ const LevelUp = (() => {
             <small>${shortDate(n.date)}</small>
           </a>
         </li>`).join("")}</ul>` : `<p class="muted">No news right now.</p>`}
-      <p class="auth-note">${player ? `New classes and shop deals also come as a notification, at most 2 a day. Switch them off in <a class="text-link" href="profile.html#app">your profile → Me</a>.`
+      <p class="auth-note">${player ? `New classes and shop deals also come as a notification, at most 2 a day. Switch them off in <a class="text-link" href="profile.html#app">your profile → Settings</a>.`
         : `<button type="button" class="link-btn" data-auth-open="login" data-close>Log in</button> and turn on notifications to hear it first.`}</p>`;
     if (list.length) write(NEWS_SEEN_KEY, Math.max(...list.map((n) => n.id)));
     renderHud();
