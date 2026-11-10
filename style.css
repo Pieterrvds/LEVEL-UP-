@@ -456,7 +456,7 @@ a { color: inherit; }
    Photos: Unsplash (free licence), see README.md. The rank colour glow of .hero-bg stays underneath. */
 /* How dark it is, in one place: --photo-o = how strong the photo shows, --layer-o / --layer-alt-o = how solid the
    sections over it are (lower = more of the photo shines through). Also used by the chat page (chat.css). */
-:root { --photo-o: 0.5; --layer-o: 0.74; --layer-alt-o: 0.84; }
+:root { --photo-o: 0.74; --layer-o: 0.5; --layer-alt-o: 0.62; }
 #home.hero, .shop-hero { isolation: auto; }
 #home .hero-bg, .shop-hero .hero-bg { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
 #home .hero-bg::before, .shop-hero .hero-bg::before {

@@ -169,8 +169,8 @@ for 10 minutes).
 screen): the hero text and every section after it slide over it as a second layer. The sections are dark glass
 (a see-through background), the cards on them are solid. The shop works the same way, with a rack of dumbbells
 behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplash by Rick Barrett / Ambitious
-Studio, made black and white). The chat page has one too: a group training together (`img/chat-bg.jpg`,
-`img/chat-bg-small.jpg`: a free photo from Unsplash by Geert Pieters), with the chat as the see-through layer.
+Studio, made black and white). The chat page has one too: a running track in a stadium (`img/chat-bg.jpg`,
+`img/chat-bg-small.jpg`: a free photo from Unsplash by Anisa Ryanda Putri, made black and white), with the chat as the see-through layer.
 How dark it all is sits in one place, at the top of that block in `style.css`: `--photo-o` (how strong the photo
 shows) and `--layer-o` / `--layer-alt-o` (how solid the sections over it are). Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
 four scenes (sign up +50 XP, pick a trainer, book an hour, train and level up) with an XP bar that follows the
