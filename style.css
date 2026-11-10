@@ -824,9 +824,58 @@ a { color: inherit; }
 .coach-faces { display: flex; flex-shrink: 0; }
 .coach-faces img { width: 30px; height: 30px; object-fit: cover; object-position: center 20%; border: 1px solid var(--frame); margin-left: -8px; box-shadow: var(--shadow-sm); }
 .coach-faces img:first-child { margin-left: 0; }
-.class-card-group { border-style: dashed; grid-column: 1 / -1; flex-direction: row; }
-.class-card-group .class-media { aspect-ratio: auto; flex: 0 0 42%; min-height: 280px; border-bottom: 0; border-right: 3px solid #000; }
-.class-card-group .class-stats { max-width: 420px; }
+/* Trainings: filters above the cards, a card per kind of group training first, and a window with more info */
+.class-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 24px; }
+.class-filters .filter-tabs { flex-wrap: wrap; border-radius: 10px; overflow: hidden; }
+.class-filters .filter-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; }
+.class-filter-trainers img { width: 22px; height: 22px; object-fit: cover; object-position: center 20%; border-radius: 50%; }
+.class-empty { padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+.class-card[data-training] { cursor: pointer; }
+.class-card[data-training]:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 3px; }
+.class-card-kind { border-color: rgba(var(--green-bright-rgb), 0.45); }
+.class-flag { position: absolute; left: 12px; top: 12px; padding: 5px 10px; font-size: 0.74rem; font-weight: 700; color: #000; background: var(--green-bright); border-radius: 99px; }
+.class-body p.class-next { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; font-size: 0.9rem; color: var(--text); background: #000; border: 1px solid var(--line); border-radius: 8px; }
+.class-next b { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--green-bright); }
+.class-places { margin-left: auto; font-weight: 700; color: var(--gold); }
+.class-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+.class-more { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.class-card:hover .class-more { color: var(--green-bright); }
+
+.training-dialog { width: min(680px, calc(100% - 24px)); max-height: min(92vh, 900px); padding: 0; overflow-y: auto; }
+.training-dialog .dialog-close { z-index: 2; background: rgba(0, 0, 0, 0.7); }
+.training-photo { aspect-ratio: 16 / 8; background: var(--img) center var(--pos, 40%) / cover no-repeat, var(--panel-2); border-bottom: 1px solid var(--line); }
+.training-body { display: grid; gap: 16px; padding: clamp(18px, 4vw, 28px); }
+.training-body .section-kicker { margin: 0; }
+.training-body h2 { margin: -8px 0 0; font-family: var(--display); font-size: clamp(1.5rem, 5vw, 2.1rem); font-style: italic; font-weight: 800; text-transform: uppercase; line-height: 1.1; }
+.training-about { margin: 0; font-size: 1.02rem; line-height: 1.6; }
+.training-points { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.training-points li { position: relative; padding-left: 22px; color: var(--muted); }
+.training-points li::before { content: "▸"; position: absolute; left: 2px; color: var(--green-bright); }
+.training-stats { max-width: 420px; }
+.training-stats li { grid-template-columns: 96px 1fr; }
+.training-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.training-facts li { display: grid; gap: 2px; padding: 12px 10px; text-align: center; background: #000; border: 1px solid var(--line); border-radius: 10px; }
+.training-facts b { font-family: var(--display); font-size: 1.15rem; font-style: italic; color: var(--gold); }
+.training-facts span { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.training-coaches { display: grid; gap: 8px; }
+.training-coach { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; padding: 8px 12px 8px 8px; text-align: left; font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.training-coach:hover { border-color: var(--green-bright); }
+.training-coach img { width: 46px; height: 46px; object-fit: cover; object-position: center 20%; border-radius: 10px; }
+.training-coach span { display: grid; line-height: 1.3; }
+.training-coach small { color: var(--muted); }
+.training-coach i { font-style: normal; font-size: 1.3rem; color: var(--muted); }
+.training-sub { margin: 4px 0 -6px; font-family: var(--display); font-size: 1rem; font-style: italic; font-weight: 800; text-transform: uppercase; }
+.training-dates { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.training-dates li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #000; border-left: 4px solid var(--green-bright); border-radius: 8px; }
+.training-dates span { display: grid; min-width: 0; }
+.training-dates small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .class-filters { flex-wrap: nowrap; margin: 0 -20px 14px; padding: 0 20px 4px; overflow-x: auto; scrollbar-width: none; }
+  .class-filters::-webkit-scrollbar { display: none; }
+  .class-filters .filter-tabs { flex: none; flex-wrap: nowrap; }
+  .class-filters .filter-tabs button { white-space: nowrap; padding: 10px 12px; }
+  .training-dialog { width: 100%; max-width: 100%; max-height: 94vh; margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+}
 .gallery-cta { justify-content: center; margin-top: 28px; }
 
 /* Stats calculator */
@@ -1473,8 +1522,6 @@ textarea { resize: vertical; min-height: 130px; }
   .press-start { display: none; }
 
   .class-grid, .team-grid, .xp-sources, .xp-rules { grid-template-columns: 1fr; }
-  .class-card-group { flex-direction: column; }
-  .class-card-group .class-media { aspect-ratio: 16 / 10; min-height: 0; border-right: 0; border-bottom: 3px solid #000; }
   .rank-strip { grid-template-columns: repeat(3, 1fr); }
   .mini-xp { width: 44px; }
   .hud-admin-label { display: none; }
@@ -2346,6 +2393,16 @@ input, select, textarea { border-radius: 8px; }
 .review-admin-face img { width: 100%; height: 100%; object-fit: cover; }
 .review-photo-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 0.85rem; color: var(--muted); }
 .review-photo-pick select { min-width: 200px; max-width: 100%; }
+.kind-list { display: grid; gap: 12px; margin: 14px 0 0; padding: 0; list-style: none; }
+.kind-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; padding: 12px; background: #000; border: 1px solid var(--line); border-radius: 12px; }
+.kind-photo { display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; align-self: start; font-size: 0.78rem; color: var(--muted); background: var(--panel-2); border: 1px dashed var(--line); border-radius: 8px; }
+.kind-photo img { width: 100%; height: 100%; object-fit: cover; }
+.kind-form { display: grid; gap: 8px; }
+.kind-form p { margin: 0; }
+.kind-form textarea { width: 100%; }
+.kind-form label.btn { cursor: pointer; }
+.kind-form label.busy { opacity: 0.5; pointer-events: none; }
+@media (max-width: 640px) { .kind-row { grid-template-columns: 1fr; } .kind-photo { max-width: 220px; } }
 .review-add summary { cursor: pointer; font-weight: 700; color: var(--green-bright); margin-top: 8px; }
 
 /* ---------- Contact: quick actions and social cards ---------- */

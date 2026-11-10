@@ -98,6 +98,17 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
   admin.html → Group classes (`class_create`, once or every week for 4/8/12 weeks). Only the admin can change the price
   and the trainer fee. A class can't overlap the trainer's other classes or 1:1 sessions, and while it runs the
   trainer's 1:1 hours are blocked on the schedule (`slot_status`, `book_session`).
+- **A card per kind on the home page:** under "Level 2 · Choose your training" every kind of group class (by its
+  name: Social run club, Ring gymnastics …) has its own card, before the personal trainings. The kind is made by
+  the first class with that name (`class_kinds`, filled by `class_create`/`class_update`) and shows as long as a
+  class of that name is planned or was held in the last 30 days (`class_kinds()`). The card shows the next date and
+  the places. Admin → Group classes → **Group trainings on the home page**: your own text (600 characters) and
+  photo per kind (`admin_class_kind`); without them it gets a photo and text that fit its name (`GROUP_LOOKS` in
+  `script.js`; `img/socialrunclub.jpg` is a free photo from Unsplash by Joshua Tsu).
+- **Filters and the info window:** above the cards: All · Group classes · Personal training, and per trainer.
+  A tap on a card opens a window with more about that training (text, price, XP, the coach, and for a group
+  training the coming dates with Sign up); the button on a card still books straight away. The personal
+  trainings and their texts are the `PERSONAL` list in `script.js`.
 - **Changing a class:** **✎ Change** on a planned class opens the same form, filled in: name, trainer (admin),
   date, start, duration, places, location, note, and for the admin the price and trainer fee (`class_update`).
   Possible at any moment while the class is not finished or cancelled. Everyone signed up gets one message when

@@ -543,8 +543,38 @@ const LevelUp = (() => {
     if (["cancelled", "waitlist"].includes(m.status)) return "";
     return "Pay at the class";
   }
+  // ---------- Kinds of group training: one card each on the home page ("Choose your training") ----------
+  // [{ key, title, description, photoUrl, trainers: [ids], next, upcoming }]: the kinds with a class planned or held lately
+  let classKinds = [];
+  async function loadClassKinds() {
+    try { classKinds = (await call("class_kinds")) || []; } catch (err) { console.error("Loading group trainings failed:", err); }
+    return classKinds;
+  }
+  // Admin: the text of a kind, or its photo (shrunk in the browser, stored like the photos on a page)
+  async function adminClassKind(key, p) {
+    classKinds = (await call("admin_class_kind", { p_key: key, p })) || [];
+    emit();
+    return classKinds;
+  }
+  async function uploadKindPhoto(key, file) {
+    if (!player || !sb) throw new Error("Log in first.");
+    const blob = await fitPhoto(file);
+    const path = `${player.id}/k${Date.now()}.jpg`;
+    const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
+    if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
+    const old = avatarPath(classKinds.find((k) => k.key === key)?.photoUrl);
+    try {
+      await adminClassKind(key, { photoUrl: sb.storage.from("avatars").getPublicUrl(path).data.publicUrl });
+    } catch (err) {
+      sb.storage.from("avatars").remove([path]).catch(() => {});
+      throw err;
+    }
+    if (old && old.startsWith(`${player.id}/`)) sb.storage.from("avatars").remove([old]).catch(() => {});
+  }
+
   async function afterClassChange() {
-    await Promise.all([refreshPlayer({ announce: true }), document.getElementById("weekBoard") ? loadClasses() : null, loadSlots()]);
+    await Promise.all([refreshPlayer({ announce: true }), document.getElementById("weekBoard") ? loadClasses() : null, loadSlots(),
+      document.getElementById("classGrid") || document.getElementById("adminKinds") ? loadClassKinds() : null]);
     emit();
   }
   async function signupClass(id, pay = "in_person") {
@@ -1999,7 +2029,8 @@ const LevelUp = (() => {
           onShop ? bootTask(loadShopCatalog(), "Loading the shop…") : null,
           bootTask(loadTrainerStats(), "Loading trainer levels…"),
           onHome ? bootTask(loadLeaderboard(), "Loading high scores…") : null,
-          onHome ? bootTask(loadReviews(), "Loading reviews…") : null
+          onHome ? bootTask(loadReviews(), "Loading reviews…") : null,
+          onHome ? bootTask(loadClassKinds(), "Loading group trainings…") : null
         ]);
         if (player) {
           welcomed = true;
@@ -3356,6 +3387,7 @@ const LevelUp = (() => {
     openAuth, toast,
     getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
+    getClassKinds: () => classKinds, loadClassKinds, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven
   };

@@ -3442,6 +3442,63 @@ create or replace function public._group_key(p_title text)
 returns text language sql immutable as $$
   select lower(regexp_replace(btrim(coalesce(p_title, '')), '\s+', ' ', 'g'));
 $$;
+
+-- Kinds of group training: one card per kind on the home page ("Choose your training"), with its own photo and
+-- text. A kind is made by the first class with that name; the admin adds the photo and the text.
+create table if not exists public.class_kinds (
+  key text primary key,                 -- _group_key(title): "social run club"
+  title text not null,
+  description text not null default '',
+  photo_url text,
+  created_at timestamptz not null default now()
+);
+alter table public.class_kinds enable row level security;  -- read through class_kinds() only
+insert into public.class_kinds (key, title)
+  select distinct on (public._group_key(c.title)) public._group_key(c.title), c.title
+  from public.class_sessions c order by public._group_key(c.title), c.starts_at desc
+on conflict do nothing;
+
+-- The kinds that are alive: a class of that name is planned, or was held in the last 30 days.
+-- With the trainers who give it and when the next one is. Anyone can read it (home page).
+create or replace function public.class_kinds()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('key', k.key, 'title', k.title, 'description', k.description, 'photoUrl', k.photo_url,
+             'trainers', x.trainers, 'next', x.next_at, 'upcoming', x.upcoming) order by x.next_at nulls last, k.title)
+    from public.class_kinds k
+    cross join lateral (
+      select coalesce(jsonb_agg(distinct c.trainer_id), '[]'::jsonb) as trainers,
+             min(c.starts_at) filter (where c.status = 'scheduled' and c.starts_at > now()) as next_at,
+             count(*) filter (where c.status = 'scheduled' and c.starts_at > now()) as upcoming,
+             count(*) as n
+      from public.class_sessions c
+      where public._group_key(c.title) = k.key and c.status <> 'cancelled' and c.starts_at > now() - interval '30 days'
+    ) x
+    where x.n > 0), '[]'::jsonb);
+end $$;
+
+-- Admin: the text and the photo of a kind of group training (the photo is a file in the admin's own Storage folder)
+create or replace function public.admin_class_kind(p_key text, p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  about text := btrim(coalesce(p ->> 'description', ''));
+  photo text := nullif(btrim(coalesce(p ->> 'photoUrl', '')), '');
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if not exists (select 1 from public.class_kinds where key = p_key) then raise exception 'Group training not found.'; end if;
+  if p ? 'description' and char_length(about) > 600 then raise exception 'Keep the text under 600 characters.'; end if;
+  if p ? 'photoUrl' and photo is not null and photo !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
+                                || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Invalid photo.';
+  end if;
+  update public.class_kinds set
+    description = case when p ? 'description' then about else description end,
+    photo_url = case when p ? 'photoUrl' then photo else photo_url end
+  where key = p_key;
+  return public.class_kinds();
+end $$;
+
 create table if not exists public.chat_reads (
   thread_id uuid not null references public.chat_threads (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -4180,6 +4237,7 @@ begin
     values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid)
     returning * into c;
     insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
+    insert into public.class_kinds (key, title) values (public._group_key(ttl), ttl) on conflict do nothing;
     made := made || jsonb_build_array(public._class_json(c, uid));
     if first.id is null then first := c; end if;
   end loop;
@@ -4301,6 +4359,7 @@ begin
     reminder_pushed_at = case when start <> c.starts_at then null else reminder_pushed_at end
   where id = c.id returning * into c;
   insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
+  insert into public.class_kinds (key, title) values (public._group_key(ttl), ttl) on conflict do nothing;
   -- the news item of this class follows its new name and hour
   update public.news set title = '📣 ' || ttl || ' · ' || to_char(start at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(start at time zone 'Europe/Brussels', 'HH24:MI'),
     expires_at = start where ref = 'class-' || c.id;
@@ -4632,6 +4691,9 @@ revoke execute on function public.class_signup(uuid, text) from public, anon;
 revoke execute on function public.class_cancel(uuid) from public, anon;
 revoke execute on function public.class_create(jsonb) from public, anon;
 revoke execute on function public.class_cancel_class(uuid, text, boolean) from public, anon;
+revoke execute on function public.admin_class_kind(text, jsonb) from public, anon;
+grant execute on function public.admin_class_kind(text, jsonb) to authenticated;
+grant execute on function public.class_kinds() to anon, authenticated;
 revoke execute on function public.class_update(uuid, jsonb) from public, anon;
 grant execute on function public.class_update(uuid, jsonb) to authenticated;
 revoke execute on function public.class_roster(uuid) from public, anon;

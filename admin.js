@@ -197,6 +197,7 @@ async function render() {
     </div>
 
     <section class="panel admin-panel gc-wrap" data-pane="classes" id="adminClasses"></section>
+    <section class="panel admin-panel" data-pane="classes" id="adminKinds"></section>
 
     <div data-pane="shop">
     <section class="panel admin-panel" id="tabsPanel"></section>
@@ -266,7 +267,70 @@ async function render() {
   renderShopAdmin();
   renderNewsPanel();
   LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
+  renderKinds();
 }
+
+// ---------- Group trainings on the home page: one card per kind of class, with your own text and photo ----------
+let kindsLoaded = false;
+let kindsError = "";
+function renderKinds() {
+  const box = document.getElementById("adminKinds");
+  if (!box) return;
+  if (!kindsLoaded) { kindsLoaded = true; LevelUp.loadClassKinds().then(renderKinds); }
+  if (box.contains(document.activeElement) && document.activeElement.matches("textarea")) return; // don't redraw while typing
+  const kinds = LevelUp.getClassKinds();
+  box.innerHTML = `
+    <div class="panel-head"><h2>Group trainings on the home page</h2></div>
+    <p class="muted">Every kind of group class (by its name) gets its own card under "Choose your training", first in the row, as long as a class of that name is planned or was held in the last 30 days. Give each one a photo and a few lines; without them it gets a photo and text that fit its name.</p>
+    ${kinds.length ? `<ul class="kind-list">${kinds.map((k) => `
+      <li class="kind-row" data-kind="${esc(k.key)}">
+        <div class="kind-photo">${k.photoUrl ? `<img src="${esc(k.photoUrl)}" alt="">` : `<span>Standard photo</span>`}</div>
+        <form class="kind-form" data-kind-form="${esc(k.key)}">
+          <p><b>${esc(k.title)}</b> <span class="muted small-text">${k.next ? `next: ${fmtDate(k.next)}` : "no date planned"} · ${(k.trainers || []).map((id) => LevelUp.trainerById(id)?.short).filter(Boolean).join(", ")}</span></p>
+          <label>Text on the card's window <small class="muted">(what is it, for whom, what to bring; 600 characters)</small>
+            <textarea name="description" rows="3" maxlength="600" placeholder="e.g. We run 5 to 8 km at an easy pace, every Wednesday. Everyone welcome.">${esc(k.description || "")}</textarea></label>
+          <div class="btn-row">
+            <button type="submit" class="btn btn-small btn-primary">Save text</button>
+            <label class="btn btn-small btn-ghost">${k.photoUrl ? "Change photo" : "Add your own photo"}<input type="file" accept="image/*" data-kind-photo="${esc(k.key)}" hidden></label>
+            ${k.photoUrl ? `<button type="button" class="btn btn-small btn-ghost" data-kind-photo-remove="${esc(k.key)}">Back to the standard photo</button>` : ""}
+          </div>
+        </form>
+      </li>`).join("")}</ul>` : `<p class="muted">No group trainings yet. Plan a class above and its card appears here and on the home page.</p>`}
+    <p class="form-error" role="alert">${esc(kindsError)}</p>`;
+}
+root.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-kind-form]");
+  if (!form) return;
+  event.preventDefault();
+  const btn = form.querySelector("[type=submit]");
+  btn.disabled = true;
+  kindsError = "";
+  try {
+    await LevelUp.adminClassKind(form.dataset.kindForm, { description: form.elements.description.value });
+    LevelUp.toast({ title: "Saved", text: "The home page shows it right away", icon: "✓", tone: "green" });
+  } catch (err) { kindsError = err.message; }
+  form.querySelector("textarea")?.blur();
+  renderKinds();
+});
+root.addEventListener("change", async (event) => {
+  const input = event.target.closest("[data-kind-photo]");
+  if (!input || !input.files?.[0]) return;
+  input.closest("label").classList.add("busy");
+  kindsError = "";
+  try {
+    await LevelUp.uploadKindPhoto(input.dataset.kindPhoto, input.files[0]);
+    LevelUp.toast({ title: "Photo saved", text: "It's on the card on the home page", icon: "📷", tone: "green" });
+  } catch (err) { kindsError = err.message; }
+  renderKinds();
+});
+root.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-kind-photo-remove]");
+  if (!btn) return;
+  btn.disabled = true;
+  kindsError = "";
+  try { await LevelUp.adminClassKind(btn.dataset.kindPhotoRemove, { photoUrl: "" }); } catch (err) { kindsError = err.message; }
+  renderKinds();
+});
 
 // ---------- Page tabs ----------
 const ADMIN_TABS = [
