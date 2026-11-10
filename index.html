@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202611111500"></script>
-  <script src="i18n.js?v=202611111500"></script>
+  <script src="i18n-nl.js?v=202611111800"></script>
+  <script src="i18n.js?v=202611111800"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611111500">
+  <link rel="stylesheet" href="style.css?v=202611111800">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -139,24 +139,55 @@
             </div>
           </div>
 
-          <ol class="quest-steps">
-            <li>
-              <span class="step-no">1</span>
-              <div><h3>Sign up</h3></div>
-            </li>
-            <li>
-              <span class="step-no">2</span>
-              <div><h3>Pick a trainer</h3></div>
-            </li>
-            <li>
-              <span class="step-no">3</span>
-              <div><h3>Book a session</h3></div>
-            </li>
-            <li>
-              <span class="step-no">★</span>
-              <div><h3>Level up</h3></div>
-            </li>
-          </ol>
+          <!-- How it works, animated: four short scenes on a loop (sign up, pick a trainer, book, level up) with the
+               XP bar that fills along the way. script.js plays them; a tap on a step jumps to that scene. -->
+          <div class="howto" id="howto" data-scene="1">
+            <div class="howto-screen" aria-hidden="true">
+              <div class="howto-top"><i></i><i></i><i></i><b>LEVEL-UP</b><span>▶ Demo</span></div>
+              <div class="howto-stage">
+                <div class="howto-scene" data-s="1">
+                  <div class="hw-profile">
+                    <span class="hw-avatar" data-no-i18n>J</span>
+                    <span class="hw-who"><b data-no-i18n>Jonas</b><small>New player · LVL 1</small></span>
+                    <span class="hw-chip">+50 XP</span>
+                  </div>
+                  <p class="hw-cap">Create your profile and start at LVL 1</p>
+                </div>
+                <div class="howto-scene" data-s="2">
+                  <div class="hw-coaches" id="howtoCoaches"></div>
+                  <p class="hw-cap">Pick the coach that fits your goal</p>
+                </div>
+                <div class="howto-scene" data-s="3">
+                  <div class="hw-slots">
+                    <b class="hw-day">Wed</b>
+                    <span data-no-i18n>17:00</span><span data-no-i18n>18:00</span><span class="hw-pick" data-no-i18n>19:00</span><span data-no-i18n>20:00</span>
+                  </div>
+                  <div class="hw-booked"><span aria-hidden="true">✓</span> Session booked</div>
+                  <p class="hw-cap">Book an hour straight from the schedule</p>
+                </div>
+                <div class="howto-scene" data-s="4">
+                  <div class="hw-gains">
+                    <span class="hw-gain g1"><b>+75 XP</b><small>Session done</small></span>
+                    <span class="hw-gain g2"><b>+50 XP</b><small>Group class</small></span>
+                    <span class="hw-gain g3"><b>+25 XP</b><small>Weekly check-in</small></span>
+                  </div>
+                  <div class="hw-levelup"><b>Level up!</b></div>
+                  <p class="hw-cap">Every session gives XP: level up and unlock rewards</p>
+                </div>
+              </div>
+              <div class="howto-xp">
+                <span class="hw-lvl">LVL <b data-hw-lvl data-no-i18n>1</b></span>
+                <div class="hw-bar"><i data-hw-bar style="width:0%"></i></div>
+                <span class="hw-num" data-hw-num data-no-i18n>0 / 100 XP</span>
+              </div>
+            </div>
+            <ol class="howto-steps">
+              <li><button type="button" data-hw-step="1"><span class="step-no">1</span><b>Sign up</b><i aria-hidden="true"></i></button></li>
+              <li><button type="button" data-hw-step="2"><span class="step-no">2</span><b>Pick a trainer</b><i aria-hidden="true"></i></button></li>
+              <li><button type="button" data-hw-step="3"><span class="step-no">3</span><b>Book a session</b><i aria-hidden="true"></i></button></li>
+              <li><button type="button" data-hw-step="4"><span class="step-no">★</span><b>Level up</b><i aria-hidden="true"></i></button></li>
+            </ol>
+          </div>
         </div>
 
         <button type="button" class="btn btn-ghost btn-block xp-toggle" id="xpToggle" aria-controls="levels" aria-expanded="false">How does XP work? ▼</button>
@@ -471,8 +502,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202611111500"></script>
-  <script src="script.js?v=202611111500"></script>
-  <script src="schedule.js?v=202611111500"></script>
+  <script src="game.js?v=202611111800"></script>
+  <script src="script.js?v=202611111800"></script>
+  <script src="schedule.js?v=202611111800"></script>
 </body>
 </html>

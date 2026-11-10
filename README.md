@@ -165,7 +165,14 @@ so browsers and the installed app fetch the new files instead of a saved copy (G
 for 10 minutes).
 
 ## Phones: looping rows
-On phones the steps (Level 1), classes (Level 2) and team (Level 3) are swipe rows that glide to the left in an
+**Home page extras.** The photo behind the hero hangs still (`#home .hero-bg` is fixed to the screen): the hero
+text scrolls away over it and every section after it slides over it like a layer, so each section has a solid
+background. Level 1 · How it works is a small animated demo on a loop (`#howto`, `howItWorks` in `script.js`):
+four scenes (sign up +50 XP, pick a trainer, book an hour, train and level up) with an XP bar that follows the
+real XP rules. It plays only while it is on screen, a tap on a step jumps to that scene, and with "reduce motion"
+on it doesn't play by itself.
+
+On phones the classes (Level 2) and team (Level 3) are swipe rows that glide to the left in an
 endless loop (`loopRows` in `script.js`): each row gets one copy of its cards, and when the first set has passed it
 jumps back by one set. Touching a row pauses it; it starts again 3 seconds after you let go. Off for "reduce motion".
 

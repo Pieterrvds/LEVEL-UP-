@@ -298,14 +298,100 @@ function renderAboutCta() {
 document.addEventListener("levelup:change", renderAboutCta);
 renderAboutCta();
 
-// ===== Phones: the swipe rows (steps, classes, team) glide to the left in an endless loop =====
+// ===== Level 1: how it works, as a looping demo =====
+// Four scenes: sign up (+50 XP), pick a trainer, book an hour, train and level up. The XP bar under the screen
+// follows the real XP rules (LevelUp.progress). It plays while the section is on screen; a tap on a step jumps
+// to that scene. With "reduce motion" on it doesn't play by itself: the steps still switch the scene.
+(function howItWorks() {
+  const root = document.getElementById("howto");
+  if (!root) return;
+  const SCENES = [3600, 3600, 4000, 6200];             // how long each scene shows (ms)
+  const XP = {                                          // [moment in the scene (ms), total XP of the demo player]
+    1: [[0, 0], [900, 50]],                             // profile made: +50
+    2: [[0, 50]],
+    3: [[0, 50]],
+    4: [[0, 50], [750, 125], [2700, 175], [3900, 200]]  // session +75 (level up), group class +50, check-in +25
+  };
+  const bar = root.querySelector("[data-hw-bar]");
+  const lvl = root.querySelector("[data-hw-lvl]");
+  const num = root.querySelector("[data-hw-num]");
+  const steps = [...root.querySelectorAll("[data-hw-step]")];
+  let timers = [];
+  let scene = 1;
+  let level = 1;
+  let onScreen = false;
+
+  // the coaches of scene 2: the real team, the first one gets picked
+  function drawCoaches() {
+    const box = document.getElementById("howtoCoaches");
+    const html = LevelUp.TRAINERS.slice(0, 3).map((t, i) => `<span class="hw-coach ${i === 0 ? "pick" : ""}"><img src="${LevelUp.esc(t.img)}" alt=""><b data-no-i18n>${LevelUp.esc(t.short)}</b></span>`).join("");
+    if (box.dataset.html !== html) { box.dataset.html = html; box.innerHTML = html; }
+  }
+
+  function showXp(xp, instant = false) {
+    const p = LevelUp.progress(xp);
+    const write = () => {
+      lvl.textContent = p.level;
+      num.textContent = `${p.into} / ${p.needed} XP`;
+      bar.style.width = `${p.pct.toFixed(1)}%`;
+    };
+    if (p.level > level && !instant) {
+      // level up: fill the bar to the end, then start the next level from zero
+      bar.style.width = "100%";
+      timers.push(setTimeout(() => {
+        root.classList.add("up");
+        bar.classList.add("jump");
+        bar.style.width = "0%";
+        void bar.offsetWidth;
+        bar.classList.remove("jump");
+        write();
+        timers.push(setTimeout(() => root.classList.remove("up"), 800));
+      }, 620));
+    } else {
+      if (instant || p.level < level) { bar.classList.add("jump"); write(); void bar.offsetWidth; bar.classList.remove("jump"); }
+      else write();
+    }
+    level = p.level;
+  }
+
+  function stop() {
+    timers.forEach(clearTimeout);
+    timers = [];
+    root.classList.remove("playing", "up");
+  }
+  function play(n, auto = true) {
+    stop();
+    scene = n;
+    root.dataset.scene = String(n);
+    root.style.setProperty("--hw-dur", `${SCENES[n - 1]}ms`);
+    steps.forEach((b) => { if (Number(b.dataset.hwStep) === n) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+    XP[n].forEach(([at, xp], i) => { if (i === 0) showXp(xp, true); else timers.push(setTimeout(() => showXp(xp), at)); });
+    if (!auto || prefersReducedMotion) { showXp(XP[n][XP[n].length - 1][1], true); return; } // no loop: show where this step ends
+    void root.offsetWidth; // restart the line under the step
+    root.classList.add("playing");
+    timers.push(setTimeout(() => play((n % SCENES.length) + 1), SCENES[n - 1]));
+  }
+  const resume = () => { if (onScreen && !document.hidden) play(scene); else stop(); };
+
+  root.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-hw-step]");
+    if (step) play(Number(step.dataset.hwStep), onScreen);
+  });
+  new IntersectionObserver(([entry]) => { onScreen = entry.isIntersecting; resume(); }, { threshold: 0.25 }).observe(root);
+  document.addEventListener("visibilitychange", resume);
+  document.addEventListener("levelup:change", drawCoaches); // a coach's own photo once the team is loaded
+  drawCoaches();
+  play(1, false);
+})();
+
+// ===== Phones: the swipe rows (classes, team) glide to the left in an endless loop =====
 // Each row gets one copy of its cards at the end. When the first set has fully passed, the row jumps
 // back by exactly one set, which looks the same, so it never ends. Touching a row pauses it (you can
 // swipe freely, also backwards); it starts again 3 seconds after you let go.
 (function loopRows() {
   const SPEED = 26; // pixels per second
   const phone = window.matchMedia("(max-width: 640px)");
-  const rows = [".quest-steps", "#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
+  const rows = ["#classGrid", "#team .team-grid"].map((s) => document.querySelector(s)).filter(Boolean);
 
   rows.forEach((row) => {
     let originals = [];
