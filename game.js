@@ -2008,6 +2008,7 @@ const LevelUp = (() => {
   const chatThread = (id, after = 0) => call("chat_thread", { p_thread: id, p_after: after });
   const chatSend = (id, body) => call("chat_send", { p_thread: id, p_body: body });
   const chatMute = (id, on) => call("chat_mute", { p_thread: id, p_on: Boolean(on) });
+  const chatLike = (messageId) => call("chat_like", { p_message: Number(messageId) });
   const chatGroupDelete = (id) => call("chat_group_delete", { p_thread: id });
   const chatOpen = (trainerId) => call("chat_open", { p_trainer: trainerId });
   const chatSearch = (query) => call("chat_search", { p_query: query });
@@ -3317,7 +3318,7 @@ const LevelUp = (() => {
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
-    chatList, chatThread, chatSend, chatMute, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
+    chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast,
     getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,

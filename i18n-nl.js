@@ -1320,6 +1320,11 @@
   "No checkpoints skipped. Today you level up.": "Geen checkpoint overgeslagen. Vandaag level je up.",
   "Respawn complete. Time to train.": "Respawn voltooid. Tijd om te trainen.",
   "Unknown coach.": "Onbekende coach.",
+  // Hearts on chat messages
+  "Like this message": "Like dit bericht",
+  "Unlike this message": "Like van dit bericht weghalen",
+  "Message not found.": "Bericht niet gevonden.",
+  "You can't like your own message.": "Je eigen bericht liken kan niet.",
   // Member page (member.html)
   "Calendar": "Agenda",
   "Players": "Spelers",

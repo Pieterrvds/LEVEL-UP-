@@ -244,6 +244,45 @@ function grow(input) {
   input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
 }
 
+// The heart on a message: tap one from someone else to like it (again = take it back); your own show their count
+function heartHtml(m) {
+  if (m.pending || m.failed || !m.id) return "";
+  const n = Number(m.likes) || 0;
+  if (m.mine) return n ? `<span class="chat-heart on" aria-label="${n} like${n === 1 ? "" : "s"}"><span aria-hidden="true">♥</span>${n > 1 ? n : ""}</span>` : "";
+  return `<button type="button" class="chat-heart ${m.liked ? "on" : ""} ${n ? "has" : ""}" data-chat-like="${m.id}" aria-pressed="${Boolean(m.liked)}"
+    aria-label="${esc(LevelUp_t(m.liked ? "Unlike this message" : "Like this message"))}"><span aria-hidden="true">♥</span>${n > 1 || (n === 1 && !m.liked) ? n : ""}</button>`;
+}
+// Fresh counts for an open chat (the other person liked or took a like back)
+function applyHearts(list) {
+  const map = new Map((list || []).map((h) => [Number(h.id), h]));
+  let changed = false;
+  state.messages.forEach((m) => {
+    const h = map.get(Number(m.id));
+    const likes = h ? Number(h.n) : 0, liked = h ? Boolean(h.mine) : false;
+    if ((Number(m.likes) || 0) !== likes || Boolean(m.liked) !== liked) { m.likes = likes; m.liked = liked; changed = true; }
+  });
+  return changed;
+}
+async function likeMessage(id) {
+  const m = state.messages.find((x) => Number(x.id) === Number(id));
+  if (!m || m.mine || m.liking) return;
+  m.liking = true;
+  const before = { likes: Number(m.likes) || 0, liked: Boolean(m.liked) };
+  m.liked = !before.liked;                         // show it right away
+  m.likes = Math.max(0, before.likes + (m.liked ? 1 : -1));
+  renderMessages();
+  try {
+    const r = await LevelUp.chatLike(m.id);
+    m.likes = Number(r.likes) || 0;
+    m.liked = Boolean(r.liked);
+  } catch (err) {
+    Object.assign(m, before);
+    LevelUp.toast({ title: LevelUp_t("That didn't work"), text: err.message, icon: "!" });
+  }
+  m.liking = false;
+  renderMessages();
+}
+
 function renderMessages() {
   const list = document.getElementById("chatMessages");
   if (!list) return;
@@ -271,7 +310,7 @@ function renderMessages() {
     html += `
       <div class="chat-msg ${m.mine ? "mine" : "theirs"} ${groupEnd ? "end" : ""} ${m.coach ? "coach" : ""} ${m.pending ? "pending" : ""} ${m.failed ? "failed" : ""}">
         ${showName ? `<span class="chat-from" ${m.userId ? `data-profile="${esc(m.userId)}"` : ""}>${esc(m.name)}${m.coach ? ` · ${esc(LevelUp_t("Coach"))}` : ""}</span>` : ""}
-        <p>${esc(m.body)}</p>
+        <div class="chat-line"><p>${esc(m.body)}</p>${heartHtml(m)}</div>
         ${groupEnd ? `<span class="chat-meta">${timeLabel(m.at)}${m.failed ? ` · ${esc(LevelUp_t("Not sent"))}` : ""}${lastMineRead && m.id === lastMineRead.id ? ` · ${esc(LevelUp_t("Seen"))}` : ""}</span>` : ""}
       </div>`;
     prev = m;
@@ -335,13 +374,14 @@ async function poll() {
     const fresh = (data.messages || []).filter((m) => !state.messages.some((x) => x.id === m.id));
     const readChanged = data.peerReadId !== state.active.peerReadId;
     state.active.peerReadId = data.peerReadId;
+    const heartsChanged = !state.messages.some((m) => m.liking) && applyHearts(data.hearts);
     if (fresh.length) {
       state.messages.push(...fresh);
       state.lastId = state.messages.at(-1).id;
       LevelUp.refreshChatUnread();
       loadList();
     }
-    if (fresh.length || readChanged) renderMessages();
+    if (fresh.length || readChanged || heartsChanged) renderMessages();
   } catch (err) {
     console.warn("Chat refresh failed:", err.message);
   }
@@ -426,6 +466,8 @@ root.addEventListener("click", async (event) => {
     closeThread();
     return;
   }
+  const heart = event.target.closest("[data-chat-like]");
+  if (heart) { likeMessage(heart.dataset.chatLike); return; }
   // Group chat: notifications off / on for yourself
   const mute = event.target.closest("[data-chat-mute]");
   if (mute && state.active) {
@@ -507,3 +549,9 @@ document.addEventListener("levelup:change", () => {
   start();
 });
 start();
+
+// Double tap (or double click) on someone's message gives it a heart
+root.addEventListener("dblclick", (event) => {
+  const heart = event.target.closest(".chat-msg.theirs")?.querySelector("[data-chat-like]:not(.on)");
+  if (heart) likeMessage(heart.dataset.chatLike);
+});

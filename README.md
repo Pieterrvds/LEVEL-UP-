@@ -197,6 +197,10 @@ Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js
   any page when a new message comes in (tap = open it). A push notification arrives on phones with notifications on.
 - **Live:** an open conversation checks for new messages every 3 seconds (right away when a push comes in), other
   pages every 20 seconds. Read receipts: "Seen" under your last message the other person has read.
+- **Hearts:** tap the small heart next to someone else's message (or double-tap the message) to like it, tap again
+  to take it back. Not on your own messages; there you see the hearts you got (with a number in a group chat). The
+  other side sees it in the open chat within a few seconds. Quiet on purpose: no notification and no celebration.
+  Table `chat_message_likes`, function `chat_like`; `chat_thread` returns `likes`/`liked` per message and `hearts`.
 - **Server:** tables `chat_threads` + `chat_messages` (no direct access), functions `chat_list`, `chat_open`,
   `chat_thread`, `chat_send` (max 2000 characters, 20 messages a minute) and `chat_unread` in `supabase/schema.sql`.
 

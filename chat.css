@@ -172,3 +172,17 @@
 @media (max-width: 480px) { .chat-head .chat-book { display: none; } }
 .chat-head-who { display: contents; }
 .chat-from[data-profile]:hover { text-decoration: underline; }
+
+/* Hearts on messages: a small heart next to someone's message (tap = like), a count next to your own */
+.chat-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.chat-line p { min-width: 0; }
+.chat-msg.mine .chat-line { flex-direction: row-reverse; }
+.chat-heart { flex: none; display: inline-flex; align-items: center; gap: 3px; min-width: 28px; height: 26px; padding: 0 7px; justify-content: center;
+  font: 700 0.74rem/1 var(--sans); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 99px; }
+.chat-heart > span { font-size: 0.95rem; line-height: 1; color: var(--muted); opacity: 0.45; transition: opacity 0.15s, color 0.15s, transform 0.15s; }
+button.chat-heart { cursor: pointer; }
+button.chat-heart:hover > span, button.chat-heart:focus-visible > span { opacity: 1; color: #ff5c86; transform: scale(1.15); }
+.chat-heart.has { background: var(--panel); border-color: var(--line); color: var(--text); }
+.chat-heart.has > span { opacity: 1; color: #ff5c86; }
+.chat-heart.on { background: #ff3b6b; border-color: #ff3b6b; color: #fff; }
+.chat-heart.on > span, button.chat-heart.on:hover > span, button.chat-heart.on:focus-visible > span { opacity: 1; color: #fff; }

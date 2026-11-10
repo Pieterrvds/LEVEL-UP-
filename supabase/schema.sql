@@ -3432,6 +3432,15 @@ create table if not exists public.chat_reads (
   primary key (thread_id, user_id)
 );
 alter table public.chat_reads add column if not exists muted boolean not null default false;  -- no notifications for this group
+-- A heart on a chat message (from someone else in that conversation). It only counts: no notification, no celebration.
+create table if not exists public.chat_message_likes (
+  message_id bigint not null references public.chat_messages (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (message_id, user_id)
+);
+alter table public.chat_message_likes enable row level security;
+revoke all on public.chat_message_likes from anon, authenticated;
 alter table public.chat_reads enable row level security;
 revoke all on public.chat_reads from anon, authenticated;
 
@@ -3675,6 +3684,8 @@ begin
                                                  (select p.name from public.profiles p where p.id = x.sender_id), 'Member') end,
                                                'coach', side = 'group' and x.from_trainer,
                                                'userId', case when side = 'group' then x.sender_id end,
+                                               'likes', (select count(*) from public.chat_message_likes l where l.message_id = x.id),
+                                               'liked', exists (select 1 from public.chat_message_likes l where l.message_id = x.id and l.user_id = auth.uid()),
                                                'body', x.body, 'at', x.created_at) order by x.id), '[]'::jsonb),
          max(x.id)
     into msgs, top
@@ -3689,7 +3700,34 @@ begin
   end if;
   return public._chat_peer(th, side) || jsonb_build_object(
     'id', th.id, 'side', side, 'direct', th.member_id is not null, 'messages', msgs,
+    -- every message in this conversation that has hearts, so an open chat keeps its counts up to date
+    'hearts', coalesce((select jsonb_agg(jsonb_build_object('id', h.message_id, 'n', h.n, 'mine', h.mine))
+                        from (select l.message_id, count(*) as n, bool_or(l.user_id = auth.uid()) as mine
+                              from public.chat_message_likes l join public.chat_messages m on m.id = l.message_id
+                              where m.thread_id = th.id group by l.message_id) h), '[]'::jsonb),
     'peerReadId', case when side = 'group' then null when side = 'client' then th.trainer_read_id else th.client_read_id end);
+end $$;
+
+-- A heart on someone else's message in one of your conversations (tap again to take it back)
+create or replace function public.chat_like(p_message bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  m public.chat_messages;
+  th public.chat_threads;
+  side text;
+  own boolean;
+begin
+  select * into m from public.chat_messages where id = p_message;
+  if found then select * into th from public.chat_threads where id = m.thread_id; end if;
+  side := case when th.id is not null then public._chat_side(th) end;
+  if m.id is null or side is null then raise exception 'Message not found.'; end if;
+  own := case when side = 'group' then m.sender_id = auth.uid() else m.from_trainer = (side = 'trainer') end;
+  if own then raise exception 'You can''t like your own message.'; end if;
+  delete from public.chat_message_likes where message_id = m.id and user_id = auth.uid();
+  if not found then insert into public.chat_message_likes (message_id, user_id) values (m.id, auth.uid()); end if;
+  return jsonb_build_object('id', m.id,
+    'likes', (select count(*) from public.chat_message_likes l where l.message_id = m.id),
+    'liked', exists (select 1 from public.chat_message_likes l where l.message_id = m.id and l.user_id = auth.uid()));
 end $$;
 
 -- Send a message; the other person gets a push notification
@@ -3814,6 +3852,8 @@ revoke execute on function public._chat_peer(public.chat_threads, text) from pub
 revoke execute on function public._group_chat_users(text) from public, anon, authenticated;
 revoke execute on function public._group_chat_member(text) from public, anon, authenticated;
 revoke execute on function public.chat_mute(uuid, boolean) from public, anon;
+revoke execute on function public.chat_like(bigint) from public, anon;
+grant execute on function public.chat_like(bigint) to authenticated;
 revoke execute on function public.chat_group_delete(uuid) from public, anon;
 grant execute on function public.chat_mute(uuid, boolean) to authenticated;
 grant execute on function public.chat_group_delete(uuid) to authenticated;
