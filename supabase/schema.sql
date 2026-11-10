@@ -201,6 +201,30 @@ create table if not exists public.profile_photos (
 );
 create index if not exists profile_photos_user_idx on public.profile_photos (user_id, created_at desc);
 alter table public.profile_photos enable row level security;  -- only through the functions below
+-- Reactions on those photos: a heart on the photo, comments, and a heart on a comment
+create table if not exists public.photo_likes (
+  photo_id uuid not null references public.profile_photos (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (photo_id, user_id)
+);
+create table if not exists public.photo_comments (
+  id uuid primary key default gen_random_uuid(),
+  photo_id uuid not null references public.profile_photos (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists photo_comments_photo_idx on public.photo_comments (photo_id, created_at);
+create table if not exists public.photo_comment_likes (
+  comment_id uuid not null references public.photo_comments (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (comment_id, user_id)
+);
+alter table public.photo_likes enable row level security;
+alter table public.photo_comments enable row level security;
+alter table public.photo_comment_likes enable row level security;
 -- Players can switch off news notifications (their own bookings, chat and XP always come through)
 alter table public.profiles add column if not exists push_news boolean not null default true;
 
@@ -1529,6 +1553,35 @@ end $$;
 -- go to or went to. Never: email, body stats, health form, payments, orders or 1:1 sessions with times.
 -- Members see each other only when logged in; a trainer's page is public like their card on the home page.
 -- A member who switched "profile_visible" off shows only a name and photo to others.
+-- A photo as a member page shows it: likes and comments (with their own likes) for logged-in members
+create or replace function public._photo_json(ph public.profile_photos)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at, 'userId', ph.user_id,
+    'likes', (select count(*) from public.photo_likes l where l.photo_id = ph.id),
+    'liked', exists (select 1 from public.photo_likes l where l.photo_id = ph.id and l.user_id = auth.uid()),
+    'commentCount', (select count(*) from public.photo_comments c where c.photo_id = ph.id),
+    'comments', case when auth.uid() is null then '[]'::jsonb else coalesce((
+      select jsonb_agg(jsonb_build_object('id', c.id, 'body', c.body, 'date', c.created_at,
+               'userId', c.user_id, 'name', u.name, 'avatarUrl', u.avatar_url,
+               'trainerId', (select t.id from public.trainers t where t.email is not null and lower(t.email) = lower(u.email) and t.active limit 1),
+               'mine', c.user_id = auth.uid(),
+               'canDelete', c.user_id = auth.uid() or ph.user_id = auth.uid() or public.is_admin(),
+               'likes', (select count(*) from public.photo_comment_likes l where l.comment_id = c.id),
+               'liked', exists (select 1 from public.photo_comment_likes l where l.comment_id = c.id and l.user_id = auth.uid()))
+             order by c.created_at)
+      from (select * from public.photo_comments where photo_id = ph.id order by created_at desc limit 40) c
+      join public.profiles u on u.id = c.user_id), '[]'::jsonb) end);
+$$;
+
+-- May the logged-in member see (and react to) this photo? Same rule as the page it is on.
+create or replace function public._photo_open(ph public.profile_photos)
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.profiles p where p.id = ph.user_id
+      and (p.profile_visible or p.id = auth.uid() or public.is_admin()
+           or exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email) and t.active)));
+$$;
+
 create or replace function public.public_profile(p_user uuid default null, p_trainer text default null)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
@@ -1565,7 +1618,8 @@ begin
     out := out || jsonb_build_object(
       'trainerBio', t.bio, 'specialties', t.specialties,
       'teaching', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title, 'startsAt', c.starts_at,
-                                'taken', public._class_taken(c.id), 'capacity', c.capacity) order by c.starts_at)
+                                'taken', public._class_taken(c.id), 'capacity', c.capacity,
+                                'mine', exists (select 1 from public.class_signups v where v.class_id = c.id and v.user_id = me and v.status in ('booked', 'waitlist'))) order by c.starts_at)
                             from (select * from public.class_sessions where trainer_id = t.id and status = 'scheduled' and starts_at > now()
                                   order by starts_at limit 6) c), '[]'::jsonb));
   end if;
@@ -1584,10 +1638,27 @@ begin
     'sessions', (select count(*) from public.bookings k where k.user_id = p.id and k.status = 'completed'),
     'classesDone', (select count(*) from public.class_signups g where g.user_id = p.id and g.status = 'attended'),
     'achievements', coalesce((select jsonb_agg(k) from jsonb_object_keys(p.achievements) k), '[]'::jsonb),
-    'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
+    'photos', coalesce((select jsonb_agg(public._photo_json(ph) order by ph.created_at desc)
                         from public.profile_photos ph where ph.user_id = p.id), '[]'::jsonb),
+    'monthXp', public._month_xp(p.id, date_trunc('month', now() at time zone 'Europe/Brussels')::date),
+    -- what they did lately, newest first: group classes, achievements, photos and Player of the Month (never 1:1 sessions)
+    'activity', coalesce((select jsonb_agg(jsonb_build_object('kind', a.kind, 'text', a.txt, 'date', a.at) order by a.at desc) from (
+        select * from (
+          select 'class' as kind, c.title as txt, c.starts_at as at
+            from public.class_sessions c join public.class_signups g on g.class_id = c.id
+            where g.user_id = p.id and g.status = 'attended' and c.starts_at > now() - interval '90 days'
+          union all
+          select 'achievement', k.key, (k.value #>> '{}')::timestamptz
+            from jsonb_each(p.achievements) k where (k.value #>> '{}') ~ '^\d{4}-'
+          union all
+          select 'photo', ph.caption, ph.created_at from public.profile_photos ph where ph.user_id = p.id
+          union all
+          select 'potm', to_char(m.month, 'FMMonth YYYY'), (m.month + interval '1 month')::timestamptz
+            from public.monthly_awards m where m.user_id = p.id
+        ) x where x.at > now() - interval '90 days' order by x.at desc limit 12) a), '[]'::jsonb),
     -- group classes only: the ones they are signed up for, and the ones they did lately
-    'upcoming', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title, 'startsAt', c.starts_at) order by c.starts_at)
+    'upcoming', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title, 'startsAt', c.starts_at,
+                              'mine', exists (select 1 from public.class_signups v where v.class_id = c.id and v.user_id = me and v.status in ('booked', 'waitlist'))) order by c.starts_at)
                           from (select c.* from public.class_sessions c join public.class_signups g on g.class_id = c.id
                                 where g.user_id = p.id and g.status = 'booked' and c.status = 'scheduled' and c.starts_at > now()
                                 order by c.starts_at limit 5) c), '[]'::jsonb),
@@ -1637,6 +1708,74 @@ begin
   delete from public.profile_photos where id = p_id and (user_id = auth.uid() or public.is_admin()) returning * into ph;
   if not found then raise exception 'Photo not found.'; end if;
   return jsonb_build_object('url', ph.url, 'userId', ph.user_id);
+end $$;
+
+-- A heart on a photo (tap again to take it back). No notification and no celebration: it just counts.
+create or replace function public.photo_like(p_photo uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare ph public.profile_photos;
+begin
+  select * into ph from public.profile_photos where id = p_photo;
+  if not found or not public._photo_open(ph) then raise exception 'Photo not found.'; end if;
+  delete from public.photo_likes where photo_id = p_photo and user_id = auth.uid();
+  if not found then insert into public.photo_likes (photo_id, user_id) values (p_photo, auth.uid()); end if;
+  return public._photo_json(ph);
+end $$;
+
+-- A comment under a photo. The owner of the photo hears about it (not about their own comments).
+create or replace function public.photo_comment(p_photo uuid, p_body text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  ph public.profile_photos;
+  msg text := btrim(coalesce(p_body, ''));
+  who text;
+begin
+  select * into ph from public.profile_photos where id = p_photo;
+  if not found or not public._photo_open(ph) then raise exception 'Photo not found.'; end if;
+  if msg = '' then raise exception 'Type a comment first.'; end if;
+  if char_length(msg) > 300 then raise exception 'Keep your comment under 300 characters.'; end if;
+  if (select count(*) from public.photo_comments where user_id = auth.uid() and created_at > now() - interval '1 minute') >= 6 then
+    raise exception 'Slow down a little: try again in a minute.';
+  end if;
+  if (select count(*) from public.photo_comments where photo_id = p_photo) >= 200 then raise exception 'This photo has enough comments.'; end if;
+  insert into public.photo_comments (photo_id, user_id, body) values (p_photo, auth.uid(), msg);
+  if ph.user_id <> auth.uid() then
+    select name into who from public.profiles where id = auth.uid();
+    perform public._push(ph.user_id, '💬 ' || coalesce(who, 'A member') || ' on your photo', left(msg, 140),
+      'member.html?u=' || ph.user_id || '#photo-' || ph.id, 'photo-' || ph.id);
+  end if;
+  return public._photo_json(ph);
+end $$;
+
+-- Remove a comment: your own, one under your own photo, or any as admin
+create or replace function public.photo_comment_delete(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c public.photo_comments;
+  ph public.profile_photos;
+begin
+  select * into c from public.photo_comments where id = p_id;
+  if found then select * into ph from public.profile_photos where id = c.photo_id; end if;
+  if c.id is null or auth.uid() is null or not (c.user_id = auth.uid() or ph.user_id = auth.uid() or public.is_admin()) then
+    raise exception 'Comment not found.';
+  end if;
+  delete from public.photo_comments where id = p_id;
+  return public._photo_json(ph);
+end $$;
+
+-- A heart on a comment (tap again to take it back). No notification.
+create or replace function public.photo_comment_like(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c public.photo_comments;
+  ph public.profile_photos;
+begin
+  select * into c from public.photo_comments where id = p_id;
+  if found then select * into ph from public.profile_photos where id = c.photo_id; end if;
+  if c.id is null or not public._photo_open(ph) then raise exception 'Comment not found.'; end if;
+  delete from public.photo_comment_likes where comment_id = p_id and user_id = auth.uid();
+  if not found then insert into public.photo_comment_likes (comment_id, user_id) values (p_id, auth.uid()); end if;
+  return public._photo_json(ph);
 end $$;
 
 create or replace function public.set_leaderboard_visibility(p_show boolean)
@@ -4204,6 +4343,16 @@ grant execute on function public.celebrations_claim(bigint[]) to authenticated;
 revoke execute on function public.set_profile(jsonb) from public, anon;
 revoke execute on function public.photo_add(text, text) from public, anon;
 revoke execute on function public.photo_delete(uuid) from public, anon;
+revoke execute on function public._photo_json(public.profile_photos) from public, anon, authenticated;
+revoke execute on function public._photo_open(public.profile_photos) from public, anon, authenticated;
+revoke execute on function public.photo_like(uuid) from public, anon;
+revoke execute on function public.photo_comment(uuid, text) from public, anon;
+revoke execute on function public.photo_comment_delete(uuid) from public, anon;
+revoke execute on function public.photo_comment_like(uuid) from public, anon;
+grant execute on function public.photo_like(uuid) to authenticated;
+grant execute on function public.photo_comment(uuid, text) to authenticated;
+grant execute on function public.photo_comment_delete(uuid) to authenticated;
+grant execute on function public.photo_comment_like(uuid) to authenticated;
 grant execute on function public.public_profile(uuid, text) to anon, authenticated;
 grant execute on function public.set_profile(jsonb) to authenticated;
 grant execute on function public.photo_add(text, text) to authenticated;

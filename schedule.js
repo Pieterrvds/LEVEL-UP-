@@ -1107,3 +1107,16 @@ function renderPriceList() {
 }
 renderPriceList();
 document.addEventListener("levelup:change", renderPriceList);
+
+// ---------- For member.html (a coach's page): the same board and booking window, for that one trainer ----------
+window.LevelUpSchedule = {
+  showTrainer(id) {
+    activeTrainer = id;
+    weekPicked = false;
+    listDay = null;
+    renderFilter();
+    renderAll();
+  },
+  openClass,
+  refresh: renderAll
+};

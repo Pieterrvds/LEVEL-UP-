@@ -8,6 +8,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
 - `profile.html`: player profile with level, rank, XP, body stats (BMI, calories, protein, weight progress, weekly check-in), sessions, health check, achievements, inventory and orders. Sign-up is one step (name, email, password); body stats are filled in later in their own tab. Split into tabs: Overview, Coach (trainers only), Rewards, Packs & shop, Body stats, Me; `profile.html#rewards` (or any section id such as `#packs`) opens that tab.
 - `chat.html`: private chat between a player and a coach (see "Chat")
+- `member.html`: the page of another member or a coach: photos with comments, group classes, likes, chat and, for a coach, their calendar to book (see "Member pages")
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
 - `archive/img/`: photos no longer used on the site
@@ -425,23 +426,38 @@ then it waits. Not on `admin.html`. After 30 days a waiting one just counts as s
 `levelup-celebrate.js` is used as delivered (don't edit it): title and subtitle are passed in Dutch or English, and
 the accent is the site's own colour (which changes with the player's rank).
 
-## Member pages (profiles of other members and coaches)
-Tap someone's photo or name and their page opens in a window: on the high scores (podium, rows, Player of the
-Month), in a chat (the header, or a name in a group chat), in the likes on your own profile, and on a coach card
-("Meet the team": the photo or name, and the small coach faces on the training cards).
-- **What it shows:** name, photo, rank and level, place on the high scores, streak, likes (with a Like button),
-  a 💬 Chat button, a line about themselves, their photos, achievements, and the **group classes** they signed up
-  for ("Going to": Social run club · Wed 19:00, with a link to join too) or did lately. A coach page also shows the
-  group classes they give and a Book button.
+## Member pages (member.html: profiles of other members and coaches)
+Tap someone's photo or name and their page opens: on the high scores (podium, rows, Player of the Month), in a
+chat (the header, or a name in a group chat), in the likes on your own profile, under a photo comment, and on a coach
+card ("Meet the team": the photo or name, and the small coach faces on the training cards).
+`member.html?u=<user id>` is a member, `member.html?trainer=<trainer id>` a coach, without either your own page.
+- **Top:** a cover in the rank colour, photo, name, rank and level with the XP bar, place on the high scores, streak,
+  Player of the Month, and the buttons: 💬 Chat, ♥ Like, and for a coach **Book**.
+- **A coach's calendar:** the same week board and booking window as on the home page (`schedule.js`), for that coach
+  only: pick an hour and book, or sign up for one of their group classes, without leaving the page. The home page
+  keeps its own schedule with all coaches. `schedule.js` exposes `LevelUpSchedule.showTrainer(id)` for this.
+- **About and numbers:** the line about themselves, a coach's specialties, level, sessions, players and price; XP,
+  XP this month, sessions, group classes, likes and achievements.
+- **Group classes:** "Going to" (the classes they signed up for, with "Join too →" or "You're going too ✓") and for
+  a coach the classes they give. A tap opens the sign-up window.
+- **Achievements** with their names, and **Lately**: group classes done, achievements unlocked, photos posted and
+  Player of the Month, newest first.
+- **Photos:** big, one under the other, each with a ♥ (tap again to take it back) and **comments**. A comment can
+  get a ♥ too. The owner of the photo gets a notification for a comment (never for likes, and there is no celebration
+  for these). You remove your own comment, any comment under your own photo, and an admin removes anything.
+  At most 300 characters and 6 comments a minute.
 - **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
-- **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card.
-  A member can make their page private (My account → Overview → My page): others then only see name and photo.
+- **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
+  see the photos and counts but not the comments. A member can make their page private (My account → Overview →
+  My page): others then only see name and photo, and can't react to the photos.
 - **My page** (My account → Overview): a line about yourself (160 characters), up to 12 photos with a caption, and
   the private switch. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
-- **Moderation:** an admin sees every page and can remove any photo (✕ on the photo); the file is deleted too.
-- Server: `public_profile`, `set_profile`, `photo_add`, `photo_delete` and table `profile_photos` in
-  `supabase/schema.sql`. The privacy policy (`privacy.html`) describes all this.
+- **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
+- Files: `member.html`, `member.js`, `member.css`. Server: `public_profile`, `set_profile`, `photo_add`,
+  `photo_delete`, `photo_like`, `photo_comment`, `photo_comment_delete`, `photo_comment_like` and the tables
+  `profile_photos`, `photo_likes`, `photo_comments`, `photo_comment_likes` in `supabase/schema.sql`.
+  The privacy policy (`privacy.html`) describes all this.
 
 ## Likes (hearts on the high scores)
 Logged-in players give each other a like by tapping the ♥ on someone's photo: on the podium, in the high score rows
