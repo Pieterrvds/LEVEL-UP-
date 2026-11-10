@@ -57,10 +57,7 @@
 .summary-badges .card-chips + .streak-nudge { margin-top: 8px; }
 .photo-setting small { flex: 1 1 240px; }
 /* "My page" tab: what others see, with your own buttons in it */
-.mp-own-bar { display: grid; gap: 10px; margin-top: 20px; padding: 14px 16px; font-size: 0.92rem; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 10px; }
-.mp-own-bar p { margin: 0; color: var(--muted); }
-.mp-own-bar p b { color: var(--text); }
-.mp-own-bar .news-setting { margin-top: 0; }
+#mpOwnBar .form-error { margin-top: 16px; }
 .mp-card .mypage-bio { margin: 0 0 12px; }
 .mp-card .mypage-bio textarea { width: 100%; resize: vertical; font-size: 1rem; line-height: 1.5; }
 .mp-card .mypage-bio-row { align-items: center; justify-content: space-between; }

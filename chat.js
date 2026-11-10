@@ -102,9 +102,10 @@ function render() {
         <section class="chat-thread" id="chatThread" aria-live="polite"></section>
       </div>`;
   }
+  // first show the conversation (on a phone it replaces the list), then fill it: a hidden list can't scroll to its end
+  root.querySelector(".chat-app").classList.toggle("show-thread", Boolean(state.active));
   renderList();
   renderThread();
-  root.querySelector(".chat-app").classList.toggle("show-thread", Boolean(state.active));
 }
 
 function renderList() {
@@ -316,10 +317,15 @@ function renderMessages() {
     prev = m;
   });
   list.innerHTML = html;
-  if (nearBottom || list.dataset.scrolled !== "1") {
-    list.scrollTop = list.scrollHeight;
-    list.dataset.scrolled = "1";
-  }
+  if (nearBottom || list.dataset.scrolled !== "1") scrollToEnd();
+}
+
+// Go to the newest message. Opening a chat always lands here, not at its first message.
+function scrollToEnd() {
+  const list = document.getElementById("chatMessages");
+  if (!list) return;
+  list.scrollTop = list.scrollHeight;
+  if (list.clientHeight) list.dataset.scrolled = "1"; // only counts once the list is on screen
 }
 
 // ---------- Data ----------
@@ -346,6 +352,8 @@ async function openThread(id, { push = true } = {}) {
     const row = state.threads?.find((t) => t.id === id);
     if (row) row.unread = 0;
     render();
+    scrollToEnd();
+    requestAnimationFrame(scrollToEnd); // once more after the layout settled (fonts, the keyboard on a phone)
     LevelUp.refreshChatUnread();
     startThreadTimer();
   } catch (err) {
@@ -512,8 +520,13 @@ window.addEventListener("popstate", () => {
   else closeThread({ push: false });
 });
 
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") { poll(); loadList(); }
+// Back in the app: fetch what came in meanwhile and show the newest message
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible") return;
+  const before = state.lastId;
+  loadList();
+  await poll();
+  if (state.lastId !== before) scrollToEnd();
 });
 // A new message anywhere (the unread check in game.js): refresh the list, and the open conversation
 document.addEventListener("levelup:chat", (event) => { if (event.detail?.unread) { loadList(); poll(); } });

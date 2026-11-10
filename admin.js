@@ -1455,14 +1455,21 @@ function reviewsPanelInner() {
   const pending = list.filter((r) => r.status === "pending").length;
   const stars = (n) => `<span class="stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
   const label = { pending: "Waiting", approved: "On the site", hidden: "Hidden" };
+  // a review you added yourself has no account behind it: pick the member whose profile photo shows with it
+  const members = [...(data.players || [])].sort((a, b) => a.name.localeCompare(b.name));
+  const memberOptions = (picked) => `<option value="">No photo (first letter)</option>${members.map((m) =>
+    `<option value="${esc(m.id)}" ${m.id === picked ? "selected" : ""}>${esc(m.name)}${m.avatarUrl ? "" : " (no photo yet)"}</option>`).join("")}`;
   return `
     <div class="panel-head"><h2>Reviews</h2>${pending ? `<span class="status-chip pending">${pending} to approve</span>` : ""}</div>
-    <p class="muted">Players with a completed session can write one in My account. Only approved reviews show on the home page (first name + photo).</p>
+    <p class="muted">Players with a completed session can write one in My account. Only approved reviews show on the home page (first name + photo). For a review you added yourself, pick the member under it to show their profile photo.</p>
     ${list.length ? `<ul class="review-admin-list">${list.map((r) => `
       <li class="review-admin ${r.status}">
-        <div>${stars(Number(r.rating))} <b>${esc(r.name)}</b> <span class="muted small-text">${r.byAdmin ? "added by you" : esc(r.email || "")} · ${fmtDate(r.createdAt)}</span>
+        <div><span class="review-admin-face">${r.avatarUrl ? `<img src="${esc(r.avatarUrl)}" alt="">` : esc(r.name.trim().charAt(0).toUpperCase())}</span>
+          ${stars(Number(r.rating))} <b>${esc(r.name)}</b> <span class="muted small-text">${r.byAdmin ? "added by you" : esc(r.email || "")} · ${fmtDate(r.createdAt)}</span>
           <span class="status-chip ${r.status === "approved" ? "confirmed" : "pending"}">${label[r.status]}</span></div>
         <p>“${esc(r.quote)}”</p>
+        ${r.byAdmin ? `<label class="review-photo-pick">Photo of member
+          <select data-review-photo="${r.id}">${memberOptions(r.photoUser)}</select></label>` : ""}
         <div class="btn-row">
           ${r.status !== "approved" ? `<button type="button" class="btn btn-small btn-primary" data-review-set="approved" data-id="${r.id}">Approve</button>` : ""}
           ${r.status !== "hidden" ? `<button type="button" class="btn btn-small btn-ghost" data-review-set="hidden" data-id="${r.id}">Hide</button>` : ""}
@@ -1478,6 +1485,8 @@ function reviewsPanelInner() {
           <label>Stars<select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option value="${n}">${"★".repeat(n)}</option>`).join("")}</select></label>
         </div>
         <label>Review<textarea name="quote" rows="3" minlength="10" maxlength="300" required></textarea></label>
+        <label>Photo of member <small class="muted">(optional: their profile photo shows with the review)</small>
+          <select name="photoUser">${memberOptions("")}</select></label>
         <p class="form-error" role="alert"></p>
         <button type="submit" class="btn btn-small btn-primary">Add to the site</button>
       </form>
@@ -1509,10 +1518,26 @@ root.addEventListener("submit", async (event) => {
   event.preventDefault();
   const f = event.target;
   try {
-    await LevelUp.adminAddReview(f.elements.name.value.trim(), f.elements.quote.value.trim(), f.elements.rating.value);
+    const name = f.elements.name.value.trim(), quote = f.elements.quote.value.trim(), photoUser = f.elements.photoUser.value;
+    await LevelUp.adminAddReview(name, quote, f.elements.rating.value);
     await refreshReviewsPanel();
+    const added = photoUser && (data.reviews || []).find((r) => r.byAdmin && r.name === name.slice(0, 24) && r.quote === quote && !r.photoUser);
+    if (added) { await LevelUp.adminReviewPhoto(added.id, photoUser); await refreshReviewsPanel(); }
   } catch (err) {
     f.querySelector(".form-error").textContent = err.message;
+  }
+});
+
+root.addEventListener("change", async (event) => {
+  const pick = event.target.closest("[data-review-photo]");
+  if (!pick) return;
+  pick.disabled = true;
+  try {
+    await LevelUp.adminReviewPhoto(pick.dataset.reviewPhoto, pick.value);
+    await refreshReviewsPanel();
+  } catch (err) {
+    alert(err.message);
+    pick.disabled = false;
   }
 });
 

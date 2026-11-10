@@ -260,16 +260,7 @@
     const activity = (d.activity || []).map(activityRow).filter(Boolean).join("");
     const price = d.trainerId ? LevelUp.priceFor(d.trainerId) : null;
     const photos = d.photos || [];
-    ownBar.innerHTML = me ? `<div class="mp-own-bar">
-        <p><b>👁 This is what other members see of you.</b> ${d.trainerId
-          ? "Your page opens from your coach card, also for visitors: your photos, the group classes you give and your calendar."
-          : "Never your email, body stats, sessions or payments: those are in the other tabs, for you only."}</p>
-        ${d.trainerId ? "" : `<label class="news-setting">
-          <input type="checkbox" data-page-visible ${me.profileVisible ? "checked" : ""}>
-          <span><b>Other members can see my page</b> <small class="muted">Off: they only see your name and photo. You can still chat and get likes on the high scores.</small></span>
-        </label>`}
-        ${d.loadError ? `<p class="form-error" role="alert">${esc(d.loadError)}</p>` : ""}
-      </div>` : "";
+    ownBar.innerHTML = me && d.loadError ? `<p class="form-error" role="alert">${esc(d.loadError)}</p>` : "";
     body.innerHTML = `
       <div class="container mp-grid">
         <div class="mp-side">

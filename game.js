@@ -569,6 +569,12 @@ const LevelUp = (() => {
     await afterClassChange();
     return r;
   }
+  // Change a planned class (name, trainer, date, time, places …); the players signed up hear what changed
+  async function classUpdate(id, p) {
+    const r = await call("class_update", { p_class: id, p });
+    await afterClassChange();
+    return r;
+  }
   async function classCancel(id, reason, series = false) {
     const r = await call("class_cancel_class", { p_class: id, p_reason: reason || "", p_series: series });
     processRefunds();
@@ -850,6 +856,8 @@ const LevelUp = (() => {
     return r;
   }
   async function adminAddReview(name, quote, rating) { await call("admin_add_review", { p_name: name, p_quote: quote, p_rating: Number(rating) }); await loadReviews(); emit(); }
+  // A review you added for a client: show that member's profile photo with it (null = their first letter)
+  async function adminReviewPhoto(id, userId) { await call("admin_review_photo", { p_id: id, p_user: userId || null }); await loadReviews(); emit(); }
   async function loadLeaderboard(period = "all") {
     try {
       if (period === "all") call("player_of_month").then((r) => { playerOfMonth = r || null; emit(); }).catch(() => {});
@@ -3328,7 +3336,7 @@ const LevelUp = (() => {
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, holdCelebrations, openProfile,
-    publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
@@ -3347,7 +3355,7 @@ const LevelUp = (() => {
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast,
     getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
-    signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classCancel, loadClasses,
+    signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven
   };

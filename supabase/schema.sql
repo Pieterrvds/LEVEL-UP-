@@ -259,6 +259,8 @@ create table if not exists public.reviews (
   approved_at timestamptz
 );
 alter table public.reviews enable row level security;
+-- A review the admin added for a client has no account behind it: photo_user is the member whose profile photo shows with it
+alter table public.reviews add column if not exists photo_user uuid references public.profiles (id) on delete set null;
 
 create table if not exists public.workouts (
   id bigint generated always as identity primary key,
@@ -3057,7 +3059,7 @@ returns jsonb language sql stable security definer set search_path = public as $
   select coalesce(jsonb_agg(jsonb_build_object('name', r.name, 'quote', r.quote, 'rating', r.rating,
                   'avatarUrl', p.avatar_url, 'date', r.approved_at) order by r.approved_at desc), '[]'::jsonb)
   from (select * from public.reviews where status = 'approved' order by approved_at desc limit 8) r
-  left join public.profiles p on p.id = r.user_id;
+  left join public.profiles p on p.id = coalesce(r.user_id, r.photo_user);
 $$;
 
 -- Admin: all reviews, approve / hide / delete, add one by hand
@@ -3067,6 +3069,8 @@ begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
   return coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name, 'quote', r.quote, 'rating', r.rating,
             'status', r.status, 'createdAt', r.created_at, 'byAdmin', r.user_id is null,
+            'photoUser', r.photo_user,
+            'avatarUrl', (select avatar_url from public.profiles where id = coalesce(r.user_id, r.photo_user)),
             'email', (select email from public.profiles where id = r.user_id))
           order by (r.status = 'pending') desc, r.created_at desc) from public.reviews r), '[]'::jsonb);
 end $$;
@@ -3080,6 +3084,15 @@ begin
   update public.reviews set status = p_status,
     approved_at = case when p_status = 'approved' then coalesce(approved_at, now()) else approved_at end
   where id = p_id;
+end $$;
+
+-- Show a member's profile photo with a review the admin added for them (null = just their first letter)
+create or replace function public.admin_review_photo(p_id uuid, p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  update public.reviews set photo_user = p_user where id = p_id and user_id is null;
+  if not found then raise exception 'Only for a review you added yourself.'; end if;
 end $$;
 
 create or replace function public.admin_add_review(p_name text, p_quote text, p_rating integer)
@@ -4218,6 +4231,87 @@ begin
   return jsonb_build_object('cancelled', n);
 end $$;
 
+-- Change a planned class at any moment: name, trainer (admin), date, time, duration, places, location, note,
+-- and for an admin the price and the trainer fee. Only what is in p changes. Everyone signed up hears it when
+-- the day, hour, place, name or trainer changed. A new price counts for people who sign up from then on.
+create or replace function public.class_update(p_class uuid, p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  admin boolean := public.is_admin();
+  c public.class_sessions;
+  trainer text;
+  ttl text;
+  d date;
+  tm time;
+  mins integer;
+  cap integer;
+  cost numeric;
+  fee numeric;
+  loc text;
+  remark text;
+  start timestamptz;
+  taken integer;
+  changed text := '';
+  g record;
+begin
+  if uid is null then raise exception 'Log in first.'; end if;
+  select * into c from public.class_sessions where id = p_class for update;
+  if not found or not public._can_lead(p_class) then raise exception 'Group class not found.'; end if;
+  if c.status <> 'scheduled' then raise exception 'A finished or cancelled class can''t be changed.'; end if;
+  trainer := case when admin then coalesce(nullif(p ->> 'trainerId', ''), c.trainer_id) else c.trainer_id end;
+  ttl := case when p ? 'title' then btrim(coalesce(p ->> 'title', '')) else c.title end;
+  d := coalesce(nullif(p ->> 'date', '')::date, (c.starts_at at time zone 'Europe/Brussels')::date);
+  tm := coalesce(nullif(p ->> 'time', '')::time, (c.starts_at at time zone 'Europe/Brussels')::time);
+  mins := coalesce(nullif(p ->> 'minutes', '')::int, c.minutes);
+  cap := coalesce(nullif(p ->> 'capacity', '')::int, c.capacity);
+  cost := case when admin and nullif(p ->> 'price', '') is not null then (p ->> 'price')::numeric else c.price end;
+  fee := case when admin and nullif(p ->> 'trainerFee', '') is not null then (p ->> 'trainerFee')::numeric else c.trainer_fee end;
+  loc := case when p ? 'location' then left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80) else c.location end;
+  remark := case when p ? 'note' then left(btrim(coalesce(p ->> 'note', '')), 300) else c.note end;
+  start := (d + tm) at time zone 'Europe/Brussels';
+  if not exists (select 1 from public.trainers where id = trainer and active) then raise exception 'Unknown trainer.'; end if;
+  if char_length(ttl) < 2 or char_length(ttl) > 40 then raise exception 'Give the class a name (2 to 40 characters).'; end if;
+  if mins < 15 or mins > 240 then raise exception 'A class lasts between 15 and 240 minutes.'; end if;
+  if cap < 2 or cap > 60 then raise exception 'A class has between 2 and 60 places.'; end if;
+  if cost < 0 or cost > 500 or fee < 0 or fee > 1000 then raise exception 'Check the price and the trainer fee.'; end if;
+  taken := public._class_taken(c.id);
+  if cap < taken then raise exception '% signed up already: the class needs at least that many places.', taken; end if;
+  if start <> c.starts_at and start <= now() then raise exception 'Pick a day and hour that are still to come.'; end if;
+  if start <> c.starts_at or mins <> c.minutes or trainer <> c.trainer_id then
+    if exists (select 1 from public.class_sessions o where o.id <> c.id and o.trainer_id = trainer and o.status = 'scheduled'
+               and tstzrange(o.starts_at, o.starts_at + make_interval(mins => o.minutes)) && tstzrange(start, start + make_interval(mins => mins))) then
+      raise exception 'This trainer already has a group class at that time.';
+    end if;
+    if exists (select 1 from public.bookings k where k.trainer_id = trainer and k.status in ('awaiting_payment', 'pending', 'confirmed')
+               and tstzrange(public._slot_start(k.day, k.hour), public._slot_start(k.day, k.hour) + interval '1 hour')
+                   && tstzrange(start, start + make_interval(mins => mins))) then
+      raise exception 'This trainer has a 1:1 session at that time.';
+    end if;
+  end if;
+  -- what the players need to hear
+  if start <> c.starts_at then changed := 'New time: ' || to_char(start at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI'); end if;
+  if loc <> c.location then changed := changed || case when changed <> '' then ' · ' else '' end || 'New place: ' || loc; end if;
+  if trainer <> c.trainer_id then
+    changed := changed || case when changed <> '' then ' · ' else '' end || 'Now with ' || (select split_part(name, ' ', 1) from public.trainers where id = trainer);
+  end if;
+  if ttl <> c.title and changed = '' then changed := 'Now called ' || ttl; end if;
+  update public.class_sessions set title = ttl, trainer_id = trainer, starts_at = start, minutes = mins, capacity = cap,
+    price = cost, trainer_fee = fee, location = loc, note = remark,
+    reminder_pushed_at = case when start <> c.starts_at then null else reminder_pushed_at end
+  where id = c.id returning * into c;
+  insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
+  -- the news item of this class follows its new name and hour
+  update public.news set title = '📣 ' || ttl || ' · ' || to_char(start at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(start at time zone 'Europe/Brussels', 'HH24:MI'),
+    expires_at = start where ref = 'class-' || c.id;
+  if changed <> '' then
+    for g in select user_id from public.class_signups where class_id = c.id and status in ('booked', 'awaiting_payment', 'waitlist') loop
+      perform public._push(g.user_id, 'Class changed: ' || ttl, changed, 'profile.html#classes', 'class-' || c.id || '-changed');
+    end loop;
+  end if;
+  return public._class_json(c, uid);
+end $$;
+
 -- The class list for the trainer or an admin: everyone signed up and on the waitlist, with payment and health flags
 create or replace function public.class_roster(p_class uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -4409,6 +4503,8 @@ revoke execute on function public.delete_my_review() from public, anon;
 revoke execute on function public.admin_reviews() from public, anon;
 revoke execute on function public.admin_set_review(uuid, text) from public, anon;
 revoke execute on function public.admin_add_review(text, text, integer) from public, anon;
+revoke execute on function public.admin_review_photo(uuid, uuid) from public, anon;
+grant execute on function public.admin_review_photo(uuid, uuid) to authenticated;
 grant execute on function public.submit_review(text, integer) to authenticated;
 grant execute on function public.delete_my_review() to authenticated;
 grant execute on function public.admin_reviews() to authenticated;
@@ -4536,6 +4632,8 @@ revoke execute on function public.class_signup(uuid, text) from public, anon;
 revoke execute on function public.class_cancel(uuid) from public, anon;
 revoke execute on function public.class_create(jsonb) from public, anon;
 revoke execute on function public.class_cancel_class(uuid, text, boolean) from public, anon;
+revoke execute on function public.class_update(uuid, jsonb) from public, anon;
+grant execute on function public.class_update(uuid, jsonb) to authenticated;
 revoke execute on function public.class_roster(uuid) from public, anon;
 revoke execute on function public.class_mark(uuid, boolean) from public, anon;
 revoke execute on function public.class_mark_paid(uuid, boolean) from public, anon;

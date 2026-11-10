@@ -1,5 +1,6 @@
-// LEVEL-UP group classes for trainers and the admin: plan classes (once or weekly), see who signed up,
-// tick off who is there (they get their XP right away) and who paid at the class, then finish the class.
+// LEVEL-UP group classes for trainers and the admin: plan classes (once or weekly), change them at any moment
+// (name, trainer, date, time, places …), see who signed up, tick off who is there (they get their XP right away)
+// and who paid at the class, then finish the class.
 // The profile's Coach tab shows a trainer's own classes; the admin dashboard shows every class.
 
 window.LevelUpClasses = (() => {
@@ -18,7 +19,7 @@ window.LevelUpClasses = (() => {
   function mount(el, { admin = false } = {}) {
     if (!el) return;
     const key = admin ? "admin" : "coach";
-    if (!states.has(key)) states.set(key, { list: null, loadedAt: 0, open: null, roster: null, creating: false, showPast: false, busy: false, error: "" });
+    if (!states.has(key)) states.set(key, { list: null, loadedAt: 0, open: null, roster: null, creating: false, editing: null, showPast: false, busy: false, error: "" });
     const st = states.get(key);
     const pricing = LevelUp.getPricing();
     const player = LevelUp.getPlayer();
@@ -58,9 +59,11 @@ window.LevelUpClasses = (() => {
             <div class="gc-actions">
               ${c.status !== "cancelled" ? `<button type="button" class="btn btn-small ${c.canFinish || (started && c.status === "scheduled") ? "btn-primary" : ""}" data-gc-roster="${c.id}" aria-expanded="${open}">${open ? "Close list ▲" : started ? "Tick off ▼" : "Who's coming ▼"}</button>` : ""}
               ${c.chatId && c.chatOpen ? `<a class="btn btn-small btn-ghost" href="chat.html?t=${encodeURIComponent(c.chatId)}">💬 Chat</a>` : ""}
+              ${c.status === "scheduled" ? `<button type="button" class="btn btn-small btn-ghost" data-gc-edit="${c.id}" aria-expanded="${st.editing === c.id}">✎ Change</button>` : ""}
               ${c.status === "scheduled" && !started ? `<button type="button" class="btn btn-small btn-ghost" data-gc-cancel="${c.id}">Cancel</button>` : ""}
             </div>
           </div>
+          ${st.editing === c.id ? formHtml(c) : ""}
           ${open ? rosterHtml(c) : ""}
         </li>`;
     }
@@ -109,37 +112,41 @@ window.LevelUpClasses = (() => {
         </div>`;
     }
 
-    function formHtml() {
+    // The form for a new class, or (with a class) to change that class
+    function formHtml(c = null) {
       const mine = player?.trainerId;
       const trainers = LevelUp.TRAINERS.filter((t) => admin || t.id === mine);
+      const picked = c ? c.trainerId : mine;
+      const durations = [...new Set([45, 60, 75, 90, 120, c?.minutes || 60])].sort((a, b) => a - b);
       return `
-        <form class="gc-form" id="gcForm-${key}">
+        <form class="gc-form ${c ? "gc-edit" : ""}" id="gcForm-${key}" ${c ? `data-gc-edit-form="${c.id}"` : ""}>
           <div class="field-row">
-            <label>Class<input name="title" list="gcPresets" maxlength="40" required placeholder="e.g. HIIT"></label>
-            ${admin ? `<label>Trainer<select name="trainerId">${trainers.map((t) => `<option value="${t.id}" ${t.id === mine ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>` : ""}
+            <label>Class<input name="title" list="gcPresets" maxlength="40" required placeholder="e.g. HIIT" value="${esc(c?.title || "")}"></label>
+            ${admin ? `<label>Trainer<select name="trainerId">${trainers.map((t) => `<option value="${t.id}" ${t.id === picked ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>` : ""}
           </div>
           <datalist id="gcPresets">${PRESETS.map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
           <div class="field-row four">
-            <label>Date<input type="date" name="date" required value="${tomorrow()}" min="${LevelUp.dateKey()}"></label>
-            <label>Start<input type="time" name="time" required value="19:00" step="900"></label>
-            <label>Duration<select name="minutes">${[45, 60, 75, 90, 120].map((m) => `<option value="${m}" ${m === 60 ? "selected" : ""}>${m} min</option>`).join("")}</select></label>
-            <label>Places<input type="number" name="capacity" min="2" max="60" value="${pricing.classCapacity}" required></label>
+            <label>Date<input type="date" name="date" required value="${c ? c.date : tomorrow()}" min="${c && c.date < LevelUp.dateKey() ? c.date : LevelUp.dateKey()}"></label>
+            <label>Start<input type="time" name="time" required value="${c ? c.time : "19:00"}" step="900"></label>
+            <label>Duration<select name="minutes">${durations.map((m) => `<option value="${m}" ${m === (c?.minutes || 60) ? "selected" : ""}>${m} min</option>`).join("")}</select></label>
+            <label>Places<input type="number" name="capacity" min="${c ? Math.max(2, c.taken) : 2}" max="60" value="${c ? c.capacity : pricing.classCapacity}" required></label>
           </div>
           <div class="field-row">
-            <label>Repeat<select name="repeatWeeks">${[[1, "Once"], [4, "Every week · 4 weeks"], [8, "Every week · 8 weeks"], [12, "Every week · 12 weeks"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>
-            <label>Location<input name="location" maxlength="80" value="Hoogstraat 40, Aalst"></label>
+            ${c ? "" : `<label>Repeat<select name="repeatWeeks">${[[1, "Once"], [4, "Every week · 4 weeks"], [8, "Every week · 8 weeks"], [12, "Every week · 12 weeks"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>`}
+            <label>Location<input name="location" maxlength="80" value="${esc(c ? c.location : "Hoogstraat 40, Aalst")}"></label>
           </div>
           ${admin ? `<div class="field-row">
-            <label>Price per player (€)<input type="number" name="price" min="0" max="500" step="0.5" value="${pricing.classPrice}"></label>
-            <label>Trainer fee per class (€)<input type="number" name="trainerFee" min="0" max="1000" step="1" value="${pricing.classTrainerFee}"></label>
-          </div>` : `<p class="muted small">Players pay ${euro(pricing.classPrice)} per class; you get ${euro(pricing.classTrainerFee)} per class you lead.</p>`}
-          <label>Note for the players (optional)<input name="note" maxlength="300" placeholder="Bring a towel and water · level: everyone welcome"></label>
-          <label class="gc-announce"><input type="checkbox" name="announce" checked> <span>📣 Tell all members: news behind the bell and a notification, with your note in it</span></label>
-          <p class="muted small">Classes with the same name share one group chat (e.g. every "Hyrox" class uses the Hyrox chat).</p>
+            <label>Price per player (€)<input type="number" name="price" min="0" max="500" step="0.5" value="${c ? c.price : pricing.classPrice}"></label>
+            <label>Trainer fee per class (€)<input type="number" name="trainerFee" min="0" max="1000" step="1" value="${c ? Number(c.trainerFee) : pricing.classTrainerFee}"></label>
+          </div>` : c ? "" : `<p class="muted small">Players pay ${euro(pricing.classPrice)} per class; you get ${euro(pricing.classTrainerFee)} per class you lead.</p>`}
+          <label>Note for the players (optional)<input name="note" maxlength="300" placeholder="Bring a towel and water · level: everyone welcome" value="${esc(c?.note || "")}"></label>
+          ${c ? `<p class="muted small">${c.taken ? `${c.taken} signed up: they get a message when the day, hour, place, name or trainer changes.` : "Nobody signed up yet."}${admin ? " A new price counts for who signs up from now on." : ""}</p>`
+            : `<label class="gc-announce"><input type="checkbox" name="announce" checked> <span>📣 Tell all members: news behind the bell and a notification, with your note in it</span></label>
+          <p class="muted small">Classes with the same name share one group chat (e.g. every "Hyrox" class uses the Hyrox chat).</p>`}
           <p class="form-error" role="alert">${esc(st.error)}</p>
           <div class="btn-row">
-            <button type="submit" class="btn btn-primary">Plan class ▶</button>
-            <button type="button" class="btn btn-ghost btn-small" data-gc-new>Cancel</button>
+            <button type="submit" class="btn btn-primary">${c ? "Save changes" : "Plan class ▶"}</button>
+            <button type="button" class="btn btn-ghost btn-small" ${c ? `data-gc-edit="${c.id}"` : "data-gc-new"}>Cancel</button>
           </div>
         </form>`;
     }
@@ -150,7 +157,10 @@ window.LevelUpClasses = (() => {
       const now = new Date();
       const toFinish = (list || []).filter((c) => c.canFinish);
       const upcoming = (list || []).filter((c) => c.status === "scheduled" && !c.canFinish && c.end > now);
-      const past = (list || []).filter((c) => !toFinish.includes(c) && !upcoming.includes(c)).reverse();
+      const rest = (list || []).filter((c) => !toFinish.includes(c) && !upcoming.includes(c)).reverse();
+      // the admin keeps no archive: a finished or cancelled class only stays while money is still open on it
+      const openMoney = admin ? rest.filter((c) => c.unpaid > 0 || c.refunds?.length) : [];
+      const past = admin ? [] : rest;
       el.innerHTML = `
         <div class="panel-head gc-head">
           <h3 class="panel-sub first">Group classes ${toFinish.length ? `<span class="count-chip">${toFinish.length}</span>` : ""}</h3>
@@ -161,9 +171,29 @@ window.LevelUpClasses = (() => {
           ${toFinish.length ? `<p class="gc-sub">To finish</p><ul class="gc-list">${toFinish.map(classCard).join("")}</ul>` : ""}
           ${upcoming.length ? `<p class="gc-sub">Upcoming</p><ul class="gc-list">${upcoming.map(classCard).join("")}</ul>`
             : st.creating ? "" : `<p class="muted">No group classes planned. Plan one: players see it on the schedule and sign up right away.</p>`}
+          ${openMoney.length ? `<p class="gc-sub">Money still open</p><ul class="gc-list">${openMoney.map(classCard).join("")}</ul>` : ""}
           ${past.length ? `<button type="button" class="btn btn-ghost btn-small history-btn" data-gc-past aria-expanded="${st.showPast}">${st.showPast ? "Hide past classes ▲" : `Past classes · ${past.length} ▼`}</button>
             ${st.showPast ? `<ul class="gc-list">${past.map(classCard).join("")}</ul>` : ""}` : ""}`}`;
-      el.querySelector("form.gc-form")?.addEventListener("submit", onCreate);
+      el.querySelectorAll("form.gc-form").forEach((form) => form.addEventListener("submit", form.dataset.gcEditForm ? onEdit : onCreate));
+    }
+
+    async function onEdit(event) {
+      event.preventDefault();
+      const form = event.target;
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      st.error = "";
+      try {
+        await LevelUp.classUpdate(form.dataset.gcEditForm, Object.fromEntries(new FormData(form)));
+        LevelUp.toast({ title: "Class changed", text: "Who signed up got a message if the day, hour or place changed", icon: "✎", tone: "green" });
+        st.editing = null;
+        await load();
+        LevelUp.refreshCoach();
+      } catch (err) {
+        st.error = err.message;
+        btn.disabled = false;
+        form.querySelector(".form-error").textContent = err.message;
+      }
     }
 
     async function onCreate(event) {
@@ -209,7 +239,8 @@ window.LevelUpClasses = (() => {
     el.onclick = async (event) => {
       const t = event.target.closest("button, a");
       if (!t || t.disabled) return;
-      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.error = ""; paint(); return; }
+      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.editing = null; st.error = ""; paint(); return; }
+      if (t.dataset.gcEdit) { st.editing = st.editing === t.dataset.gcEdit ? null : t.dataset.gcEdit; st.creating = false; st.error = ""; paint(); return; }
       if (t.hasAttribute("data-gc-past")) { st.showPast = !st.showPast; paint(); return; }
       if (t.dataset.gcRoster) {
         st.error = "";

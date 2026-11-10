@@ -98,6 +98,15 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
   admin.html → Group classes (`class_create`, once or every week for 4/8/12 weeks). Only the admin can change the price
   and the trainer fee. A class can't overlap the trainer's other classes or 1:1 sessions, and while it runs the
   trainer's 1:1 hours are blocked on the schedule (`slot_status`, `book_session`).
+- **Changing a class:** **✎ Change** on a planned class opens the same form, filled in: name, trainer (admin),
+  date, start, duration, places, location, note, and for the admin the price and trainer fee (`class_update`).
+  Possible at any moment while the class is not finished or cancelled. Everyone signed up gets one message when
+  the day, hour, place, name or trainer changed; a new price counts for who signs up from then on; places can't
+  go below the number signed up. A class that gets another name moves to the group chat of that name.
+- **No archive for the admin:** admin.html lists the classes to finish and the upcoming ones. A finished or
+  cancelled class is gone from the list, unless money is still open on it (unpaid places, or a refund to give
+  back by hand): those stay under "Money still open" until it's settled. Trainers keep "Past classes" in their
+  Coach tab.
 - **Signing up:** classes show on the schedule (`schedule.js`: the week board, the phone day list and the "Up next"
   board) with the places taken, e.g. 6/10. Everyone sees the numbers; the trainer and the admin see the names
   (`class_roster`). A player signs up (`class_signup`, health check first) and pays online (Mollie, type `class`) or at
@@ -195,6 +204,8 @@ Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js
   (or starts) the coach chat with them; two members get a private chat of their own (`member_id`), never a second one.
 - **Unread:** red badge on the Chat tab (phones) and the chat icon in the header (computer); a pop-up at the top of
   any page when a new message comes in (tap = open it). A push notification arrives on phones with notifications on.
+- **Opens at the newest message:** opening a conversation (from the list, a link or a notification) always lands
+  on the last message, also on a phone; coming back to the app shows what came in meanwhile.
 - **Live:** an open conversation checks for new messages every 3 seconds (right away when a push comes in), other
   pages every 20 seconds. Read receipts: "Seen" under your last message the other person has read.
 - **Hearts:** tap the small heart next to someone else's message (or double-tap the message) to like it, tap again
@@ -402,7 +413,9 @@ you're unsure about anything legal.
 - **Reviews** (home page, above the schedule): only real clients. Players with at least one completed session write
   one under My account → Overview ("How is your training going?": 1–5 stars + max. 300 characters). Pieter gets an
   email and approves, hides or deletes it under Admin → Overview → Reviews. A review a client sent another way
-  (WhatsApp, Google…) can be added there too, with their permission. The section stays hidden until there is an
+  (WhatsApp, Google…) can be added there too, with their permission; pick the member under it ("Photo of
+  member") to show their profile photo with it (`reviews.photo_user`, `admin_review_photo`), otherwise it shows
+  their first letter. The section stays hidden until there is an
   approved review; it shows the first name and current profile photo. Editing a review sends it back for approval.
 - **Q&A** (`#faq`, home page): the answers are built in `script.js` (`renderFaq`) with the live prices and rules,
   so they change along when prices change in admin.
@@ -437,8 +450,7 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
 `profile.html?u=<user id>` is a member, `profile.html?trainer=<trainer id>` a coach, without either your own page.
 - **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (Overview,
   Coach, Rewards, Packs & shop, Body stats, Me). The first tab, **My page**, is exactly what others see, with your
-  own buttons in it: 📷 on your photo, the text about yourself, "Add a photo", Remove under your photos and the
-  switch "Other members can see my page". `member.js` draws the top block and the My page tab, `profile.js` the
+  own buttons in it: 📷 on your photo, the text about yourself, "Add a photo" and Remove under your photos. `member.js` draws the top block and the My page tab, `profile.js` the
   other tabs; on someone else's page `profile.js` draws nothing.
 - **One photo:** your profile photo is changed in one place (📷 on the photo at the top) and shows everywhere.
   For a coach it is also the photo on the coach card, in the calendar, the booking window and the chat
@@ -460,10 +472,10 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
   At most 300 characters and 6 comments a minute.
 - **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
 - **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
-  see the photos and counts but not the comments. A member can make their page private (the switch at the top of
-  their My page tab): others then only see name and photo, and can't react to the photos.
+  see the photos and counts but not the comments. A member can make their page private (Me → Account →
+  "Other members can see my page"): others then only see name and photo, and can't react to the photos.
 - **Your own text and photos:** a line about yourself (160 characters), up to 12 photos with a caption, and
-  the private switch, all on the My page tab. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
+  on the My page tab; the private switch is under Me → Account. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
 - **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
 - Files: `profile.html`, `member.js`, `member.css` (the page), `profile.js`, `profile.css` (the account tabs). Server: `public_profile`, `set_profile`, `photo_add`,

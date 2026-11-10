@@ -775,6 +775,10 @@ function renderSettings() {
         </div>
         ${LevelUp.getPlayer().trainerId ? "" : `
         <label class="toggle">
+          <input type="checkbox" data-page-visible ${LevelUp.getPlayer().profileVisible ? "checked" : ""}>
+          <span>Other members can see my page <small class="muted">(off: they only see your name and photo)</small></span>
+        </label>
+        <label class="toggle">
           <input type="checkbox" id="leaderboardToggle" ${LevelUp.getPlayer().showOnLeaderboard !== false ? "checked" : ""}>
           <span>Show my player name and level on the <a href="index.html#highScores" class="text-link">high scores</a></span>
         </label>`}
