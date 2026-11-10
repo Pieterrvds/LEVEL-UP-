@@ -325,6 +325,11 @@ function scrollToEnd() {
   const list = document.getElementById("chatMessages");
   if (!list) return;
   list.scrollTop = list.scrollHeight;
+  // a newest message that is taller than the screen (the coach's welcome) starts at its first line, not its last
+  const last = [...list.querySelectorAll(".chat-msg")].pop();
+  if (last && list.clientHeight && last.offsetHeight > list.clientHeight) {
+    list.scrollTop = Math.max(0, last.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - 8);
+  }
   if (list.clientHeight) list.dataset.scrolled = "1"; // only counts once the list is on screen
 }
 

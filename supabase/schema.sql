@@ -837,6 +837,12 @@ begin
       null; -- never block a sign-up because of the stats
     end;
   end if;
+  -- The head coach says hello in the chat
+  begin
+    perform public._welcome_chat(new.id);
+  exception when others then
+    null; -- never block a sign-up because of the welcome message
+  end;
   return new;
 end $$;
 
@@ -1691,7 +1697,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare about text := btrim(coalesce(p ->> 'bio', ''));
 begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
-  if p ? 'bio' and char_length(about) > 160 then raise exception 'Keep the text about yourself under 160 characters.'; end if;
+  if p ? 'bio' and char_length(about) > 1200 then raise exception 'Keep the text about yourself under 1200 characters.'; end if;
   update public.profiles set
     bio = case when p ? 'bio' then nullif(about, '') else bio end,
     profile_visible = coalesce((p ->> 'visible')::boolean, profile_visible)
@@ -4786,3 +4792,97 @@ grant execute on function public.mark_pack_gift_given(uuid) to authenticated;
 
 -- Hand out the free session vouchers members already earned before rewards existed
 do $$ begin perform public._check_rewards(id) from public.profiles; end $$;
+
+-- ---------------------------------------------------------
+-- Welcome in the chat: the head coach says hello to every member
+-- ---------------------------------------------------------
+-- A new account gets one chat message from the head coach (app_config: owner_trainer_id): a welcome, what you can
+-- do in the app and who to turn to. Members who already had an account get it once too (the first time this
+-- script runs with this block). It is an ordinary chat message: the member sees the red dot on the chat icon and
+-- the "new message" notice, gets a push message when they have those on (not at night), and can simply answer.
+-- The text is in app_config (welcome_chat_text); {name} becomes the member's first name. Change it there (Table
+-- Editor > app_config) and every later welcome uses the new text; an empty text switches the welcome off.
+alter table public.profiles add column if not exists welcomed_at timestamptz;
+
+insert into public.app_config (key, value) values ('welcome_chat_text', $welcome$Hey {name}! 👋
+
+Pieter hier, hoofdcoach van LEVEL-UP. Welkom, en merci dat je de app een kans geeft. Een account maken is al je eerste level-up. 💪
+
+Wat kan je hier doen?
+🗓️ Een training boeken: 1-op-1 met een coach of mee in een groepsles.
+⚡ XP verdienen met elke sessie, in level stijgen en beloningen vrijspelen.
+🏆 Je plaats in het klassement volgen en anderen aanmoedigen met een hartje.
+🛍️ Rondkijken in de shop.
+💬 Chatten met je coach en met andere leden.
+
+Bij wie kan je terecht?
+Voor alles over trainingen, je planning of de app: stuur mij hier gewoon een berichtje. Heb je al een vaste coach? Die vind je ook in de chat.
+
+Nieuw bij ons? Boek dan je eerste sessie. Dat is meteen je intakegesprek: we maken kennis, bekijken waar je nu staat en kiezen samen je eerste doel.
+
+Bij LEVEL-UP is sport een spel. Dus speel mee, heb plezier en level-up op je eigen tempo. Tot snel op de vloer!
+
+Pieter$welcome$)
+on conflict (key) do nothing;
+
+-- Send the welcome to one member (once). True when a message was sent.
+create or replace function public._welcome_chat(p_user uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  coach text := public._config('owner_trainer_id');
+  coach_name text;
+  txt text := btrim(coalesce(public._config('welcome_chat_text'), ''));
+  pr public.profiles;
+  tid uuid;
+  mid bigint;
+  at timestamptz;
+begin
+  select * into pr from public.profiles where id = p_user;
+  if not found or pr.welcomed_at is not null or txt = '' then return false; end if;
+  select split_part(name, ' ', 1) into coach_name from public.trainers where id = coach and active;
+  if not found then return false; end if; -- no head coach (yet): try again at the next run
+  -- coaches, the head coach included, don't get a welcome from the head coach
+  if exists (select 1 from public.trainers t where t.active and t.email is not null and lower(t.email) = lower(pr.email)) then
+    update public.profiles set welcomed_at = now() where id = p_user;
+    return false;
+  end if;
+  insert into public.chat_threads (client_id, trainer_id) values (p_user, coach) on conflict do nothing;
+  select id into tid from public.chat_threads where client_id = p_user and trainer_id = coach and member_id is null;
+  if tid is null then return false; end if;
+  txt := left(replace(txt, '{name}', coalesce(nullif(split_part(btrim(pr.name), ' ', 1), ''), 'daar')), 2000);
+  insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
+  values (tid, public._trainer_user(coach), true, txt) returning id, created_at into mid, at;
+  -- read for the coach (he "wrote" it), new for the member
+  update public.chat_threads set last_at = at, trainer_read_id = greatest(trainer_read_id, mid) where id = tid;
+  update public.profiles set welcomed_at = now() where id = p_user;
+  -- a push for who has notifications on, never at night (22:00-08:00 waits till the morning)
+  insert into public.push_outbox (user_id, title, body, url, tag, send_after)
+  select p_user, '💬 ' || coach_name, left(txt, 140), 'chat.html?t=' || tid, 'chat-' || tid, public._after_quiet()
+  where exists (select 1 from public.push_subscriptions where user_id = p_user);
+  return true;
+end $$;
+revoke execute on function public._welcome_chat(uuid) from public, anon, authenticated;
+
+-- Members who were here before the welcome existed: once, oldest account first
+do $$ begin perform public._welcome_chat(p.id) from (select id from public.profiles where welcomed_at is null order by created_at) p; end $$;
+
+-- ---------------------------------------------------------
+-- The head coach's own text ("About Pieter" on his page), written once
+-- ---------------------------------------------------------
+-- Set one time on the account linked to the head coach's card (app_config: owner_about_added). After that the
+-- text is his: he changes it on his own page (My page > About > Change) and this script leaves it alone.
+do $$
+declare owner_user uuid := public._trainer_user(public._config('owner_trainer_id'));
+begin
+  if owner_user is not null and not exists (select 1 from public.app_config where key = 'owner_about_added') then
+    update public.profiles set bio = $about$Ik ben LEVEL-UP begonnen met één idee: sport moet voelen als spel. Niet als straf of als iets dat moet, wel als iets waar je naar uitkijkt. Samen zweten, samen lachen en elke keer een klein beetje beter worden.
+
+Daarom werkt alles hier zoals in een game. Met elke training verdien je XP, je stijgt in level en we vieren elke stap, groot of klein. En je doet het nooit alleen: in de groepslessen, de run club en de chat leer je mensen kennen die er evenveel zin in hebben als jij. Mensen bij elkaar brengen, daar doe ik het voor.
+
+Kort over mij: hoofdcoach en oprichter van LEVEL-UP, met een hart voor CrossFit, calisthenics, HIIT en Muay Thai.
+
+Nieuw hier? Welkom! Boek je eerste sessie als intakegesprek: we maken kennis, bekijken waar je nu staat en kiezen samen je eerste doel. Ervaring heb je niet nodig, alleen goesting. Klaar om te level-uppen?$about$
+    where id = owner_user;
+    insert into public.app_config (key, value) values ('owner_about_added', '1') on conflict (key) do nothing;
+  end if;
+end $$;

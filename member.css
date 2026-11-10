@@ -76,7 +76,9 @@
 .mp-card { padding: 18px; }
 .mp-card h2, .mp-feed-title { margin: 0 0 12px; font-family: var(--display); font-size: 1.15rem; font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
 .mp-card h2 small, .mp-feed-title small { font-family: var(--sans); font-style: normal; font-weight: 600; font-size: 0.8rem; }
-.mp-bio { margin: 0 0 12px; font-size: 1rem; line-height: 1.55; }
+.mp-bio { margin: 0 0 12px; font-size: 1rem; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
+.mypage-bio-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+.mypage-bio-btns { display: flex; gap: 8px; flex: none; }
 .mp-card .team-chips { margin: 0 0 12px; }
 .mp-card .trainer-stats { margin-top: 4px; }
 .mp-price { margin: 12px 0 0; padding-top: 12px; font-size: 0.9rem; color: var(--muted); border-top: 1px solid var(--line); }

@@ -40,6 +40,8 @@
     };
   }
   const openAll = new Set(); // photos whose comments are all shown
+  let bioEditing = false;     // your own page: is the text about yourself open for writing?
+  const BIO_MAX = 1200;
 
   const when = (value) => new Date(value).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const day = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -261,21 +263,30 @@
     const price = d.trainerId ? LevelUp.priceFor(d.trainerId) : null;
     const photos = d.photos || [];
     ownBar.innerHTML = me && d.loadError ? `<p class="form-error" role="alert">${esc(d.loadError)}</p>` : "";
+    // a redraw while you are writing (new XP, a like …) must not throw away what you typed
+    const draftBox = bioEditing ? document.getElementById("bioInput") : null;
+    const draft = draftBox ? { text: draftBox.value, focus: document.activeElement === draftBox, at: draftBox.selectionStart } : null;
     body.innerHTML = `
       <div class="container mp-grid">
         <div class="mp-side">
           ${me || about || tags.length || d.trainerId ? `<section class="panel mp-card">
             <h2>About ${esc(first)}</h2>
-            ${me ? `<form class="mypage-bio" data-mp-bio>
+            ${me ? (bioEditing ? `<form class="mypage-bio" data-mp-bio>
               <label class="sr-only" for="bioInput">About me</label>
-              <textarea id="bioInput" name="bio" rows="3" maxlength="160" placeholder="e.g. Training for my first Hyrox 💪">${esc(me.bio || "")}</textarea>
+              <textarea id="bioInput" name="bio" rows="7" maxlength="${BIO_MAX}" placeholder="e.g. Training for my first Hyrox 💪">${esc(me.bio || "")}</textarea>
               <div class="mypage-bio-row">
-                <small class="muted">A line about yourself (optional, 160 characters)</small>
-                <button type="submit" class="btn btn-small btn-primary">Save</button>
+                <small class="muted"><span data-bio-count>${(me.bio || "").length}</span> / ${BIO_MAX}</small>
+                <span class="mypage-bio-btns">
+                  <button type="button" class="btn btn-small btn-ghost" data-bio-cancel>Cancel</button>
+                  <button type="submit" class="btn btn-small btn-primary">Save</button>
+                </span>
               </div>
               <p class="form-error" role="alert"></p>
-            </form>
-            ${!me.bio && cardText ? `<p class="mp-bio muted" data-no-i18n>${esc(cardText)}</p>` : ""}`
+            </form>`
+              // closed: the text exactly as others read it, with a button to change it
+              : `${about ? `<p class="mp-bio" data-no-i18n>${esc(about)}</p>` : `<p class="mp-bio muted">Nothing here yet. Tell others something about yourself.</p>`}
+            <p class="mypage-bio-edit"><button type="button" class="btn btn-small btn-ghost" data-bio-edit>${me.bio ? "✎ Change" : "✎ Write something"}</button>
+              <small class="muted">This is what others read on your page.</small></p>`)
               : about ? `<p class="mp-bio" data-no-i18n>${esc(about)}</p>` : ""}
             ${tags.length ? `<ul class="team-chips">${tags.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
             ${d.trainerId ? `<div class="trainer-stats" data-trainer-stats="${esc(d.trainerId)}"></div>
@@ -328,6 +339,14 @@
             : `<p class="mp-empty">${me ? "No photos yet. Add your first one above." : `${esc(first)} hasn't posted photos yet.`}</p>`}
         </div>
       </div>`;
+    if (draft) {
+      const box = document.getElementById("bioInput");
+      if (box) {
+        box.value = draft.text;
+        const count = box.form.querySelector("[data-bio-count]"); if (count) count.textContent = draft.text.length;
+        if (draft.focus) { box.focus(); box.setSelectionRange(draft.at, draft.at); }
+      }
+    }
     if (me) bindOwnPage();
     window.LevelUpSchedule?.refresh(); // fills the coach's level, sessions and open hours
   }
@@ -445,10 +464,25 @@
     try {
       await LevelUp.setProfile({ bio: form.elements.bio.value });
       LevelUp.toast({ title: "Saved", text: "Your page is up to date.", icon: "✓", tone: "green" });
+      // close the box: the page now shows the new text, the way others read it
+      bioEditing = false;
+      if (page?.isMe) { page.bio = LevelUp.getPlayer()?.bio || ""; renderBody(); return; }
     } catch (err) {
       form.querySelector(".form-error").textContent = err.message;
     }
     btn.disabled = false;
+  });
+  document.addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-bio-edit]"), cancel = event.target.closest("[data-bio-cancel]");
+    if (!edit && !cancel) return;
+    bioEditing = Boolean(edit);
+    renderBody();
+    if (edit) { const box = document.getElementById("bioInput"); box?.focus(); box?.setSelectionRange(box.value.length, box.value.length); }
+  });
+  document.addEventListener("input", (event) => {
+    if (event.target.id !== "bioInput") return;
+    const count = event.target.form?.querySelector("[data-bio-count]");
+    if (count) count.textContent = event.target.value.length;
   });
   document.addEventListener("change", async (event) => {
     const box = event.target.closest("[data-page-visible]");

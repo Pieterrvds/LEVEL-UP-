@@ -237,6 +237,12 @@ Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js
   Table `chat_message_likes`, function `chat_like`; `chat_thread` returns `likes`/`liked` per message and `hearts`.
 - **Server:** tables `chat_threads` + `chat_messages` (no direct access), functions `chat_list`, `chat_open`,
   `chat_thread`, `chat_send` (max 2000 characters, 20 messages a minute) and `chat_unread` in `supabase/schema.sql`.
+- **Welcome from the head coach:** every new account gets one chat message from the head coach (`owner_trainer_id`
+  in `app_config`): a welcome, what you can do in the app and who to turn to. Members who were already there got it
+  once too. It is an ordinary message (red dot on the chat icon, the "new message" notice, a push for who has
+  those on, never at night) and the member can answer it. The text is `welcome_chat_text` in `app_config`
+  (`{name}` = the member's first name; empty = no welcome); `_welcome_chat` in `supabase/schema.sql`, called from
+  the sign-up trigger. Coaches get none. A newest message that is taller than the screen opens at its first line.
 
 ## Bonus XP (admin)
 Admin → Members: **+ XP** next to a member (or "Reward with XP" in their details) gives extra XP with your own reason,
@@ -508,7 +514,8 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
 - **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
   see the photos and counts but not the comments. A member can make their page private (Settings → Account →
   "Other members can see my page"): others then only see name and photo, and can't react to the photos.
-- **Your own text and photos:** a line about yourself (160 characters), up to 12 photos with a caption, and
+- **Your own text and photos:** a text about yourself (up to 1200 characters, blank lines are kept; on your own
+  page it shows the way others read it, with a ✎ Change button that opens it for writing), up to 12 photos with a caption, and
   on the My page tab; the private switch is under Settings → Account. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
 - **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
