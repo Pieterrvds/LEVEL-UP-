@@ -1,5 +1,5 @@
 /* PREVIEW: the new "How it works" demo. Six short scenes on a loop (profile, coach, booking, training, high scores,
-   shop) with one XP bar that follows along, and a mascot: the gymnast of the celebration (levelup-celebrate.js)
+   shop) with one XP bar that follows along, a mouse that clicks, and a mascot: the gymnast of the celebration (levelup-celebrate.js)
    hangs on his rings next to the scenes, does a rep when something good happens, and does his muscle-up with
    confetti and rays when the demo player levels up. Only howto-preview.html loads this file.
    How it stays light: the scenes move with transforms and opacity only (Web Animations + CSS transitions); the
@@ -14,15 +14,18 @@
   const screen = one(".hx-screen"), stage = one(".hx-stage"), bar = one("[data-hx-bar]"), lvl = one("[data-hx-lvl]"), num = one("[data-hx-num]");
   const tapEl = one(".hx-tap"), flyEl = one(".hx-fly"), burst = one(".hx-levelup");
   const scenes = all(".hx-scene"), steps = all("[data-hx-step]");
-  const DUR = [1600, 1500, 1700, 2600, 2200, 2100];          // how long each scene shows (ms): 11.7 s for one loop
+  const SLOW = 1.2;                                           // the pace: every moment below is stretched by this (1 = fastest)
+  const DUR = [1600, 1500, 1700, 2600, 2200, 2100].map((ms) => Math.round(ms * SLOW)); // how long each scene shows: 14 s for one loop
   const XP_START = [0, 50, 50, 50, 175, 175];                 // the demo player's XP when a scene starts …
   const XP_END = [50, 50, 50, 175, 175, 210];                 // … and when it ends
   let timers = [], anims = [], scene = 1, level = 1, onScreen = false;
   let levelSwitch = null;                                     // a level-up that waits for the mascot's lock-out
 
-  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms * SLOW));
   const run = (el, frames, opts) => { const a = el.animate(frames, opts); anims.push(a); return a; };
   const centre = (el) => { const s = screen.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2, w: r.width, h: r.height }; };
+  // the middle of el where it comes to rest: a scene that is still sliding in doesn't put the mouse off
+  const restCentre = (el) => { let x = 0, y = 0; for (let n = el; n && n !== screen; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; } return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2 }; };
 
   // ---------- the mascot ----------
   // The celebration's own drawing engine (its poses are a function of time: 0 = above the screen, 0.7 = hanging,
@@ -32,7 +35,7 @@
   const mascot = (() => {
     const zone = one(".hx-mascot"), cv = one(".hx-cv");
     const HANG = 0.7, REP = 1.18, LOCK = 2.12, SUPPORT = 3.4, CROSS = 4.3;
-    const RATE = 1.25;                                        // how fast the muscle-up runs (1 = as in the celebration)
+    const RATE = 1.25 / SLOW;                                 // how fast the muscle-up runs (1 = as in the celebration)
     const END_POSE = [HANG, HANG, HANG, SUPPORT, CROSS, HANG]; // where he is when a scene is over
     let lib = null, sim = null, ctx = null, raf = 0, last = 0, stepping = false, queue = [], tween = null, onBurst = null;
 
@@ -87,7 +90,7 @@
       else { last = 0; cv.classList.add("idle"); }
     }
     const go = () => { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } };
-    const move = (from, to, ms, linear = false) => { queue.push({ from, to, ms, linear }); go(); };
+    const move = (from, to, ms, linear = false) => { queue.push({ from, to, ms: ms * SLOW, linear }); go(); };
 
     return {
       ready: false,
@@ -154,7 +157,7 @@
         root.classList.add("up");
         jump(() => { bar.style.transform = "scaleX(0)"; });
         write();
-        run(burst, [{ opacity: 0, transform: "scale(0.5)" }, { opacity: 1, transform: "scale(1.12)", offset: 0.18 }, { opacity: 1, transform: "none", offset: 0.34 }, { opacity: 1, transform: "none", offset: 0.82 }, { opacity: 0, transform: "scale(1.05)" }], { duration: wait ? 1150 : 780, easing: "ease-out" });
+        run(burst, [{ opacity: 0, transform: "scale(0.5)" }, { opacity: 1, transform: "scale(1.12)", offset: 0.18 }, { opacity: 1, transform: "none", offset: 0.34 }, { opacity: 1, transform: "none", offset: 0.82 }, { opacity: 0, transform: "scale(1.05)" }], { duration: (wait ? 1150 : 780) * SLOW, easing: "ease-out" });
         at(700, () => root.classList.remove("up"));
       };
       // with the mascot: the level changes at the moment he locks out and the confetti bursts
@@ -167,9 +170,34 @@
 
   // ---------- the finger and the flying XP ----------
   function tap(el) {
-    const c = centre(el);
+    const c = restCentre(el);
     run(tapEl, [{ transform: `translate3d(${c.x}px, ${c.y}px, 0) scale(0.4)`, opacity: 0 }, { transform: `translate3d(${c.x}px, ${c.y}px, 0) scale(1)`, opacity: 1, offset: 0.35 }, { transform: `translate3d(${c.x}px, ${c.y}px, 0) scale(1.6)`, opacity: 0 }], { duration: 420, easing: "ease-out" });
   }
+  // ---------- the mouse ----------
+  // A pointer that glides to what gets clicked and presses it (on a narrow screen it is a round touch dot, like a
+  // finger). It moves with a CSS transition on its transform, so a new target halfway simply bends its path.
+  const cursor = (() => {
+    const node = one(".hx-cursor");
+    let shown = false;
+    const place = (x, y, ms) => { node.style.transitionDuration = `${ms}ms, 220ms`; node.style.transform = `translate3d(${x}px, ${y}px, 0)`; };
+    // where it waits when there is nothing to click: the lower right corner of the scenes
+    const corner = () => { const s = screen.getBoundingClientRect(), r = stage.getBoundingClientRect(); return [r.right - s.left - 34, r.bottom - s.top - 30]; };
+    return {
+      // glide to the middle of el in ms (it appears where it waited when it was hidden)
+      to(el, ms) {
+        if (!node || !el) return;
+        if (!shown) { place(...corner(), 0); void node.offsetWidth; shown = true; node.classList.add("on"); }
+        const c = restCentre(el);
+        place(c.x, c.y, ms * SLOW);
+      },
+      // press: the pointer dips, the ring spreads from the spot
+      click(el) { if (!node || !el) return; node.classList.add("press"); at(130, () => node.classList.remove("press")); tap(el); },
+      hide() { if (!node) return; shown = false; node.classList.remove("on", "press"); },
+      // out of the way, then gone (a scene without anything to click)
+      leave() { if (!node || !shown) return; place(...corner(), 420 * SLOW); at(260, () => this.hide()); }
+    };
+  })();
+
   // a chip leaves its place, arcs to the bar and lands there: the bar takes the hit and fills
   function fly(chip, xp, wait = false) {
     const a = centre(chip), b = centre(bar.parentElement);
@@ -179,7 +207,7 @@
     const from = `translate3d(${a.x - w / 2}px, ${a.y - h / 2}px, 0)`, to = `translate3d(${b.x - w / 2}px, ${b.y - h / 2}px, 0)`;
     const mid = `translate3d(${(a.x + b.x) / 2 - w / 2 + 26}px, ${a.y - h / 2 - 22}px, 0)`;
     chip.style.opacity = "0.25";
-    const anim = run(flyEl, [{ transform: `${from} scale(1)`, opacity: 1 }, { transform: `${mid} scale(1.15)`, opacity: 1, offset: 0.38 }, { transform: `${to} scale(0.4)`, opacity: 0.9 }], { duration: 480, easing: "cubic-bezier(0.45, 0, 0.75, 0.5)" });
+    const anim = run(flyEl, [{ transform: `${from} scale(1)`, opacity: 1 }, { transform: `${mid} scale(1.15)`, opacity: 1, offset: 0.38 }, { transform: `${to} scale(0.4)`, opacity: 0.9 }], { duration: 480 * SLOW, easing: "cubic-bezier(0.45, 0, 0.75, 0.5)" });
     anim.onfinish = () => {
       root.classList.remove("hit"); void root.offsetWidth; root.classList.add("hit");
       setXp(xp, false, wait);
@@ -188,7 +216,7 @@
 
   // ---------- the scenes ----------
   const el = {
-    chip1: one('[data-s="1"] .hx-chip'),
+    avatar: one(".hx-avatar"), chip1: one('[data-s="1"] .hx-chip'),
     coaches: one("#hxCoaches"),
     slot: one('[data-s="3"] [data-pick]'), ticket: one(".hx-ticket"),
     gain1: one(".hx-gain.g1 .hx-chip"), gain2: one(".hx-gain.g2 .hx-chip"),
@@ -231,18 +259,20 @@
   }
   // what happens when, per scene (ms after the scene starts)
   const SCRIPT = {
-    1: () => { at(560, () => el.chip1.classList.add("show")); at(920, () => fly(el.chip1, 50)); at(1020, () => mascot.rep()); },
-    2: () => { at(680, () => tap(coach())); at(790, () => coach().classList.add("picked")); at(850, () => mascot.rep()); },
-    3: () => { at(620, () => tap(el.slot)); at(730, () => el.slot.classList.add("picked")); at(960, () => el.ticket.classList.add("show")); at(1020, () => mascot.rep()); },
-    // the session's XP lands while he pulls; the level changes when he locks out (about 1.1 s in)
-    4: () => { at(300, () => fly(el.gain1, 125, true)); at(1780, () => fly(el.gain2, 175)); },
+    // (the mouse sets off first, so it arrives at the moment of the click)
+    1: () => { at(60, () => cursor.to(el.avatar, 420)); at(500, () => cursor.click(el.avatar)); at(560, () => el.chip1.classList.add("show")); at(920, () => fly(el.chip1, 50)); at(1020, () => mascot.rep()); },
+    2: () => { at(170, () => cursor.to(coach(), 480)); at(680, () => cursor.click(coach())); at(790, () => coach().classList.add("picked")); at(850, () => mascot.rep()); },
+    3: () => { at(130, () => cursor.to(el.slot, 460)); at(620, () => cursor.click(el.slot)); at(730, () => el.slot.classList.add("picked")); at(960, () => el.ticket.classList.add("show")); at(1020, () => mascot.rep()); },
+    // the session's XP lands while he pulls; the level changes when he locks out (about 1.4 s in)
+    4: () => { at(40, () => cursor.leave()); at(300, () => fly(el.gain1, 125, true)); at(1780, () => fly(el.gain2, 175)); },
     5: () => {
+      at(0, () => cursor.hide());
       at(420, () => { el.meScore.textContent = "175"; run(el.meScore, [{ transform: "scale(1.6)" }, { transform: "none" }], { duration: 380, easing: "ease-out" }); });
       at(700, () => board(AFTER, "175"));
       at(1150, () => el.up.classList.add("show"));
       at(1500, () => el.heart.classList.add("show"));
     },
-    6: () => { at(560, () => tap(el.buy)); at(670, () => { el.buy.classList.add("done"); el.buy.textContent = "✓"; }); at(820, () => el.chip6.classList.add("show")); at(1180, () => fly(el.chip6, 210)); at(1300, () => mascot.rep()); }
+    6: () => { at(60, () => cursor.to(el.buy, 470)); at(560, () => cursor.click(el.buy)); at(670, () => { el.buy.classList.add("done"); el.buy.textContent = "✓"; }); at(820, () => el.chip6.classList.add("show")); at(1180, () => fly(el.chip6, 210)); at(1300, () => mascot.rep()); }
   };
 
   function stop(keepMascot = false) {
@@ -250,7 +280,7 @@
     anims.forEach((a) => { a.onfinish = null; a.cancel(); }); anims = [];
     levelSwitch = null;
     root.classList.remove("playing", "up", "hit");
-    if (!keepMascot) mascot.halt();
+    if (!keepMascot) { mascot.halt(); cursor.hide(); } // (a loop that walks on keeps its mouse where it is)
   }
   function play(n, auto = true) {
     const flow = auto && root.classList.contains("playing") && n === scene + 1; // the loop walking on by itself
@@ -265,11 +295,11 @@
     setXp(XP_START[n - 1], true);
     const animate = auto && !reduce;
     mascot.scene(n, animate, flow);
-    if (!animate) { finish(n); return; }
+    if (!animate) { cursor.hide(); finish(n); return; }
     SCRIPT[n]();
     void root.offsetWidth; // restart the line under the step
     root.classList.add("playing");
-    at(DUR[n - 1], () => play((n % DUR.length) + 1));
+    timers.push(setTimeout(() => play((n % DUR.length) + 1), DUR[n - 1])); // (DUR is already stretched by SLOW)
   }
   const resume = () => { if (onScreen && !document.hidden) play(scene); else stop(); };
 
