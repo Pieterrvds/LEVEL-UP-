@@ -5116,6 +5116,21 @@ begin
   end loop;
 end $$;
 
+-- What the schedule on the website shows of the rentals. Everyone: the hours the whole room is rented out, without
+-- a name (so it is clear why no coach can be booked then). The admin and the coaches also see who rents, and the
+-- rentals that take only a place in the room.
+create or replace function public.room_blocks(p_from date, p_to date)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'date', to_char(r.day, 'YYYY-MM-DD'), 'start', r.start_hour, 'end', r.end_hour, 'kind', r.kind,
+           'name', case when public.is_admin() or public._my_trainer() is not null then r.renter end)
+         order by r.day, r.start_hour, r.created_at), '[]'::jsonb)
+  from public.room_rentals r
+  where r.status = 'booked' and r.day between p_from and least(p_to, p_from + 70)
+    and (r.kind = 'full' or public.is_admin() or public._my_trainer() is not null);
+$$;
+grant execute on function public.room_blocks(date, date) to anon, authenticated;
+
 revoke execute on function public._rental_json(public.room_rentals) from public, anon, authenticated;
 revoke execute on function public.admin_room(integer) from public, anon;
 revoke execute on function public.admin_rental_add(jsonb) from public, anon;

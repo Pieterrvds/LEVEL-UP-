@@ -440,13 +440,18 @@ const LevelUp = (() => {
     return player;
   }
 
+  let roomBlocks = []; // rentals of the gym room on the schedule: { date, start, end, kind: "full" | "shared", name (staff only) }
+  const roomBlocksOn = (key) => roomBlocks.filter((r) => r.date === key);
   async function loadSlots() {
     try {
-      const rows = await call("slot_status", {
-        p_from: dateKey(startOfWeek(0)),
-        p_to: dateKey(startOfWeek(BOOKING_WEEKS_AHEAD))
-      });
+      const range = { p_from: dateKey(startOfWeek(0)), p_to: dateKey(startOfWeek(BOOKING_WEEKS_AHEAD)) };
+      const [rows, blocks] = await Promise.all([
+        call("slot_status", range),
+        // the hours the gym room is rented out, to show on the schedule (an older database doesn't know this yet)
+        call("room_blocks", range).catch(() => [])
+      ]);
       slots = new Map((rows || []).map((r) => [`${r.trainer_id}|${r.day}|${r.hour}`, { id: r.booking_id || null, status: r.status || null }]));
+      roomBlocks = (blocks || []).map((r) => ({ ...r, start: Number(r.start), end: Number(r.end) }));
     } catch (err) {
       serverError = err.message;
       console.error("Loading the schedule failed:", err);
@@ -3401,7 +3406,7 @@ const LevelUp = (() => {
     chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast,
-    getClasses: () => classes, classesOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
+    getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     getClassKinds: () => classKinds, loadClassKinds, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },

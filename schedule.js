@@ -36,6 +36,7 @@ function boardHours(days, trainers) {
     trainers.forEach((t) => LevelUp.trainerHours(t.id, day.key).forEach((h) => hours.add(h)));
     LevelUp.groupSessions(day.key).forEach((g) => hours.add(g.start.getHours()));
     shownClasses(day.key).forEach((c) => hours.add(c.hour));
+    LevelUp.roomBlocksOn(day.key).forEach((r) => { for (let h = r.start; h < r.end; h++) hours.add(h); });
   });
   if (!hours.size) return Array.from({ length: 9 }, (_, i) => 9 + i);
   const list = [...hours];
@@ -76,6 +77,21 @@ function classButton(c, cls = "slot") {
       <span class="slot-state">${classBadge(c)}</span>
       <i class="class-fill" aria-hidden="true"></i>
     </button>`;
+}
+
+// ---------- The gym room rented out, on the board ----------
+// Not something to book: it shows that the room is taken. Everyone sees a whole-room rental (without a name);
+// the admin and the coaches also see who rents, and the rentals that take only one place.
+const rentalSpan = (r) => `${pad(r.start)}:00–${pad(r.end)}:00`;
+const rentalWhat = (r) => r.kind === "full" ? "Whole room" : "1 place";
+const rentalName = (r) => r.name ? `<span data-no-i18n>${esc(r.name)}</span>` : `<span>Room rented out</span>`;
+function rentalBlock(r, hour, past) {
+  return `
+    <div class="slot rental ${r.kind} ${past ? "past" : ""}" title="${r.name ? esc(r.name) : "Room rented out"} · ${rentalSpan(r)}">
+      <span class="slot-time">${pad(hour)}:00</span>
+      <span class="slot-name"><span aria-hidden="true">🔑</span> ${rentalName(r)}</span>
+      <span class="slot-state">${rentalWhat(r)} · ${rentalSpan(r)}</span>
+    </div>`;
 }
 
 // ---------- Trainer filter ----------
@@ -197,7 +213,12 @@ function renderBoard() {
             </button>`;
         }).join("");
 
-      const content = group + classSlots + trainerSlots;
+      const rentals = LevelUp.roomBlocksOn(day.key).filter((r) => hour >= r.start && hour < r.end).map((r) => {
+        itemCount++;
+        return rentalBlock(r, hour, LevelUp.slotStart(day.key, hour) <= now);
+      }).join("");
+
+      const content = group + classSlots + rentals + trainerSlots;
       return `<div class="board-cell ${content ? "" : "empty"}">${content}</div>`;
     }).join("");
 
@@ -253,14 +274,19 @@ function renderWeekList(days, trainers, now, todayKey) {
       <div class="list-row list-class" style="--c:${LevelUp.trainerById(c.trainerId)?.color || "#7cff6b"}">
         ${classButton(c, "class-chip")}
       </div>`).join("");
-    if (!rows && !groupRows && !classRows) return { day, html: "", open: 0 };
+    const rentalRows = LevelUp.roomBlocksOn(day.key).filter((r) => LevelUp.slotStart(day.key, r.end - 1).getTime() + 3600e3 > now.getTime()).map((r) => `
+      <div class="list-row list-group list-rental">
+        <span class="list-trainer"><span class="list-group-icon" aria-hidden="true">🔑</span><b>Room</b></span>
+        <p class="list-group-text"><b>${rentalSpan(r)}</b> ${rentalName(r)} · <span>${rentalWhat(r)}</span></p>
+      </div>`).join("");
+    if (!rows && !groupRows && !classRows && !rentalRows) return { day, html: "", open: 0 };
     const open = (rows.match(/class="time-chip free"/g) || []).length + groups.length
       + dayClasses.filter((c) => ["class-open", "class-full"].includes(classState(c))).length;
     const when = day.key === todayKey ? "Today" : day.key === tomorrowKey ? "Tomorrow" : "";
     return { day, open, html: `
       <div class="list-day${day.key === todayKey ? " today" : ""}">
         <h3 class="list-day-head">${day.date.toLocaleDateString("en-GB", { weekday: "long" })} <span>${day.date.getDate()} ${day.date.toLocaleDateString("en-GB", { month: "short" })}</span>${when ? `<em>${when}</em>` : ""}</h3>
-        ${classRows}${groupRows}${rows}
+        ${classRows}${groupRows}${rentalRows}${rows}
       </div>` };
   });
   const withContent = blocks.filter((b) => b.html);
