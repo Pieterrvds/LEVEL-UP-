@@ -302,3 +302,12 @@
 .bulk-sale .switch-field > span { color: var(--text); font-size: 0.88rem; }
 .news-admin li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 960px) { .announce-form { grid-template-columns: 1fr; } }
+
+/* Long panels (reviews, messages to everyone) are closed until you click their title */
+.admin-fold > summary { cursor: pointer; list-style: none; margin-bottom: 0; }
+.admin-fold > summary::-webkit-details-marker { display: none; }
+.admin-fold > summary h2::after { content: " ▸"; color: var(--muted); }
+.admin-fold[open] > summary h2::after { content: " ▾"; }
+.admin-fold[open] > summary { margin-bottom: 16px; }
+.admin-fold > summary:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 4px; }
+.fold-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }

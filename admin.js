@@ -17,6 +17,7 @@ const state = {
   tables: {}, // chart key -> showing table view
   tab: "overview", // open page tab (see ADMIN_TABS)
   tabFromLink: false,
+  folds: {}, // long panels that open on a click (reviews, messages): key -> open
   fin: { mode: "month", offset: 0, statementMonth: null }
 };
 let data = null;
@@ -1523,8 +1524,11 @@ function reviewsPanelInner() {
   const members = [...(data.players || [])].sort((a, b) => a.name.localeCompare(b.name));
   const memberOptions = (picked) => `<option value="">No photo (first letter)</option>${members.map((m) =>
     `<option value="${esc(m.id)}" ${m.id === picked ? "selected" : ""}>${esc(m.name)}${m.avatarUrl ? "" : " (no photo yet)"}</option>`).join("")}`;
+  const live = list.filter((r) => r.status === "approved").length;
   return `
-    <div class="panel-head"><h2>Reviews</h2>${pending ? `<span class="status-chip pending">${pending} to approve</span>` : ""}</div>
+    <details class="admin-fold" data-fold="reviews" ${state.folds.reviews ? "open" : ""}>
+    <summary class="panel-head"><h2>Reviews</h2>
+      <span class="fold-info">${pending ? `<span class="status-chip pending">${pending} to approve</span>` : ""}<span class="muted">${live} on the site · ${list.length} in total</span></span></summary>
     <p class="muted">Players with a completed session can write one in My account. Only approved reviews show on the home page (first name + photo). For a review you added yourself, pick the member under it to show their profile photo.</p>
     ${list.length ? `<ul class="review-admin-list">${list.map((r) => `
       <li class="review-admin ${r.status}">
@@ -1554,6 +1558,7 @@ function reviewsPanelInner() {
         <p class="form-error" role="alert"></p>
         <button type="submit" class="btn btn-small btn-primary">Add to the site</button>
       </form>
+    </details>
     </details>`;
 }
 
@@ -1916,10 +1921,12 @@ function renderNewsPanel() {
   if (!el) return;
   const list = LevelUp.getNews();
   el.innerHTML = `
-    <div class="panel-head">
+    <details class="admin-fold" data-fold="news" ${state.folds.news ? "open" : ""}>
+    <summary class="panel-head">
       <h2>Message to everyone</h2>
-      <span class="muted">Shows behind the 🔔 on every page and goes out as a notification</span>
-    </div>
+      <span class="fold-info"><span class="muted">${list.length ? `${list.length} behind the 🔔 now` : "Nothing behind the 🔔 now"}</span></span>
+    </summary>
+    <p class="muted">Shows behind the 🔔 on every page and goes out as a notification.</p>
     <form class="announce-form" id="announceForm">
       <label><span>Title</span><input name="title" maxlength="60" required placeholder="e.g. Closed on Monday 11 November"></label>
       <label><span>Message (optional)</span><input name="body" maxlength="200" placeholder="Public holiday. See you on Tuesday!"></label>
@@ -1932,8 +1939,14 @@ function renderNewsPanel() {
     <p class="form-error" role="alert" id="announceError"></p>
     ${list.length ? `<h3 class="panel-sub">Behind the bell now</h3><ul class="detail-list news-admin">${list.map((n) => `
       <li><span><b>${esc(n.title)}</b>${n.body ? ` <span class="muted">· ${esc(n.body)}</span>` : ""}</span>
-        <span class="muted small">${fmtDate(n.date)} <button type="button" class="btn btn-small btn-ghost" data-news-delete="${n.id}" aria-label="Remove this news item">✕</button></span></li>`).join("")}</ul>` : ""}`;
+        <span class="muted small">${fmtDate(n.date)} <button type="button" class="btn btn-small btn-ghost" data-news-delete="${n.id}" aria-label="Remove this news item">✕</button></span></li>`).join("")}</ul>` : ""}
+    </details>`;
 }
+// Long panels on the overview stay closed until you click their title; a redraw keeps them as you left them
+root.addEventListener("toggle", (event) => {
+  const fold = event.target.closest?.("details[data-fold]");
+  if (fold && fold === event.target) state.folds[fold.dataset.fold] = fold.open;
+}, true);
 root.addEventListener("submit", async (event) => {
   if (event.target.id !== "announceForm") return;
   event.preventDefault();
