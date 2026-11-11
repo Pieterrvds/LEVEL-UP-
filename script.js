@@ -103,17 +103,8 @@ document.addEventListener("click", (event) => {
       about: "Faster and longer on the bike: intervals, climbing, position on the bike and the strength training cyclists often skip.",
       points: ["More power in the legs", "Structure in your rides", "For road, gravel and your first sportive"] }
   ];
-  // A kind of group training without a photo or text of its own gets one that fits its name
-  const GROUP_LOOKS = [
-    [/run|loop|jog/i, "img/socialrunclub.jpg", "Run together at a pace where you can still talk. Everyone is welcome, from your first kilometres to your next race. We start and finish together."],
-    [/ring|gymnast|turn/i, "img/pulluptraining.jpg", "Gymnastics on the rings in a small group: support, swings, pulls and step by step towards your first skills. Strength, control and shoulders that can take a lot.", "12%"],
-    [/calisthenic|pull|street/i, "img/calipersonal.jpg", ""],
-    [/hiit|interval|tabata/i, "img/HIIT.JPG", ""],
-    [/muay|box|kick/i, "img/muaythay.jpg", ""],
-    [/spin|cycl|fiets|bike/i, "img/highlights/cycling.jpg", ""],
-    [/hyrox|crossfit|wod|bootcamp|kettlebell/i, "img/jimsgroepstraining.jpg", ""]
-  ];
-  const GROUP_DEFAULT = ["img/grouptrainingsessie.jpg", "Train together in a small group with a coach: the same quality as a personal training, with the energy of the group."];
+  // A kind of group training without a photo or text of its own gets one that fits its name (game.js)
+  const { GROUP_LOOKS, GROUP_DEFAULT } = LevelUp;
 
   const coach = (id) => LevelUp.trainerById(id);
   const names = (ids) => ids.map((id) => coach(id)?.short).filter(Boolean);

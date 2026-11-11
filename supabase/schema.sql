@@ -311,6 +311,20 @@ create table if not exists public.body_stats (
 alter table public.body_stats add column if not exists activity numeric(4, 3) not null default 1.55;
 create index if not exists body_stats_user_idx on public.body_stats (user_id, created_at desc);
 
+-- The weekly check-in: one row per member per week (the Monday, Brussels time). A tap on "Check in" on the start
+-- screen and a saved set of body stats both count. It pays XP once a week and keeps the streak going.
+create table if not exists public.checkins (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  week date not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, week)
+);
+alter table public.checkins enable row level security;  -- only through the functions below
+-- the weeks that already had a check-in (a saved set of body stats) before this table existed
+insert into public.checkins (user_id, week, created_at)
+  select b.user_id, date_trunc('week', b.day)::date, min(b.created_at) from public.body_stats b group by 1, 2
+  on conflict do nothing;
+
 create table if not exists public.bookings (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -736,7 +750,7 @@ begin
   end if;
 
 
-  if (select count(distinct date_trunc('week', day)) from public.body_stats where user_id = p_user) >= 4 then
+  if (select count(*) from public.checkins where user_id = p_user) >= 4 then
     perform public._unlock(p_user, 'checkins_4', 150, 'On track');
   end if;
 
@@ -772,7 +786,19 @@ begin
   if a is null or a < 14 or a > 100 then raise exception 'Enter an age between 14 and 100.'; end if;
 end $$;
 
--- Saves a set of character stats; the first save each week earns check-in XP.
+-- This week's check-in (Monday to Sunday, Brussels): the first one in a week pays the check-in XP, a second one
+-- changes nothing. Returns the XP it gave (0 = already checked in this week).
+create or replace function public._week_checkin(p_user uuid)
+returns integer language plpgsql security definer set search_path = public as $$
+declare w date := date_trunc('week', now() at time zone 'Europe/Brussels')::date;
+begin
+  insert into public.checkins (user_id, week) values (p_user, w) on conflict do nothing;
+  if not found then return 0; end if;
+  perform public._grant_xp(p_user, 25, 'Weekly check-in');
+  return 25;
+end $$;
+
+-- Saves a set of character stats; it also counts as this week's check-in (XP once a week).
 -- A second save on the same day corrects that day's row instead of adding one.
 create or replace function public._insert_stats(p_user uuid, p jsonb)
 returns integer language plpgsql security definer set search_path = public as $$
@@ -782,13 +808,6 @@ declare
 begin
   perform public._check_stats(p);
 
-  if not exists (
-    select 1 from public.xp_log
-    where user_id = p_user and reason = 'Weekly check-in' and created_at > now() - interval '6 days 12 hours'
-  ) then
-    gained := 25;
-  end if;
-
   update public.body_stats set
     weight = (p ->> 'weight')::numeric, height = (p ->> 'height')::numeric, age = (p ->> 'age')::int,
     sex = left(coalesce(p ->> 'sex', 'male'), 10), goal = left(coalesce(p ->> 'goal', 'maintain'), 20),
@@ -797,8 +816,7 @@ begin
     target = (p ->> 'target')::int, protein = (p ->> 'protein')::int
   where id = (select max(id) from public.body_stats where user_id = p_user and day = today);
   if found then
-    perform public._grant_xp(p_user, gained, 'Weekly check-in');
-    return gained;
+    return public._week_checkin(p_user);
   end if;
 
   insert into public.body_stats (user_id, day, weight, height, age, sex, goal, activity, bmi, bmr, maintenance, target, protein)
@@ -807,7 +825,7 @@ begin
     least(2.0, greatest(1.0, coalesce((p ->> 'activity')::numeric, 1.55))),
     (p ->> 'bmi')::numeric, (p ->> 'bmr')::int, (p ->> 'maintenance')::int, (p ->> 'target')::int, (p ->> 'protein')::int);
 
-  perform public._grant_xp(p_user, gained, 'Weekly check-in');
+  gained := public._week_checkin(p_user);
   perform public._check_achievements(p_user);
   return gained;
 end $$;
@@ -882,8 +900,8 @@ returns timestamptz language sql stable as $$
   select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
 $$;
 
--- Weeks in a row (Monday to Sunday, Brussels) with at least one completed session.
--- This week counts as soon as it has a completed session; until then the streak runs up to last week.
+-- Weeks in a row (Monday to Sunday, Brussels) with at least one completed session, a group class you were at,
+-- or the weekly check-in. This week counts as soon as it has one of those; until then the streak runs up to last week.
 create or replace function public._streak(p_user uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
   with w as (select date_trunc('week', (now() at time zone 'Europe/Brussels')::date)::date as w0),
@@ -892,7 +910,9 @@ returns jsonb language sql stable security definer set search_path = public as $
            union
            select distinct date_trunc('week', (c.starts_at at time zone 'Europe/Brussels')::date)::date
            from public.class_signups g join public.class_sessions c on c.id = g.class_id
-           where g.user_id = p_user and g.status = 'attended'),
+           where g.user_id = p_user and g.status = 'attended'
+           union
+           select h.week from public.checkins h where h.user_id = p_user),
   this_week as (select exists (select 1 from done, w where done.wk = w.w0) as done,
                        exists (select 1 from public.bookings k, w where k.user_id = p_user
                                and k.status in ('pending', 'confirmed', 'awaiting_payment')
@@ -963,6 +983,12 @@ returns jsonb language sql stable security definer set search_path = public as $
     'classes', public._class_mine_json(p.id),
     'healthForm', public._health_brief(p.id),
     'streak', public._streak(p.id),
+    -- the weekly check-in: done this week?, in how many weeks so far, and what it pays
+    'checkin', jsonb_build_object(
+      'done', exists (select 1 from public.checkins h where h.user_id = p.id
+                      and h.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date),
+      'weeks', (select count(*) from public.checkins h where h.user_id = p.id),
+      'xp', 25),
     'potm', (select jsonb_build_object('month', a.month, 'xp', a.xp) from public.monthly_awards a
              where a.user_id = p.id and a.month = public._potm_month()),
     'potmWins', (select count(*) from public.monthly_awards a where a.user_id = p.id),
@@ -1974,6 +2000,72 @@ declare uid uuid := auth.uid();
 begin
   if uid is null then raise exception 'Log in first.'; end if;
   return jsonb_build_object('xp', public._insert_stats(uid, p));
+end $$;
+
+-- The weekly check-in from the start screen ("For you"): one tap, XP once a week, and the week counts for the streak
+create or replace function public.check_in()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  gained integer;
+begin
+  if uid is null then raise exception 'Log in first.'; end if;
+  gained := public._week_checkin(uid);
+  if gained > 0 then
+    perform public._check_achievements(uid);
+    perform public._check_rank(uid);
+  end if;
+  return jsonb_build_object('xp', gained, 'streak', public._streak(uid));
+end $$;
+
+-- What the start screen ("For you") needs on top of your own data:
+--  race: you on the high scores with the player just above and just below you; when you are hidden from the
+--        high scores or a trainer (ranked = false) the top 3 instead
+--  photos: the latest photos other members and coaches put on their page (only pages that are open to members)
+--  trainersDone: with how many different trainers you completed a session (for the "Full squad" achievement)
+create or replace function public.for_you()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  p public.profiles;
+  ranked boolean;
+  race jsonb;
+begin
+  if me is null then raise exception 'Log in first.'; end if;
+  select * into p from public.profiles where id = me;
+  ranked := coalesce(p.show_on_leaderboard, false)
+    and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email));
+  -- the same order as the high scores: most XP first, equal XP = who joined first
+  with board as (
+    select o.id, o.name, o.xp, o.avatar_url, row_number() over (order by o.xp desc, o.created_at) as place,
+           count(*) over () as total
+    from public.profiles o
+    where o.show_on_leaderboard
+      and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(o.email))
+  ), mine as (
+    select coalesce((select b.place from board b where b.id = me and ranked), 2) as place,
+           coalesce((select max(b.total) from board b), 0) as total
+  )
+  select jsonb_agg(jsonb_build_object('place', b.place, 'name', b.name, 'xp', b.xp, 'avatarUrl', b.avatar_url,
+                                      'userId', b.id, 'isMe', b.id = me) order by b.place)
+  into race
+  from board b, mine m
+  where b.place between greatest(1, least(m.place - 1, m.total - 2)) and greatest(m.place + 1, 3);
+  return jsonb_build_object(
+    'race', coalesce(race, '[]'::jsonb), 'ranked', ranked,
+    'photos', coalesce((select jsonb_agg(x.j order by x.at desc) from (
+        select jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at,
+                 'userId', ph.user_id, 'name', coalesce(t.name, u.name), 'trainerId', t.id,
+                 'likes', (select count(*) from public.photo_likes l where l.photo_id = ph.id),
+                 'liked', exists (select 1 from public.photo_likes l where l.photo_id = ph.id and l.user_id = me),
+                 'commentCount', (select count(*) from public.photo_comments c where c.photo_id = ph.id)) as j,
+               ph.created_at as at
+        from public.profile_photos ph
+        join public.profiles u on u.id = ph.user_id
+        left join public.trainers t on t.email is not null and lower(t.email) = lower(u.email) and t.active
+        where ph.user_id <> me and (u.profile_visible or t.id is not null)
+        order by ph.created_at desc limit 6) x), '[]'::jsonb),
+    'trainersDone', (select count(distinct k.trainer_id) from public.bookings k where k.user_id = me and k.status = 'completed'));
 end $$;
 
 -- Adds an order's items and XP to a player
@@ -3334,7 +3426,8 @@ returns jsonb language sql stable security definer set search_path = public as $
   where a.month = public._potm_month();
 $$;
 
--- Thursday evening: a gentle nudge to players whose streak (2+ weeks) ends on Sunday without a session this week
+-- Thursday evening: a gentle nudge to players whose streak (2+ weeks) ends on Sunday without a session or a
+-- check-in this week
 drop function if exists public._push_streak_reminders();
 create or replace function public._push_streak_reminders(p_now timestamptz default now())
 returns integer language plpgsql security definer set search_path = public as $$
@@ -3347,14 +3440,18 @@ declare
 begin
   if extract(isodow from local) <> 4 or extract(hour from local) < 18 then return 0; end if;
   for u in
-    select distinct k.user_id from public.bookings k join public.profiles p on p.id = k.user_id
-    where k.status = 'completed' and k.day between w0 - 7 and w0 - 1
-      and p.streak_reminded_week is distinct from w0
+    select p.id as user_id from public.profiles p
+    where p.streak_reminded_week is distinct from w0
+      and (exists (select 1 from public.bookings k where k.user_id = p.id and k.status = 'completed' and k.day between w0 - 7 and w0 - 1)
+           or exists (select 1 from public.checkins h where h.user_id = p.id and h.week = w0 - 7)
+           or exists (select 1 from public.class_signups g join public.class_sessions c on c.id = g.class_id
+                      where g.user_id = p.id and g.status = 'attended'
+                        and (c.starts_at at time zone 'Europe/Brussels')::date between w0 - 7 and w0 - 1))
   loop
     st := public._streak(u.user_id);
     if (st ->> 'weeks')::int >= 2 and (st ->> 'atRisk')::boolean then
       perform public._push(u.user_id, '🔥 Keep your ' || (st ->> 'weeks') || '-week streak',
-        'No session yet this week. Book one before Sunday to keep it going.', 'index.html#schedule', 'streak-' || w0);
+        'Train or check in before Sunday to keep it going.', 'index.html', 'streak-' || w0);
       n := n + 1;
     end if;
     update public.profiles set streak_reminded_week = w0 where id = u.user_id;
@@ -4868,6 +4965,11 @@ grant execute on function public.save_trainer_hours(uuid, text, integer, date, i
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;
+revoke execute on function public._week_checkin(uuid) from public, anon, authenticated;
+revoke execute on function public.check_in() from public, anon;
+revoke execute on function public.for_you() from public, anon;
+grant execute on function public.check_in() to authenticated;
+grant execute on function public.for_you() to authenticated;
 grant execute on function public.update_body_stats(bigint, jsonb) to authenticated;
 grant execute on function public.claim_orders(text[]) to authenticated;
 grant execute on function public.delete_my_account() to authenticated;

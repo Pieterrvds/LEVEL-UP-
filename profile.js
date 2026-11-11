@@ -1,5 +1,6 @@
 // LEVEL-UP: your account, as tabs on your own page (profile.html).
 // member.js draws the top block (photo, name, level) and the "My page" tab: what other members see.
+// On a computer the first tab is "For you", your own start screen (foryou.js); on a phone that is the home page.
 // This file adds the tabs only you see (Overview, Coach, Rewards, Packs & shop, Body stats, Settings) and what is
 // in them. On someone else's page it draws nothing.
 
@@ -7,9 +8,11 @@
 const root = document.getElementById("profileRoot");
 const tabBar = document.getElementById("profileTabs");
 const pagePane = document.getElementById("mpPage"); // the "My page" tab (member.js)
+const fyPane = document.getElementById("fyPane");   // the "For you" tab (foryou.js)
+const PHONE = window.matchMedia("(max-width: 760px)"); // phones have "For you" as their home page (the bar at the bottom)
 const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 
-const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: "page", tabFromLink: false }; // open/closed blocks stay that way between renders
+const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: PHONE.matches ? "page" : "foryou", tabFromLink: false }; // open/closed blocks stay that way between renders
 // back from a payment (profile.html?payment=pack:… or booking:…): open where the result shows
 const paidFor = new URLSearchParams(location.search).get("payment");
 if (paidFor) state.tab = paidFor.startsWith("pack") ? "shop" : "overview";
@@ -71,7 +74,7 @@ function headerBadges(player) {
     player.potm ? `<span class="card-chip potm-chip">👑 Player of the Month · ${month}</span>` : "",
     s.weeks >= 2 ? `<span class="card-chip streak-chip">🔥 ${s.weeks} weeks in a row</span>` : ""
   ].join("");
-  const nudge = s.weeks >= 2 && s.atRisk ? `<p class="streak-nudge">No session yet this week: <a href="index.html#schedule" class="text-link">book one before Sunday</a> to keep your streak.</p>` : "";
+  const nudge = s.weeks >= 2 && s.atRisk ? `<p class="streak-nudge">No session or check-in yet this week: <a href="index.html#schedule" class="text-link">book one before Sunday</a> to keep your streak.</p>` : "";
   return chips || nudge ? `<div class="card-chips">${chips}</div>${nudge}` : "";
 }
 
@@ -802,6 +805,8 @@ function render() {
     root.innerHTML = tabBar.innerHTML = "";
     tabBar.dataset.html = "";
     if (pagePane) pagePane.hidden = false;
+    if (fyPane) fyPane.hidden = true;
+    document.body.classList.remove("fy-open");
     return;
   }
   const p = LevelUp.progress(player.xp);
@@ -844,7 +849,7 @@ function render() {
   if (!state.tabFromLink) {
     state.tabFromLink = true;
     const hash = decodeURIComponent(location.hash.slice(1));
-    const fromLink = /^(mypage|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, tabs.map((t) => t.id));
+    const fromLink = /^(mypage|page|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, tabs.map((t) => t.id));
     if (fromLink) {
       state.tab = fromLink;
       const target = fromLink === "page" ? null : document.getElementById(hash);
@@ -861,9 +866,24 @@ function showTab(id) {
   state.tab = id;
   LevelUp.showPageTab(root, id);
   LevelUp.showPageTab(tabBar, id);
-  root.hidden = id === "page";
+  root.hidden = id === "page" || id === "foryou";
   if (pagePane) pagePane.hidden = id !== "page";
+  if (fyPane) {
+    fyPane.hidden = id !== "foryou";
+    // "For you" starts with your name and level itself: the top block of your page steps aside
+    document.body.classList.toggle("fy-open", id === "foryou");
+    if (id === "foryou" && window.LevelUpForYou) { window.LevelUpForYou.mount(fyPane); window.LevelUpForYou.draw(); }
+  }
 }
+// A link on the start screen to another tab of your account
+window.LevelUpProfile = {
+  openTab(id) {
+    if (!profileTabs(LevelUp.getPlayer()).some((t) => t.id === id)) return;
+    showTab(id);
+    history.replaceState(null, "", `${location.pathname}${location.search}#${id}`);
+    window.scrollTo({ top: 0 });
+  }
+};
 
 // Page tabs; the counters show what needs attention
 function profileTabs(player) {
@@ -873,6 +893,7 @@ function profileTabs(player) {
   const toSettle = coach.filter((b) => LevelUp.canSettle(b)).length;
   const needsSetup = !LevelUp.healthValid() ? 1 : 0;
   return [
+    fyPane && !PHONE.matches && { id: "foryou", label: "For you" },
     { id: "page", label: "My page" },
     { id: "overview", label: "Overview" },
     LevelUp.isTrainer() && { id: "coach", label: "Coach", badge: requests + toSettle },

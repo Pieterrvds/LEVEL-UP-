@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202611132200"></script>
-  <script src="i18n.js?v=202611132200"></script>
+  <script src="i18n-nl.js?v=202611141000"></script>
+  <script src="i18n.js?v=202611141000"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -18,7 +18,7 @@
   <meta property="og:image:alt" content="LEVEL-UP: Train hard. Level up. Personal training in Aalst.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#070707">
-  <script>try{var r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")document.documentElement.dataset.rank=r}catch(e){}</script>
+  <script>try{var r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")document.documentElement.dataset.rank=r;if(localStorage.getItem("levelup.fy"))document.documentElement.setAttribute("data-fy","")}catch(e){}</script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/app/favicon-64.png" type="image/png">
   <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611132200">
+  <link rel="stylesheet" href="style.css?v=202611141000">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -82,6 +82,8 @@
   <main>
     <!-- HERO / TITLE SCREEN -->
     <section id="home" class="hero">
+      <!-- Logged in on a phone: your own start screen takes the place of the title screen (foryou.js) -->
+      <div class="fy" id="forYou"><p class="fy-wait">Loading…</p></div>
       <div class="hero-bg" aria-hidden="true"></div>
       <div class="container hero-grid">
         <div class="hero-copy">
@@ -534,8 +536,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202611132200"></script>
-  <script src="script.js?v=202611132200"></script>
-  <script src="schedule.js?v=202611132200"></script>
+  <script src="game.js?v=202611141000"></script>
+  <script src="script.js?v=202611141000"></script>
+  <script src="schedule.js?v=202611141000"></script>
+  <script src="foryou.js?v=202611141000"></script>
 </body>
 </html>

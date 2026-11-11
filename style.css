@@ -3163,3 +3163,133 @@ button.like-badge:focus-visible { outline: 2px solid #ff5c86; outline-offset: 2p
 
 /* ---------- Member pages (member.html): anything that opens someone's page looks clickable ---------- */
 [data-profile], [data-profile-trainer], .team-card[id^="team-"] .team-photo-wrap, .team-card[id^="team-"] h3, img[data-coach] { cursor: pointer; }
+
+/* ---------- "For you": your own start screen (foryou.js) ----------
+   A phone: the top of the home page for a logged-in member. A computer: the first tab of your account. */
+.fy { display: grid; gap: 14px; min-width: 0; }
+.fy[hidden] { display: none !important; }
+.fy-wait { margin: 0; padding: 40px 0; text-align: center; color: var(--muted); }
+.fy-card { position: relative; min-width: 0; padding: 16px; background: var(--panel); border: 1px solid var(--frame); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.fy-k { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green-bright); }
+.fy-k small { font-family: var(--sans); font-style: normal; font-weight: 600; font-size: 0.72rem; letter-spacing: 0; text-transform: none; color: var(--muted); }
+/* hello + level, with the mascot on his rings */
+.fy-hello { overflow: hidden; min-height: 172px; padding-right: 118px; background: radial-gradient(120% 120% at 100% 0%, rgba(var(--green-bright-rgb), 0.16), transparent 60%), var(--panel); }
+.fy-hello.no-mascot { padding-right: 16px; }
+.fy-hi { margin: 2px 0 8px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 1.9rem; line-height: 1.05; text-transform: uppercase; overflow-wrap: anywhere; }
+.fy-rank { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.fy-bar { height: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); border-radius: 99px; }
+.fy-bar i { display: block; height: 100%; width: var(--w, 0%); background: linear-gradient(90deg, var(--green), var(--green-bright)); border-radius: 99px; transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.fy-bar.gold i { background: linear-gradient(90deg, #c99a12, var(--gold)); }
+.fy-xp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; margin: 6px 0 0; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fy-xp b { color: var(--text); }
+.fy-mascot { position: absolute; right: 4px; top: 0; width: 118px; height: 100%; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fy-mascot canvas { display: block; width: 100%; height: 100%; }
+/* your next step */
+.fy-next { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.fy-next img { width: 58px; height: 58px; object-fit: cover; object-position: center 20%; border-radius: 50%; border: 2px solid var(--c, var(--green-bright)); }
+.fy-next b { display: block; font-size: 1.05rem; }
+.fy-next b::first-letter { text-transform: uppercase; }
+.fy-next span { color: var(--muted); font-size: 0.9rem; }
+.fy-plus { color: var(--green-bright); white-space: nowrap; }
+.fy-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.fy-acts .btn { flex: 1 1 130px; justify-content: center; text-align: center; }
+/* streak and race: two small cards next to each other */
+.fy-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.fy-big { margin: 0; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 1.7rem; line-height: 1; }
+.fy-big small { font-family: var(--sans); font-style: normal; font-weight: 600; font-size: 0.8rem; color: var(--muted); }
+.fy-week { display: flex; gap: 4px; margin: 10px 0 8px; }
+.fy-week i { flex: 1; height: 8px; box-sizing: border-box; border-radius: 99px; background: var(--line); }
+.fy-week i.on { background: var(--gold); }
+.fy-week i.now { background: transparent; border: 2px dashed var(--gold); }
+.fy-note { margin: 0; font-size: 0.82rem; line-height: 1.35; color: var(--muted); }
+.fy-note b { color: var(--text); }
+.fy-again { margin-top: 8px; }
+.fy-checked, .fy-checked:disabled { color: var(--gold); background: transparent; border-color: var(--gold); opacity: 1; cursor: default; }
+.fy-race { display: grid; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 0.84rem; }
+.fy-race li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 8px; color: var(--muted); }
+.fy-race li.me { color: var(--text); background: rgba(var(--green-bright-rgb), 0.12); outline: 1px solid var(--green-bright); }
+.fy-race li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fy-race em { font-family: var(--display); font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.fy-more { display: inline-block; margin-top: 8px; font-size: 0.82rem; }
+/* almost there */
+.fy-goal { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; color: inherit; text-decoration: none; }
+.fy-goal + .fy-goal { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.fy-ico { display: grid; place-items: center; width: 40px; height: 40px; font-size: 1.25rem; background: #000; border: 1px solid var(--line); border-radius: 12px; }
+.fy-goal b { display: block; font-size: 0.95rem; }
+.fy-goal .fy-bar { height: 8px; margin-top: 6px; }
+.fy-goal em { font-family: var(--display); font-style: italic; font-weight: 800; color: var(--gold); white-space: nowrap; }
+a.fy-goal:hover b { color: var(--green-bright); }
+/* picked for you: cards you swipe through */
+.fy-row { display: flex; gap: 12px; margin: 0 -16px; padding: 2px 16px 6px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-left: 16px; scrollbar-width: none; }
+.fy-row::-webkit-scrollbar { display: none; }
+.fy-class { position: relative; flex: 0 0 74%; max-width: 300px; min-height: 190px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; scroll-snap-align: start; padding: 12px; border: 1px solid var(--frame); border-radius: 14px; isolation: isolate; }
+.fy-class:only-child { flex-basis: 100%; max-width: none; }
+.fy-class::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--img) center 25% / cover no-repeat; }
+.fy-class::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(8, 8, 8, 0.05) 20%, rgba(8, 8, 8, 0.75) 60%, #0b0b0b 96%); }
+.fy-class h3 { margin: 0 0 2px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 1.15rem; text-transform: uppercase; }
+.fy-class p { margin: 0 0 10px; font-size: 0.84rem; color: #d6d6d6; }
+.fy-class p::first-letter { text-transform: uppercase; }
+.fy-tag { position: absolute; top: 10px; left: 10px; padding: 3px 9px; font-size: 0.7rem; font-weight: 700; color: #000; background: var(--gold); border-radius: 99px; }
+.fy-join { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.fy-price { font-size: 0.8rem; font-weight: 600; color: #d6d6d6; }
+/* from the club */
+.fy-posts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fy-posts[data-n="1"] { grid-template-columns: 1fr; }
+.fy-posts[data-n="3"] .fy-post:first-child { grid-column: 1 / -1; aspect-ratio: 2; }
+.fy-post { position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: #000; border: 1px solid var(--frame); border-radius: 12px; }
+.fy-posts[data-n="1"] .fy-post { aspect-ratio: 16 / 10; }
+.fy-post a { display: block; height: 100%; color: #fff; text-decoration: none; }
+.fy-post img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.fy-post figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 8px 8px; font-size: 0.78rem; background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.85)); overflow-wrap: anywhere; }
+.fy-post figcaption b { display: block; }
+.fy-heart { position: absolute; top: 8px; right: 8px; min-width: 44px; height: 34px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font: 700 0.82rem/1 var(--sans); color: #fff; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 99px; cursor: pointer; transition: transform 0.15s; }
+.fy-heart span:empty { display: none; }
+.fy-heart.on { background: #ff4d6d; border-color: #ff4d6d; }
+.fy-heart:active { transform: scale(0.9); }
+.fy-news { display: flex; gap: 10px; align-items: flex-start; width: 100%; margin-top: 12px; padding: 10px 12px; text-align: left; font: inherit; font-size: 0.88rem; color: var(--text); background: #000; border: 1px dashed var(--gold); border-radius: 12px; cursor: pointer; }
+.fy-in > .fy-news:first-child { margin-top: 0; }
+.fy-news b { display: block; }
+.fy-news span span { color: var(--muted); }
+.fy-empty { display: grid; gap: 10px; justify-items: start; }
+
+/* a phone: the start screen takes the place of the title screen on the home page */
+#forYou { display: none; }
+@media (max-width: 760px) {
+  html[data-fy] #home.hero { display: block; min-height: 0; padding: calc(var(--hud-h) + 14px) 14px 26px; overflow: visible; }
+  html[data-fy] #home.hero > :not(#forYou):not(.hero-bg) { display: none; }
+  html[data-fy] #forYou { display: grid; }
+}
+@media (max-width: 380px) {
+  .fy-duo { gap: 10px; }
+  .fy-card { padding: 14px; }
+  .fy-hello { padding-right: 112px; }
+  .fy-hello.no-mascot { padding-right: 14px; }
+  .fy-mascot { width: 110px; right: 2px; }
+  .fy-row { margin: 0 -14px; padding-left: 14px; padding-right: 14px; scroll-padding-left: 14px; }
+}
+/* a computer: the same cards in columns, as the first tab of your account */
+.fy-pane { padding-top: 24px; padding-bottom: 64px; }
+body.fy-open #mpHero { display: none; }
+@media (min-width: 761px) {
+  .fy-pane.fy { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+  .fy-pane .fy-hello { grid-column: 1 / -1; padding-right: 190px; }
+  .fy-pane .fy-hello.no-mascot { padding-right: 16px; }
+  .fy-pane .fy-mascot { width: 180px; right: 20px; }
+  .fy-pane .fy-duo { display: contents; }
+  .fy-pane .fy-wide { grid-column: span 2; }
+  .fy-pane .fy-class { flex: 1 1 0; max-width: none; }
+  .fy-pane .fy-club { grid-column: 1 / -1; }
+  .fy-pane .fy-wide { display: flex; flex-direction: column; }
+  .fy-pane .fy-wide .fy-row { flex: 1; }
+  .fy-pane .fy-swipe { display: none; }
+  .fy-pane .fy-club .fy-in { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+  .fy-pane .fy-club .fy-in > :only-child { grid-column: 1 / -1; }
+  .fy-pane .fy-club .fy-posts { display: flex; gap: 10px; }
+  .fy-pane .fy-club .fy-posts .fy-post, .fy-pane .fy-club .fy-posts[data-n="3"] .fy-post:first-child { flex: 0 1 200px; width: 200px; aspect-ratio: 1; }
+  .fy-pane .fy-club .fy-news { margin-top: 0; }
+}
+@media (min-width: 761px) and (max-width: 1000px) {
+  .fy-pane.fy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fy-pane .fy-wide { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) { .fy-bar i, .fy-heart { transition: none; } }

@@ -292,8 +292,10 @@ const LevelUp = (() => {
     return { label: "Obese", warn: true };
   }
 
-  // Next moment the weekly check-in pays XP again (null = now)
+  // Next moment the weekly check-in pays XP again (null = now). One check-in a week (Monday to Sunday): the tap
+  // on the start screen or a saved set of body stats. (A database from before the check-in: 6.5 days after the last.)
   function nextCheckin(p = player) {
+    if (p?.checkin) return p.checkin.done ? startOfWeek(1) : null;
     const last = (p?.xpLog || []).find((e) => e.reason === "Weekly check-in" && e.amount > 0);
     if (!last) return null;
     const next = new Date(new Date(last.date).getTime() + (6 * 24 + 12) * 3600e3);
@@ -364,6 +366,8 @@ const LevelUp = (() => {
       introEligible: Boolean(data.introEligible),
       streak: { weeks: Number(data.streak?.weeks) || 0, thisWeek: Boolean(data.streak?.thisWeek),
                 planned: Boolean(data.streak?.planned), atRisk: Boolean(data.streak?.atRisk) },
+      // the weekly check-in (null = the database doesn't know it yet): done this week, in how many weeks so far
+      checkin: data.checkin ? { done: Boolean(data.checkin.done), weeks: Number(data.checkin.weeks) || 0, xp: Number(data.checkin.xp) || CHECKIN_XP } : null,
       potm: data.potm || null,                 // { month, xp } when you won last month
       potmWins: Number(data.potmWins) || 0,
       likes: Number(data.likes) || 0,           // hearts other players gave you (all time)
@@ -550,7 +554,23 @@ const LevelUp = (() => {
   }
   // ---------- Kinds of group training: one card each on the home page ("Choose your training") ----------
   // [{ key, title, description, photoUrl, trainers: [ids], next, upcoming }]: the kinds with a class planned or held lately
+  // A kind of group training without a photo or text of its own gets one that fits its name
+  const GROUP_LOOKS = [
+    [/run|loop|jog/i, "img/socialrunclub.jpg", "Run together at a pace where you can still talk. Everyone is welcome, from your first kilometres to your next race. We start and finish together."],
+    [/ring|gymnast|turn/i, "img/pulluptraining.jpg", "Gymnastics on the rings in a small group: support, swings, pulls and step by step towards your first skills. Strength, control and shoulders that can take a lot.", "12%"],
+    [/calisthenic|pull|street/i, "img/calipersonal.jpg", ""],
+    [/hiit|interval|tabata/i, "img/HIIT.JPG", ""],
+    [/muay|box|kick/i, "img/muaythay.jpg", ""],
+    [/spin|cycl|fiets|bike/i, "img/highlights/cycling.jpg", ""],
+    [/hyrox|crossfit|wod|bootcamp|kettlebell/i, "img/jimsgroepstraining.jpg", ""]
+  ];
+  const GROUP_DEFAULT = ["img/grouptrainingsessie.jpg", "Train together in a small group with a coach: the same quality as a personal training, with the energy of the group."];
   let classKinds = [];
+  // The photo for a group class by its name: the admin's own photo for that kind, else one that fits the name
+  const classPhoto = (title) => {
+    const key = String(title || "").trim().replace(/\s+/g, " ").toLowerCase();
+    return classKinds.find((k) => k.key === key)?.photoUrl || GROUP_LOOKS.find(([re]) => re.test(title || ""))?.[1] || GROUP_DEFAULT[0];
+  };
   async function loadClassKinds() {
     try { classKinds = (await call("class_kinds")) || []; } catch (err) { console.error("Loading group trainings failed:", err); }
     return classKinds;
@@ -1637,6 +1657,34 @@ const LevelUp = (() => {
     return { xp: Number(result?.xp) || 0, stats };
   }
 
+  // ---------- The start screen ("For you", foryou.js) ----------
+  // What it shows on top of your own data: { race: [{ place, name, xp, isMe … }] (you and your neighbours on the
+  // high scores, or the top 3 when ranked is false), photos: [...] from other members, trainersDone }
+  let forYou = null;
+  async function loadForYou() {
+    if (!player) { forYou = null; return null; }
+    try {
+      const d = await call("for_you");
+      forYou = {
+        race: (d?.race || []).map((r) => ({ ...r, place: Number(r.place), xp: Number(r.xp), isMe: Boolean(r.isMe) })),
+        ranked: Boolean(d?.ranked),
+        photos: (d?.photos || []).map((ph) => ({ ...ph, likes: Number(ph.likes) || 0, liked: Boolean(ph.liked), commentCount: Number(ph.commentCount) || 0 })),
+        trainersDone: Number(d?.trainersDone) || 0
+      };
+    } catch (err) {
+      console.error("Loading your start screen failed:", err);
+      forYou = forYou || { race: [], ranked: false, photos: [], trainersDone: 0 };
+    }
+    return forYou;
+  }
+  // The weekly check-in: one tap, XP once a week, and the week counts for your streak
+  async function checkIn() {
+    const r = await call("check_in");
+    await Promise.all([refreshPlayer({ announce: true }), loadForYou(), leaderboard.length ? loadLeaderboard() : null]);
+    emit();
+    return { xp: Number(r?.xp) || 0 };
+  }
+
   // Corrects an earlier check-in (same date, new values); never earns XP
   async function updateBodyStats(id, input) {
     const stats = computeStats(input);
@@ -1791,6 +1839,7 @@ const LevelUp = (() => {
     if (!session) {
       if (event === "INITIAL_SESSION") return; // startup already loaded everything for a visitor
       player = null;
+      forYou = null;
       welcomed = false;
       await Promise.all([loadSlots(), onHome ? loadLeaderboard() : null, document.getElementById("weekBoard") ? loadClasses() : null]);
       emit();
@@ -1982,7 +2031,7 @@ const LevelUp = (() => {
     "Train with a friend: a duo session is €80 for the two of you",
     "Reach Champion and Legend for a free session",
     "Turn on notifications: hear it when your trainer confirms",
-    "A weekly check-in of your stats earns XP",
+    "Check in every week on your start screen: +25 XP",
     "Session packs make every session cheaper"
   ];
   const bootEl = document.getElementById("boot");
@@ -2265,6 +2314,13 @@ const LevelUp = (() => {
     try {
       if (tier > 0) localStorage.setItem("levelup.rank", String(tier));
       else localStorage.removeItem("levelup.rank");
+    } catch {}
+    // Logged in: on a phone the home page opens on your own start screen (foryou.js). Remembered like the colour,
+    // so the next visit starts that way without first showing the page for visitors.
+    root.toggleAttribute("data-fy", Boolean(player));
+    try {
+      if (player) localStorage.setItem("levelup.fy", "1");
+      else localStorage.removeItem("levelup.fy");
     } catch {}
   }
 
@@ -3389,7 +3445,7 @@ const LevelUp = (() => {
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
-    saveBodyStats, updateBodyStats, recordPurchase,
+    saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
@@ -3408,7 +3464,7 @@ const LevelUp = (() => {
     openAuth, toast,
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
-    getClassKinds: () => classKinds, loadClassKinds, adminClassKind, uploadKindPhoto,
+    getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven
   };

@@ -14,6 +14,8 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `archive/img/`: photos no longer used on the site
 
 ## Phones
+- **Logged in, the home page opens on "For you"**, your own start screen, in the place of the title screen (see
+  "For you: the start screen and the weekly check-in"). Visitors keep the normal home page.
 - A bar at the bottom (Home · Book · Scores · Chat · Menu) replaces the ☰ button; Scores jumps to the high scores, Chat opens
   the conversations (red badge = unread), Menu opens the same menu with **My profile** at the top (and Contact).
 - Section descriptions (and the price cards in Level 5 · Schedule) sit behind a "Read more" button; elements marked
@@ -31,6 +33,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `admin.js`: admin dashboard
 - `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
 - `room.js`: the admin's Gym room tab: how busy the room is, rentals, the room's settings
+- `foryou.js`: "For you", a member's own start screen (see "For you: the start screen and the weekly check-in")
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
 - `levelup-celebrate.js`: the celebration animation, loaded by `game.js` when one is due (see "Celebrations")
 - `i18n.js` + `i18n-nl.js`: Dutch translation layer (see "Dutch and English")
@@ -84,7 +87,7 @@ database can't be reached. Trainers can overlap: the training area fits two trai
 ## Trainers and bookings
 Trainers (name, photo, colours, fallback hours) live in `TRAINERS` in `game.js`, and their ids in the `trainers`
 table in Supabase. Sessions are 1 hour, need at least 12 hours notice and can be booked up to 4 weeks ahead.
-Clients earn 75 XP per booking and 25 XP for the first stats check-in each week (a second save on the same day corrects that day's check-in; earlier check-ins can be corrected under "My check-ins" with `update_body_stats`, which only changes the values and never gives XP); trainers earn 100 XP per session and 50 XP per unique client.
+Clients earn 75 XP per booking and 25 XP for the weekly check-in: one tap on "Check in" on the start screen, or the first save of their body stats that week, whichever comes first (a second save on the same day corrects that day's check-in; earlier check-ins can be corrected under "My check-ins" with `update_body_stats`, which only changes the values and never gives XP); trainers earn 100 XP per session and 50 XP per unique client.
 Trainers sign up as "Personal trainer" (or apply later from their profile). The admin gets an email and a pop-up,
 and approves the application in the admin dashboard: either linked to an existing trainer card (Filip, Maxim) or as a
 new trainer card, which then appears in the team, the schedule filter and the booking board automatically. Coaching
@@ -533,8 +536,9 @@ Tap someone's photo or name and their page opens: on the high scores (podium, ro
 chat (the header, or a name in a group chat), in the likes on your own profile, under a photo comment, and on a coach
 card ("Meet the team": the photo or name, and the small coach faces on the training cards).
 `profile.html?u=<user id>` is a member, `profile.html?trainer=<trainer id>` a coach, without either your own page.
-- **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (Overview,
-  Coach, Rewards, Packs & shop, Body stats, Settings). The first tab, **My page**, is exactly what others see, with your
+- **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (For you on a
+  computer, Overview, Coach, Rewards, Packs & shop, Body stats, Settings). On a computer your page opens on **For you**
+  (the start screen); on a phone on **My page**. The tab **My page** is exactly what others see, with your
   own buttons in it: 📷 on your photo, the text about yourself, "Add a photo" and Remove under your photos. `member.js` draws the top block and the My page tab, `profile.js` the
   other tabs; on someone else's page `profile.js` draws nothing.
 - **One photo:** your profile photo is changed in one place (📷 on the photo at the top) and shows everywhere.
@@ -589,10 +593,41 @@ day. Everything goes through `give_like` in `supabase/schema.sql` (table `player
   gets "👑 Jonas is Player of the Month". It's settled by the first profile load of the month or by the 10-minute
   push job (`monthly_awards`, `_settle_player_of_month`). The winner shows in a banner on the high scores, with a
   crown chip on their card and share image.
-- **Training streak:** weeks in a row (Monday–Sunday) with at least one completed session, shown from 2 weeks
-  ("🔥 4 weeks in a row") on the player card and share image. Without a session (done or booked) this week, the
-  card shows a gentle note, and on Thursday evening the push job sends one reminder ("Keep your 4-week streak").
-  The reminder needs the 10-minute push job from "Push notifications" step 4.
+- **Training streak:** weeks in a row (Monday–Sunday) with at least one completed session, a group class you were
+  at, or the weekly check-in. Shown on the start screen from the first week, and from 2 weeks ("🔥 4 weeks in a row")
+  on the player card and share image. Without a session (done or booked) or a check-in this week, the card shows a
+  gentle note, and on Thursday evening the push job sends one reminder ("Keep your 4-week streak · Train or check in
+  before Sunday"). The reminder needs the 10-minute push job from "Push notifications" step 4.
+
+## For you: the start screen and the weekly check-in
+A member's own screen, made to give a reason to open the app every week (`foryou.js`, styles under "For you" at the
+end of `style.css`).
+- **Where:** on a phone it takes the place of the title screen at the top of the home page for a logged-in member
+  (the rest of the home page follows under it; "Home" in the bottom bar goes there). On a computer the home page
+  stays as it is and "For you" is the first tab of your account, so one click on your name in the header.
+  The phone remembers that you are logged in (`levelup.fy` in the browser, set next to the rank colour), so the next
+  visit starts on the start screen without first showing the title screen.
+- **What is on it, top to bottom:**
+  1. *Hello:* your first name, level, XP bar and the mascot on his rings (the gymnast of `levelup-celebrate.js`; tap
+     him for a rep, he does a muscle-up when you check in; with "reduce motion" he hangs still).
+  2. *Your next step:* your first session or group class that is coming (with "View" and the chat), or a push to book
+     one (mentions a free session that is waiting, or the first-session price). A coach first sees requests that wait.
+  3. *Your streak:* the weeks in a row and the **Check in** button.
+  4. *Your race:* you on the high scores between the players just above and below you, and how much XP you need to
+     pass the next one. Hidden from the high scores or a coach: the top 3.
+  5. *Almost there:* the three goals you are closest to (loyalty card, next rank, achievements with their progress).
+  6. *Picked for you:* group classes you are not in yet, one card per kind: a class you did before first, then your
+     coach's, then by date. "Sign up" opens the same window as the schedule. No class planned: the coaches.
+  7. *From the club:* the latest photos other members and coaches put on their page (heart them here, a tap opens the
+     page) and the latest news item.
+- **Weekly check-in:** one per week (Monday–Sunday, Brussels time), +25 XP, and the week counts for the streak. The tap
+  on the start screen and saving your body stats are the same check-in: whichever comes first that week gets the XP
+  (table `checkins`, `_week_checkin`, `check_in()`). The achievement "On track" counts those weeks. When the schema
+  runs, weeks with saved body stats from before are taken over as check-ins.
+- **Server:** `for_you()` gives the race, the photos (only from pages that are open to members, never your own) and
+  the number of trainers you trained with; everything else comes from `my_data` (`checkin: { done, weeks, xp }`).
+- **A database without this yet** (schema not run): the screen still shows, without the check-in button, the race and
+  the photos.
 
 ## Style (FC Ultimate) and the backup of the old look
 The site looks like a sports game menu: bold slanted letters (Barlow Condensed), slanted buttons and chips, rounded
