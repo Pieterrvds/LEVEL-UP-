@@ -1466,13 +1466,12 @@ textarea { resize: vertical; min-height: 130px; }
   background: repeating-linear-gradient(135deg, rgba(var(--green-bright-rgb), 0.12) 0 6px, transparent 6px 12px), #000;
   border-style: dashed;
 }
-/* the gym room rented out: a grey block that shows the room is taken (nothing to press) */
-.slot.rental { --c: var(--gold); cursor: default; overflow: hidden; color: var(--muted);
-  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 6px, transparent 6px 12px), #000; border-color: var(--line); border-left-color: var(--c); }
+/* the gym room rented out: an hour that is taken, so it looks like "Booked" (.slot.taken), with a key and what it
+   is; nothing to press. A rental of one place (staff only) has a dashed edge. */
+.slot.rental { --c: var(--muted); cursor: default; overflow: hidden; }
 .slot.rental.shared { border-style: dashed; border-left-style: solid; }
-.slot.rental .slot-name { color: var(--text); }
-.slot.rental .slot-state { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-/* next to a coach's hour in the same cell it is just the key (its title and the legend say what it is) */
+.slot.rental .slot-state { overflow: hidden; text-overflow: ellipsis; }
+/* next to a coach's hour in the same cell (staff) it is just the key; its title says who and when */
 .board-cell .slot.rental:not(:only-child) { flex: 0 0 30px; padding: 4px 0; align-items: center; }
 .board-cell .slot.rental:not(:only-child) .slot-name span + span, .board-cell .slot.rental:not(:only-child) .slot-state { display: none; }
 .legend-key { font-size: 0.95rem; line-height: 1; }
@@ -1527,7 +1526,6 @@ textarea { resize: vertical; min-height: 130px; }
 .coach-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .coach-item .form-error:empty { display: none; }
 @media (max-width: 640px) { .coach-item { grid-template-columns: 1fr; } .coach-actions { justify-content: flex-start; } }
-.legend-swatch.group { border-style: dashed; background: repeating-linear-gradient(135deg, rgba(var(--green-bright-rgb), 0.3) 0 3px, transparent 3px 6px); }
 .slot.done { background: color-mix(in srgb, var(--green-bright) 25%, #000); border-color: var(--green-bright); cursor: default; }
 .slot.done .slot-state { color: var(--green-bright); }
 

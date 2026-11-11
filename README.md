@@ -249,11 +249,14 @@ There is one room (12 m × 12 m), and the app now knows it. Rules, all checked o
 - **Server:** table `room_rentals` (no direct access), column `class_sessions.uses_room`, `_room_load` (per hour:
   places used, whole room or not; feeds `slot_status` as trainer `*`), `_room_blocker` (what stands in the way),
   `admin_room`, `admin_rental_add`, `admin_rental_cancel`, `admin_rental_paid`, `admin_room_settings`.
-- **On the schedule of the home page:** a rental is a block of its own (🔑), on every hour it covers, also outside
-  the coaches' hours (the board grows to show it). Everyone sees a whole-room rental as "Room rented out · Whole
-  room" without a name; the admin and the coaches see who rents, and also the rentals of one place. Next to a
-  coach's hour in the same cell it is just the key. On phones it is a row in the day's list. `room_blocks` in
-  `supabase/schema.sql`, `rentalBlock` in `schedule.js`.
+- **On the schedule of the home page:** a rented hour is an hour that is taken, drawn like "Booked" with a 🔑, on
+  every hour it covers, also outside the coaches' hours (the board grows to show it). Visitors and members see a
+  whole-room rental as "Room rented out · Booked" without a name, and no extra block next to a coach's hour (that
+  hour already reads "Booked"). The admin and the coaches read who rents and what (whole room or 1 place), also
+  for rentals of one place; next to a coach's hour that is just the key. On phones it is a row in the day's list.
+  `room_blocks` in `supabase/schema.sql`, `rentalBlock` in `schedule.js`.
+- **The legend under the schedule** lists what you can meet there: free, requested, confirmed, booked (a rental
+  counts as booked), 👥 group class, closed.
 - **In the Finances tab:** rentals that are over count as income on their date. A tile "Room rental" (and it is
   part of "Your share"), a table per renter (hours, rental, paid, open now), a column in the week/month overview
   and its CSV, "Download rentals (CSV)", unpaid rental in "To collect" and planned rental in "Booked ahead".

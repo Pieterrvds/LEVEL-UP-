@@ -273,6 +273,7 @@
   "Confirmed session": "Bevestigde sessie",
   "Booked": "Bezet",
   "Group session": "Groepssessie",
+  "Group class: click to sign up": "Groepsles: klik om in te schrijven",
   "Closed: book at least 12 hours ahead": "Gesloten: boek minstens 12 uur vooraf",
   "Closed: book at least {0} hours ahead": "Gesloten: boek minstens {0} uur vooraf",
   "Closed": "Gesloten",

@@ -80,14 +80,15 @@ function classButton(c, cls = "slot") {
 }
 
 // ---------- The gym room rented out, on the board ----------
-// Not something to book: it shows that the room is taken. Everyone sees a whole-room rental (without a name);
-// the admin and the coaches also see who rents, and the rentals that take only one place.
+// Not something to book: it is an hour that is taken, drawn like "Booked". Everyone sees a whole-room rental
+// (without a name, as "Booked"); the admin and the coaches read who rents and what (the whole room or one place),
+// and also see the rentals that take only one place.
 const rentalSpan = (r) => `${pad(r.start)}:00–${pad(r.end)}:00`;
-const rentalWhat = (r) => r.kind === "full" ? "Whole room" : "1 place";
+const rentalWhat = (r) => !r.name ? "Booked" : r.kind === "full" ? "Whole room" : "1 place";
 const rentalName = (r) => r.name ? `<span data-no-i18n>${esc(r.name)}</span>` : `<span>Room rented out</span>`;
 function rentalBlock(r, hour, past) {
   return `
-    <div class="slot rental ${r.kind} ${past ? "past" : ""}" title="${r.name ? esc(r.name) : "Room rented out"} · ${rentalSpan(r)}">
+    <div class="slot taken rental ${r.kind} ${past ? "past" : ""}" title="${r.name ? esc(r.name) : "Room rented out"} · ${rentalSpan(r)}">
       <span class="slot-time">${pad(hour)}:00</span>
       <span class="slot-name"><span aria-hidden="true">🔑</span> ${rentalName(r)}</span>
       <span class="slot-state">${rentalWhat(r)} · ${rentalSpan(r)}</span>
@@ -213,7 +214,8 @@ function renderBoard() {
             </button>`;
         }).join("");
 
-      const rentals = LevelUp.roomBlocksOn(day.key).filter((r) => hour >= r.start && hour < r.end).map((r) => {
+      // (next to a coach's hour visitors and members don't get an extra block: that hour already reads "Booked")
+      const rentals = LevelUp.roomBlocksOn(day.key).filter((r) => hour >= r.start && hour < r.end && (r.name || !trainerSlots)).map((r) => {
         itemCount++;
         return rentalBlock(r, hour, LevelUp.slotStart(day.key, hour) <= now);
       }).join("");
