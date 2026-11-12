@@ -57,6 +57,8 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `admin.js`: admin dashboard
 - `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
 - `room.js`: the admin's Gym room tab: how busy the room is, rentals, the room's settings
+- `levelupy-admin.js`: the admin's Levelupy tab: who has the assistant, the model, the limits, what it knows, the use
+- `supabase/functions/assistant/index.ts`: the Edge Function behind Levelupy (see "Levelupy")
 - `posts.js`: a post (photos with a text, hearts, comments) and the window to make one; used by the member page and "For you"
 - `foryou.js`: "For you", a member's own start screen (see "For you: the start screen and the weekly check-in")
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
@@ -664,13 +666,24 @@ end of `style.css`).
   visit starts on For you from the first moment. A visitor sees there what an account gives, with the buttons to
   create one or log in.
 - **What is on it, top to bottom:**
-  1. *Hello:* your first name, level, XP bar and the mascot on his rings (the gymnast of `levelup-celebrate.js`; tap
-     him for a rep, he does a muscle-up when you check in; with "reduce motion" he hangs still).
+  1. *Hello:* your first name, level, XP bar and the mascot on his rings, **Levelupy** (the gymnast of
+     `levelup-celebrate.js`, used as it is). He hangs, breathes and blinks, and every 15 to 40 seconds he trains: a
+     pull-up or a few, a muscle-up, an L-sit, a straddle or an iron cross, with sweat flying off him while he works.
+     A speech bubble pops up now and then (about every 40 to 80 seconds): an offer to help for who has the assistant,
+     else a few words of motivation. Tap him: the conversation with Levelupy opens (see "Levelupy"); without the
+     assistant he does a move. He does a muscle-up when you check in; with "reduce motion" he hangs still. He only
+     moves while his page is on screen. How: the engine has one timeline (hang, pulled up, support, cross);
+     `sim.step(0)` gives the pose for a moment on it, and `startMascot` in `foryou.js` puts the legs, the breathing,
+     the blinking and the sweat on top. `LevelUpForYou.move("lsit")` shows one move (pullup, pullups, muscleup,
+     lsit, straddle, cross).
   2. *Your next step:* your first session or group class that is coming (with "View" and the chat), or a push to book
      one (mentions a free session that is waiting, or the first-session price). A coach first sees requests that wait.
   3. *Your streak:* the weeks in a row and the **Check in** button.
-  4. *Your race:* you on the high scores between the players just above and below you, and how much XP you need to
-     pass the next one. Hidden from the high scores or a coach: the top 3.
+  4. *Your race:* your place ("#2 of 8 players") and a lane per runner: the player just above you, you and the one
+     just below, each with their XP as a bar and what they earned in the last 7 days. Under it: how much XP and how
+     many sessions until you pass the next one, and who is coming up behind you ("Watch out: Sara earned 350 XP this
+     week…"). Two buttons switch between all time and this month. Tap a runner to open their page. Hidden from the
+     high scores or a coach: the top 3.
   5. *Almost there:* the three goals you are closest to (loyalty card, next rank, achievements with their progress).
   6. *Picked for you:* group classes you are not in yet, one card per kind: a class you did before first, then your
      coach's, then by date. "Sign up" opens the same window as the schedule. No class planned: the coaches.
@@ -682,10 +695,59 @@ end of `style.css`).
   on the start screen and saving your body stats are the same check-in: whichever comes first that week gets the XP
   (table `checkins`, `_week_checkin`, `check_in()`). The achievement "On track" counts those weeks. When the schema
   runs, weeks with saved body stats from before are taken over as check-ins.
-- **Server:** `for_you()` gives the race, the latest posts (only from pages that are open to members, plus your own) and
+- **Server:** `for_you()` gives the race (`board.all` and `board.month` from `_race`, with each runner's XP of the
+  last 7 days from `xp_log`), the latest posts (only from pages that are open to members, plus your own) and
   the number of trainers you trained with; everything else comes from `my_data` (`checkin: { done, weeks, xp }`).
 - **A database without this yet** (schema not run): the screen still shows, without the check-in button, the race and
   the posts.
+
+## Levelupy: the assistant in the chat
+The mascot as an AI assistant: a member asks, a Claude model answers with what the site knows.
+- **Where a member finds him:** the first conversation in the chat ("Levelupy · AI"), the mascot on the start screen
+  (tap him, or the green speech bubble), and a small round button with his face on the other pages. The address is
+  `chat.html?t=levelupy` on a computer and `#chat/t/levelupy` on a phone (`LevelUp.gotoChat({ t: "levelupy" })`).
+- **The conversation** (`chat.js`, "Levelupy"): a hello with five questions to tap, the answers with up to three
+  buttons that open the right screen (`LevelUp.assistantGo`: book, with a coach filled in; the group classes; My
+  sessions; the check-in; the high scores; the shop; the chat with a coach; the profile; contact), three dots while
+  he thinks, how many questions are left today, and a broom to clear the conversation.
+- **What he knows:** (1) how the app works, written into the function; (2) the knowledge text of the gym, which the
+  admin edits in the dashboard (`app_config.assistant_knowledge`); (3) the facts of the moment from
+  `_assistant_context()`: the coaches with their own text and weekly hours, the group classes of the next three weeks,
+  the shop, prices and rules, and the member's own first name, XP, streak, planned sessions and classes, weekly
+  sessions, what is still to pay, pack credits and free sessions; (4) the free hours of a coach, which he looks up
+  himself (`assistant_free_hours`, the same rules as the schedule). **Never** the email address, the health
+  questionnaire, body stats or anything of another member.
+- **What he can't do:** he only reads. No booking, moving, cancelling or paying: he says how and gives a button.
+- **Who has him** (`app_config.assistant_mode`, the admin's Levelupy tab): `off`, `staff` (the admin and the coaches:
+  the trial, the start value) or `members`. Visitors without an account never.
+- **Limits:** questions per member per day (25) and per month for everyone together (2000, the budget), one question at
+  a time, at most 600 characters. A question the model could not answer does not count. The admin tab shows the
+  questions and members of the month and an estimate of the cost from the tokens (`assistant_spend`).
+- **What he could not answer:** he notes the subject in his own words, without the member or the question
+  (`assistant_gaps`); the admin sees the list, adds the answer to the knowledge text and ticks it off. Nobody can read
+  a member's conversation, the admin neither; a member clears it with the broom.
+- **Server:** tables `assistant_messages`, `assistant_usage`, `assistant_spend`, `assistant_gaps` (no direct access);
+  `assistant_state`, `assistant_begin` (the limits, keeps the question, hands over the knowledge and the facts),
+  `assistant_free_hours`, `assistant_clear`, and for the function only (server key): `assistant_reply`,
+  `assistant_undo`; admin: `admin_assistant`, `admin_assistant_save`, `admin_assistant_gap_done`.
+- **The Edge Function** `supabase/functions/assistant/index.ts` (Deno, the official `@anthropic-ai/sdk`): it calls
+  `assistant_begin` as the member, sends one request per round to the Messages API (the model of the admin's choice:
+  Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5; effort `low`; refusal fallbacks on) with three strict tools (`free_hours`,
+  `show_buttons`, `note_unanswered`), runs the tools, and keeps the answer with `assistant_reply`. The fixed part of
+  the prompt (tools, instructions, knowledge text) is the same for every member and ends with a cache marker, so
+  repeat questions read it at a tenth of the price. A refused request, an error or a missing key: the question is
+  undone and the member gets a clear line. Logs never hold a member's words.
+
+### Switching it on (once)
+1. Make an account on console.anthropic.com, add a payment method and create an **API key** (a spending limit can be
+   set there).
+2. Supabase → **Edge Functions → Secrets**: add `ANTHROPIC_API_KEY`. The key lives only there: never in the website,
+   in this repository, in a chat or an email. Optional: `ASSISTANT_EFFORT` (`low`, `medium` or `high`).
+3. Supabase → **Edge Functions → Deploy a new function → Via Editor**: name `assistant`, paste
+   `supabase/functions/assistant/index.ts`, **Verify JWT off** (the function checks the member itself).
+4. Run `supabase/schema.sql` in the SQL Editor.
+5. Admin dashboard → **Levelupy**: it starts as "Trial: you and the coaches". Ask him things in the chat; then choose
+   "On for all members".
 
 ## Style (FC Ultimate) and the backup of the old look
 The site looks like a sports game menu: bold slanted letters (Barlow Condensed), slanted buttons and chips, rounded

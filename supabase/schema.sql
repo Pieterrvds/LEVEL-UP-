@@ -2397,36 +2397,58 @@ end $$;
 --  photos: the latest posts (photos with a text, likes and comments) of members and coaches, your own too;
 --          only from pages that are open to members
 --  trainersDone: with how many different trainers you completed a session (for the "Full squad" achievement)
+-- Your race on the high scores: you between the players just above and below you (or the top 3 when you are not
+-- on the board), all time or this month, with what each of them earned in the last 7 days
+create or replace function public._race(p_user uuid, p_month boolean)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  m0 date := date_trunc('month', now() at time zone 'Europe/Brussels')::date;
+  res jsonb;
+begin
+  -- the same order as the high scores: the most XP first, equal XP = who joined first
+  with players as (
+    select o.id, o.name, o.xp as total_xp, o.avatar_url, o.created_at,
+           case when p_month then public._month_xp(o.id, m0) else o.xp end as score
+    from public.profiles o
+    where o.show_on_leaderboard
+      and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(o.email))
+  ), board as (
+    select pl.*, row_number() over (order by pl.score desc, pl.created_at) as place, count(*) over () as total
+    from players pl where not p_month or pl.score > 0
+  ), mine as (
+    select (select b.place from board b where b.id = p_user) as place, coalesce((select max(b.total) from board b), 0) as total
+  )
+  select jsonb_build_object(
+    'place', m.place, 'total', m.total,
+    'rows', coalesce((select jsonb_agg(jsonb_build_object('place', b.place, 'name', b.name, 'xp', b.score, 'totalXp', b.total_xp,
+        'avatarUrl', b.avatar_url, 'userId', b.id, 'isMe', b.id = p_user,
+        'week', (select coalesce(sum(x.amount), 0) from public.xp_log x where x.user_id = b.id and x.created_at > now() - interval '7 days')) order by b.place)
+      from board b
+      where b.place between greatest(1, least(coalesce(m.place, 2) - 1, m.total - 2)) and greatest(coalesce(m.place, 2) + 1, 3)), '[]'::jsonb))
+  into res from mine m;
+  return res;
+end $$;
+revoke execute on function public._race(uuid, boolean) from public, anon, authenticated;
+
 create or replace function public.for_you()
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
   me uuid := auth.uid();
   p public.profiles;
   ranked boolean;
+  board_all jsonb;
   race jsonb;
 begin
   if me is null then raise exception 'Log in first.'; end if;
   select * into p from public.profiles where id = me;
   ranked := coalesce(p.show_on_leaderboard, false)
     and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(p.email));
-  -- the same order as the high scores: most XP first, equal XP = who joined first
-  with board as (
-    select o.id, o.name, o.xp, o.avatar_url, row_number() over (order by o.xp desc, o.created_at) as place,
-           count(*) over () as total
-    from public.profiles o
-    where o.show_on_leaderboard
-      and not exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(o.email))
-  ), mine as (
-    select coalesce((select b.place from board b where b.id = me and ranked), 2) as place,
-           coalesce((select max(b.total) from board b), 0) as total
-  )
-  select jsonb_agg(jsonb_build_object('place', b.place, 'name', b.name, 'xp', b.xp, 'avatarUrl', b.avatar_url,
-                                      'userId', b.id, 'isMe', b.id = me) order by b.place)
-  into race
-  from board b, mine m
-  where b.place between greatest(1, least(m.place - 1, m.total - 2)) and greatest(m.place + 1, 3);
+  board_all := public._race(case when ranked then me end, false);
+  race := board_all -> 'rows';
   return jsonb_build_object(
     'race', coalesce(race, '[]'::jsonb), 'ranked', ranked,
+    'board', jsonb_build_object('all', board_all, 'month', public._race(case when ranked then me end, true),
+                                'sessionXp', coalesce(nullif(public._config('session_xp'), '')::int, 75)),
     'photos', coalesce((select jsonb_agg(public._photo_json(ph) order by ph.created_at desc)
       from public.profile_photos ph
       where ph.id in (
@@ -5734,3 +5756,437 @@ Nieuw hier? Welkom! Boek je eerste sessie als intakegesprek: we maken kennis, be
     insert into public.app_config (key, value) values ('owner_about_added', '1') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- ---------------------------------------------------------
+-- Levelupy: the assistant in the chat (the mascot)
+-- ---------------------------------------------------------
+-- A member asks a question in the chat. The Edge Function "assistant" (supabase/functions/assistant) lets a Claude
+-- model answer it with what this file hands over: the knowledge text (the admin edits it in the dashboard), the
+-- coaches, classes, shop and prices, and the member's own sessions, classes and what is still to pay.
+-- Never the health questionnaire, body stats or anything of another member. Levelupy only reads: it never books,
+-- cancels or pays; its answer can carry buttons that open the right screen.
+-- Settings (app_config): assistant_mode = off | staff (the admin and the coaches only: the trial) | members;
+-- assistant_model; assistant_daily_limit (questions per member per day); assistant_month_limit (questions per
+-- month for everyone together); assistant_knowledge (what it knows about the gym).
+insert into public.app_config (key, value) values
+  ('assistant_mode', 'staff'),
+  ('assistant_model', 'claude-opus-5-5'),
+  ('assistant_daily_limit', '25'),
+  ('assistant_month_limit', '2000'),
+  ('assistant_knowledge', $know$LEVEL-UP is personal training in Aalst waar sport voelt als een spel: met elke training verdien je XP, je stijgt in level en rang en je staat op het klassement. Elke stap wordt gevierd.
+
+De zaal (het hoofdkwartier): Hoogstraat 40, 9308 Aalst. Bellen of WhatsApp: +32 471 95 54 89 (Pieter). Mail: PieterV-D-S@hotmail.com. We antwoorden meestal dezelfde dag.
+
+Pieter is hoofdcoach en oprichter van LEVEL-UP, met een hart voor CrossFit, calisthenics, HIIT en Muay Thai. Zijn eigen verhaal staat bij de gegevens van de coaches.
+
+Voor wie: ook voor beginners. Sessies zijn één-op-één (of met één vriend: een duosessie), dus je coach werkt op jouw niveau. Voor je eerste sessie vul je een korte gezondheidsvragenlijst in. Je eerste sessie is een kennismaking: waar sta je nu en wat wordt je eerste doel.
+
+Groepslessen (bijvoorbeeld HIIT, CrossFit WOD, bootcamp, run club) staan in het rooster met het aantal vrije plaatsen. Vol? Dan kan je op de wachtlijst: komt er een plaats vrij, dan ben je er automatisch bij. Elke groep heeft een eigen groepschat.
+
+De app: open de site op je telefoon en kies Menu > Download de app. LEVEL-UP staat dan op je startscherm, gratis en zonder app store. Zet meldingen aan om te horen wanneer je coach bevestigt.
+
+Wie ziet je gezondheidsantwoorden en lichaamsgegevens: alleen jijzelf, je coach en LEVEL-UP.$know$)
+on conflict (key) do nothing;
+
+create table if not exists public.assistant_messages (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  body text not null,
+  buttons jsonb not null default '[]'::jsonb,   -- (assistant) the buttons under the answer: [{label, action, arg}]
+  created_at timestamptz not null default now()
+);
+create index if not exists assistant_messages_user_idx on public.assistant_messages (user_id, id desc);
+-- questions per member per day (the daily limit; stays when a member clears the conversation)
+create table if not exists public.assistant_usage (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null,
+  questions integer not null default 0,
+  primary key (user_id, day)
+);
+-- what the answers used, per month and model (for the admin: the size of the bill)
+create table if not exists public.assistant_spend (
+  month date not null,
+  model text not null,
+  answers integer not null default 0,
+  tokens_in bigint not null default 0,       -- read at the full price (new text, and text stored for later)
+  tokens_cached bigint not null default 0,   -- read from the store, at a tenth of the price
+  tokens_out bigint not null default 0,
+  primary key (month, model)
+);
+-- what Levelupy could not answer: a short subject in its own words, without the member (for a better knowledge text)
+create table if not exists public.assistant_gaps (
+  id bigint generated always as identity primary key,
+  topic text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.assistant_messages enable row level security;  -- only through the functions below
+alter table public.assistant_usage enable row level security;
+alter table public.assistant_spend enable row level security;
+alter table public.assistant_gaps enable row level security;
+
+-- Is Levelupy there for the member who asks?
+create or replace function public._assistant_on()
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and case coalesce(public._config('assistant_mode'), 'off')
+    when 'members' then true
+    when 'staff' then public.is_admin() or public._my_trainer() is not null
+    else false end;
+$$;
+
+create or replace function public._assistant_left()
+returns integer language sql stable security definer set search_path = public as $$
+  select greatest(0, coalesce(nullif(public._config('assistant_daily_limit'), '')::int, 25)
+    - coalesce((select u.questions from public.assistant_usage u
+                where u.user_id = auth.uid() and u.day = (now() at time zone 'Europe/Brussels')::date), 0));
+$$;
+
+-- For the website: is Levelupy there for me, how many questions are left today, and (when asked) the conversation
+create or replace function public.assistant_state(p_messages boolean default false)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare me uuid := auth.uid();
+begin
+  if me is null or not public._assistant_on() then return jsonb_build_object('on', false); end if;
+  return jsonb_build_object(
+    'on', true, 'left', public._assistant_left(),
+    'limit', coalesce(nullif(public._config('assistant_daily_limit'), '')::int, 25),
+    'trial', coalesce(public._config('assistant_mode'), 'off') = 'staff',
+    'messages', case when p_messages then coalesce((
+      select jsonb_agg(jsonb_build_object('id', m.id, 'role', m.role, 'body', m.body, 'buttons', m.buttons, 'at', m.created_at) order by m.id)
+      from (select * from public.assistant_messages where user_id = me order by id desc limit 60) m), '[]'::jsonb) end);
+end $$;
+
+-- A member's own things, and what everyone may know, as the model gets them. No health data, no body stats.
+create or replace function public._assistant_context()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  p public.profiles;
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  price1 numeric := coalesce(nullif(public._config('session_price'), '')::numeric, 60);
+  owner_id text := public._config('owner_trainer_id');
+  sessions jsonb; weekly jsonb; classes jsonb; due_sessions jsonb; due_classes jsonb; tab numeric; packs_due jsonb;
+  credits integer; vouchers jsonb; done integer;
+begin
+  select * into p from public.profiles where id = me;
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'date', b.day, 'weekday', trim(to_char(b.day, 'Day')), 'time', lpad(b.hour::text, 2, '0') || ':00',
+      'coach', t.name, 'coachId', t.id,
+      'status', case b.status when 'pending' then 'requested, waiting for the coach to confirm'
+                              when 'awaiting_payment' then 'waiting for the online payment' else b.status end,
+      'kind', case b.kind when 'duo' then 'duo session' else '1:1 session' end,
+      'weekly', b.series_id is not null,
+      'payment', case when b.pay_method = 'pack' then 'paid with a pack credit'
+                      when b.pay_method = 'reward' then 'free session voucher'
+                      when b.pay_status = 'paid' then 'paid'
+                      else 'still to pay: ' || b.price || ' euro (' || case b.pay_method when 'online' then 'online' else 'at the gym' end || ')' end)
+    order by b.day, b.hour), '[]'::jsonb)
+  into sessions
+  from (select * from public.bookings k where k.user_id = me and k.status in ('pending', 'confirmed', 'awaiting_payment')
+          and public._slot_start(k.day, k.hour) > now() order by k.day, k.hour limit 12) b
+  join public.trainers t on t.id = b.trainer_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object('when', public._series_label(s), 'coach', t.name,
+      'until', coalesce(s.last_day::text, 'until someone stops it'),
+      'status', case s.status when 'requested' then 'requested, waiting for the coach' else 'running' end)), '[]'::jsonb)
+  into weekly
+  from public.booking_series s join public.trainers t on t.id = s.trainer_id
+  where s.user_id = me and s.status <> 'ended';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'class', c.title, 'start', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD HH24:MI'),
+      'weekday', trim(to_char(c.starts_at at time zone 'Europe/Brussels', 'Day')), 'coach', t.name,
+      'status', case g.status when 'waitlist' then 'on the waitlist' when 'awaiting_payment' then 'waiting for the online payment' else 'signed up' end,
+      'payment', case when g.price = 0 then 'free' when g.pay_status = 'paid' then 'paid'
+                      else 'still to pay: ' || g.price || ' euro' end) order by c.starts_at), '[]'::jsonb)
+  into classes
+  from public.class_signups g join public.class_sessions c on c.id = g.class_id join public.trainers t on t.id = c.trainer_id
+  where g.user_id = me and g.status in ('booked', 'waitlist', 'awaiting_payment') and c.status = 'scheduled' and c.starts_at > now();
+
+  -- what is still to pay: sessions and classes that count (also ones that are over), the tab, packs asked for
+  select coalesce(jsonb_agg(jsonb_build_object('date', b.day, 'time', lpad(b.hour::text, 2, '0') || ':00', 'coach', t.name,
+      'what', case b.status when 'no_show' then 'session you missed (charged)' when 'late_cancel' then 'session cancelled too late (charged)'
+                            when 'completed' then 'session that is done' else 'session that is planned' end,
+      'euro', b.price) order by b.day, b.hour), '[]'::jsonb)
+  into due_sessions
+  from public.bookings b join public.trainers t on t.id = b.trainer_id
+  where b.user_id = me and b.pay_status = 'unpaid' and b.pay_method in ('online', 'in_person')
+    and b.status in ('confirmed', 'completed', 'no_show', 'late_cancel');
+  select coalesce(jsonb_agg(jsonb_build_object('class', c.title, 'start', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD HH24:MI'),
+      'euro', g.price) order by c.starts_at), '[]'::jsonb)
+  into due_classes
+  from public.class_signups g join public.class_sessions c on c.id = g.class_id
+  where g.user_id = me and g.pay_status = 'unpaid' and g.price > 0 and g.status in ('booked', 'attended', 'no_show', 'late_cancel')
+    and c.status <> 'cancelled';
+  select coalesce(sum(o.total), 0) into tab from public.orders o where o.user_id = me and o.status = 'open';
+  select coalesce(jsonb_agg(jsonb_build_object('pack', sp.size || ' sessions', 'euro', sp.price)), '[]'::jsonb)
+  into packs_due from public.session_packs sp where sp.user_id = me and sp.status = 'requested';
+
+  select coalesce(sum(greatest(0, sp.size - public._pack_used(sp.id))), 0)::int into credits
+  from public.session_packs sp where sp.user_id = me and sp.status = 'paid';
+  select coalesce(jsonb_agg(jsonb_build_object('validUntil', (v.expires_at at time zone 'Europe/Brussels')::date)), '[]'::jsonb)
+  into vouchers
+  from public.reward_vouchers v
+  where v.user_id = me and v.expires_at > now()
+    and not exists (select 1 from public.bookings b where b.voucher_id = v.id and b.status not in ('declined', 'expired', 'cancelled'));
+  select count(*)::int into done from public.bookings b where b.user_id = me and b.status = 'completed';
+
+  return jsonb_build_object(
+    'now', jsonb_build_object('date', today, 'weekday', trim(to_char(today, 'Day')),
+                              'time', to_char(now() at time zone 'Europe/Brussels', 'HH24:MI'), 'timezone', 'Europe/Brussels'),
+    'member', jsonb_build_object(
+      'firstName', split_part(btrim(coalesce(p.name, '')), ' ', 1),
+      'xp', p.xp,
+      'isCoach', public._my_trainer() is not null,
+      'sessionsDone', done,
+      'streak', public._streak(me),
+      'checkedInThisWeek', exists (select 1 from public.checkins h where h.user_id = me and h.week = date_trunc('week', today)::date),
+      'upcomingSessions', sessions,
+      'weeklySessions', weekly,
+      'upcomingClasses', classes,
+      'stillToPay', jsonb_build_object('sessions', due_sessions, 'classes', due_classes, 'shopTabEuro', tab, 'packsAskedFor', packs_due),
+      'packCreditsLeft', credits,
+      'freeSessionVouchers', vouchers),
+    'coaches', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', t.id, 'name', t.name, 'role', coalesce(t.role, ''), 'specialties', coalesce(t.specialties, ''),
+        'about', left(coalesce(nullif(btrim(coalesce((select u.bio from public.profiles u where t.email is not null and lower(u.email) = lower(t.email) limit 1), '')), ''), t.bio, ''), 900),
+        'headCoach', t.id = owner_id,
+        'canBeMessagedInTheChat', t.email is not null,
+        'priceFor1to1Euro', coalesce((select tp.price from public.trainer_pricing tp where tp.trainer_id = t.id), price1),
+        'weeklyHours', coalesce((select string_agg((array['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[h.weekday + 1] || ' ' || lpad(h.start_hour::text, 2, '0') || ':00-' || lpad(h.end_hour::text, 2, '0') || ':00', ', '
+                                                    order by (h.weekday + 6) % 7, h.start_hour)
+                                 from public.trainer_hours h where h.trainer_id = t.id and h.weekday is not null and h.kind = 'open'), 'no fixed hours')
+      ) order by t.created_at, t.id) from public.trainers t where t.active), '[]'::jsonb),
+    'groupClasses', coalesce((select jsonb_agg(jsonb_build_object(
+        'class', c.title, 'start', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD HH24:MI'),
+        'weekday', trim(to_char(c.starts_at at time zone 'Europe/Brussels', 'Day')), 'minutes', c.minutes, 'coach', t.name,
+        'euro', c.price, 'xp', c.xp, 'where', c.location,
+        'placesLeft', greatest(0, c.capacity - (select count(*) from public.class_signups g where g.class_id = c.id and g.status in ('booked', 'awaiting_payment', 'attended')))
+      ) order by c.starts_at)
+      from (select * from public.class_sessions where status = 'scheduled' and starts_at > now() and starts_at < now() + interval '21 days' order by starts_at limit 25) c
+      join public.trainers t on t.id = c.trainer_id), '[]'::jsonb),
+    'shop', coalesce((select jsonb_agg(jsonb_build_object('item', s.name, 'category', s.category, 'euro', s.price,
+        'saleEuro', case when s.sale_price is not null and (s.sale_ends_at is null or s.sale_ends_at > now()) then s.sale_price end,
+        'limitedLeft', s.stock) order by s.category, s.name)
+      from public.shop_items s where public._shop_available(s)), '[]'::jsonb),
+    'pricesAndRules', jsonb_build_object(
+      'first1to1SessionEuro', nullif(public._config('intro_price'), '')::numeric,
+      'session1to1Euro', price1,
+      'duoSessionEuroForTwo', nullif(public._config('duo_price'), '')::numeric,
+      'sessionPacks', coalesce(nullif(public._config('packs'), ''), '[]')::jsonb,
+      'groupClassEuro', nullif(public._config('class_price'), '')::numeric,
+      'xpPerSession', nullif(public._config('session_xp'), '')::int,
+      'xpPerGroupClass', nullif(public._config('class_xp'), '')::int,
+      'xpWeeklyCheckIn', 25,
+      'freeSessionEveryNSessions', nullif(public._config('loyalty_sessions'), '')::int,
+      'bookAtLeastHoursAhead', nullif(public._config('booking_notice_hours'), '')::int,
+      'bookAtMostWeeksAhead', nullif(public._config('booking_weeks_ahead'), '')::int,
+      'freeCancelUntilHoursBefore', nullif(public._config('free_cancel_hours'), '')::int,
+      'classFreeSignOutUntilHoursBefore', nullif(public._config('class_cancel_hours'), '')::int,
+      'onlinePayments', coalesce(public._config('online_payments'), 'off') = 'on',
+      'levels', 'XP needed in total for level L = 50 * L * (L - 1): level 2 = 100 XP, level 3 = 300, level 4 = 600, level 5 = 1000'));
+end $$;
+
+-- A question comes in (called by the Edge Function, as the member): checks the limits, keeps the question and
+-- gives everything the model needs
+create or replace function public.assistant_begin(p_message text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  msg text := btrim(coalesce(p_message, ''));
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  daily integer := coalesce(nullif(public._config('assistant_daily_limit'), '')::int, 25);
+  monthly integer := coalesce(nullif(public._config('assistant_month_limit'), '')::int, 2000);
+  used integer;
+  history jsonb;
+  new_id bigint;
+begin
+  if me is null then raise exception 'Log in first.'; end if;
+  if not public._assistant_on() then raise exception 'Levelupy is not available right now.'; end if;
+  if msg = '' then raise exception 'Write a question first.'; end if;
+  if char_length(msg) > 600 then raise exception 'That question is too long. Keep it under 600 characters.'; end if;
+  if exists (select 1 from public.assistant_messages m
+             where m.user_id = me and m.role = 'user' and m.created_at > now() - interval '40 seconds'
+               and m.id = (select max(x.id) from public.assistant_messages x where x.user_id = me)) then
+    raise exception 'Levelupy is still working on your last question.';
+  end if;
+  select coalesce((select u.questions from public.assistant_usage u where u.user_id = me and u.day = today), 0) into used;
+  if used >= daily then
+    raise exception 'That was question % of today, the most Levelupy answers in a day. Tomorrow he is back. Your coach is in the chat too.', daily;
+  end if;
+  if (select coalesce(sum(u.questions), 0) from public.assistant_usage u where u.day >= date_trunc('month', today)::date) >= monthly then
+    raise exception 'Levelupy has answered all he can this month. Your coach is in the chat for anything you need.';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('role', m.role, 'body', m.body) order by m.id), '[]'::jsonb) into history
+  from (select * from public.assistant_messages where user_id = me order by id desc limit 12) m;
+  insert into public.assistant_usage (user_id, day, questions) values (me, today, 1)
+  on conflict (user_id, day) do update set questions = public.assistant_usage.questions + 1;
+  insert into public.assistant_messages (user_id, role, body) values (me, 'user', msg) returning id into new_id;
+  return jsonb_build_object(
+    'questionId', new_id, 'userId', me, 'left', greatest(0, daily - used - 1),
+    'model', coalesce(nullif(public._config('assistant_model'), ''), 'claude-opus-5-5'),
+    'knowledge', coalesce(public._config('assistant_knowledge'), ''),
+    'history', history,
+    'context', public._assistant_context());
+end $$;
+
+-- The free hours of a coach on the days asked for (the model calls this through the Edge Function, as the member).
+-- The same rules as the schedule: the coach's open hours, minus what is taken or closed, not too soon, not too far.
+create or replace function public.assistant_free_hours(p_trainer text, p_from date default null, p_days integer default 7)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  d0 date := greatest(coalesce(p_from, today), today);
+  n integer := least(greatest(coalesce(p_days, 7), 1), 14);
+  notice integer := coalesce(nullif(public._config('booking_notice_hours'), '')::int, 12);
+  weeks integer := coalesce(nullif(public._config('booking_weeks_ahead'), '')::int, 4);
+  horizon timestamptz := public._slot_start((date_trunc('week', today)::date + weeks * 7), 0);
+  tid text := lower(btrim(coalesce(p_trainer, '')));
+  days jsonb;
+begin
+  if not public._assistant_on() then raise exception 'Levelupy is not available right now.'; end if;
+  if not exists (select 1 from public.trainers t where t.id = tid and t.active) then
+    return jsonb_build_object('error', 'Unknown coach id. Use one of the ids in the list of coaches.');
+  end if;
+  with taken as materialized (
+    select s.day, s.hour from public.slot_status(d0, d0 + n - 1) s where s.trainer_id in (tid, '*')
+  ), d as (
+    select g::date as day from generate_series(d0, d0 + n - 1, interval '1 day') g
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('date', d.day, 'weekday', trim(to_char(d.day, 'Day')),
+      'freeHours', coalesce((
+        select jsonb_agg(lpad(h::text, 2, '0') || ':00' order by h) from generate_series(0, 23) h
+        where exists (select 1 from public.trainer_hours o where o.trainer_id = tid and o.kind = 'open'
+                        and (o.weekday = extract(dow from d.day)::int or o.day = d.day) and h >= o.start_hour and h < o.end_hour)
+          and not exists (select 1 from public.trainer_hours c where c.trainer_id = tid and c.kind = 'closed'
+                            and c.day = d.day and h >= c.start_hour and h < c.end_hour)
+          and not exists (select 1 from taken k where k.day = d.day and k.hour = h)
+          and public._slot_start(d.day, h) > now() + make_interval(hours => notice)
+          and public._slot_start(d.day, h) < horizon), '[]'::jsonb)) order by d.day), '[]'::jsonb)
+  into days from d;
+  return jsonb_build_object('coachId', tid, 'days', days,
+    'note', 'Hours that can be asked for right now. The booking screen has the last word; the coach confirms a request.');
+end $$;
+
+-- The answer (the Edge Function only, with the server key): kept in the conversation, the use counted
+create or replace function public.assistant_reply(p_user uuid, p_body text, p_buttons jsonb, p_gap text, p_model text,
+                                                  p_in bigint, p_cached bigint, p_out bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  m public.assistant_messages;
+  month0 date := date_trunc('month', (now() at time zone 'Europe/Brussels')::date)::date;
+begin
+  insert into public.assistant_messages (user_id, role, body, buttons)
+  values (p_user, 'assistant', left(btrim(coalesce(p_body, '')), 4000), coalesce(p_buttons, '[]'::jsonb)) returning * into m;
+  insert into public.assistant_spend (month, model, answers, tokens_in, tokens_cached, tokens_out)
+  values (month0, coalesce(p_model, ''), 1, greatest(coalesce(p_in, 0), 0), greatest(coalesce(p_cached, 0), 0), greatest(coalesce(p_out, 0), 0))
+  on conflict (month, model) do update set answers = public.assistant_spend.answers + 1,
+    tokens_in = public.assistant_spend.tokens_in + excluded.tokens_in,
+    tokens_cached = public.assistant_spend.tokens_cached + excluded.tokens_cached,
+    tokens_out = public.assistant_spend.tokens_out + excluded.tokens_out;
+  if btrim(coalesce(p_gap, '')) <> '' then
+    insert into public.assistant_gaps (topic) values (left(btrim(p_gap), 160));
+    delete from public.assistant_gaps g where g.id not in (select id from public.assistant_gaps order by id desc limit 200);
+  end if;
+  return jsonb_build_object('id', m.id, 'role', m.role, 'body', m.body, 'buttons', m.buttons, 'at', m.created_at);
+end $$;
+
+-- No answer came (the model could not be reached): the question does not count and leaves the conversation
+create or replace function public.assistant_undo(p_user uuid, p_question bigint)
+returns void language plpgsql security definer set search_path = public as $$
+declare gone integer;
+begin
+  delete from public.assistant_messages where id = p_question and user_id = p_user and role = 'user';
+  get diagnostics gone = row_count;
+  if gone > 0 then
+    update public.assistant_usage set questions = greatest(0, questions - 1)
+    where user_id = p_user and day = (now() at time zone 'Europe/Brussels')::date;
+  end if;
+end $$;
+
+-- A member clears their conversation with Levelupy (the count of today stays)
+create or replace function public.assistant_clear()
+returns void language sql security definer set search_path = public as $$
+  delete from public.assistant_messages where user_id = auth.uid();
+$$;
+
+-- Admin: the settings, how much it is used and what it could not answer
+create or replace function public.admin_assistant()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  month0 date := date_trunc('month', today)::date;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  return jsonb_build_object(
+    'mode', coalesce(public._config('assistant_mode'), 'off'),
+    'model', coalesce(nullif(public._config('assistant_model'), ''), 'claude-opus-5-5'),
+    'dailyLimit', coalesce(nullif(public._config('assistant_daily_limit'), '')::int, 25),
+    'monthLimit', coalesce(nullif(public._config('assistant_month_limit'), '')::int, 2000),
+    'knowledge', coalesce(public._config('assistant_knowledge'), ''),
+    'month', jsonb_build_object(
+      'questions', (select coalesce(sum(u.questions), 0) from public.assistant_usage u where u.day >= month0),
+      'members', (select count(distinct u.user_id) from public.assistant_usage u where u.day >= month0 and u.questions > 0),
+      'today', (select coalesce(sum(u.questions), 0) from public.assistant_usage u where u.day = today)),
+    'spend', coalesce((select jsonb_agg(jsonb_build_object('month', s.month, 'model', s.model, 'answers', s.answers,
+        'tokensIn', s.tokens_in, 'tokensCached', s.tokens_cached, 'tokensOut', s.tokens_out) order by s.month desc, s.model)
+      from public.assistant_spend s where s.month >= month0 - interval '2 months'), '[]'::jsonb),
+    'days', coalesce((select jsonb_agg(jsonb_build_object('day', x.day, 'questions', x.q) order by x.day)
+      from (select u.day, sum(u.questions) as q from public.assistant_usage u where u.day > today - 30 group by u.day) x), '[]'::jsonb),
+    'gaps', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'topic', g.topic, 'at', g.created_at) order by g.id desc)
+      from (select * from public.assistant_gaps order by id desc limit 40) g), '[]'::jsonb));
+end $$;
+
+create or replace function public.admin_assistant_save(p jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  k text; v text;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  if p ? 'mode' and (p ->> 'mode') not in ('off', 'staff', 'members') then raise exception 'Unknown setting.'; end if;
+  if p ? 'model' and (p ->> 'model') not in ('claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5') then raise exception 'Unknown model.'; end if;
+  if p ? 'dailyLimit' and not ((p ->> 'dailyLimit') ~ '^\d{1,3}$' and (p ->> 'dailyLimit')::int between 1 and 200) then
+    raise exception 'Questions per member per day: a number from 1 to 200.';
+  end if;
+  if p ? 'monthLimit' and not ((p ->> 'monthLimit') ~ '^\d{1,6}$' and (p ->> 'monthLimit')::int between 10 and 100000) then
+    raise exception 'Questions per month: a number from 10 to 100000.';
+  end if;
+  if p ? 'knowledge' and char_length(p ->> 'knowledge') > 12000 then raise exception 'The text is too long (12000 characters at most).'; end if;
+  for k, v in select * from (values ('assistant_mode', p ->> 'mode'), ('assistant_model', p ->> 'model'),
+                                    ('assistant_daily_limit', p ->> 'dailyLimit'), ('assistant_month_limit', p ->> 'monthLimit'),
+                                    ('assistant_knowledge', p ->> 'knowledge')) as s(key, value) loop
+    if v is not null then
+      insert into public.app_config (key, value) values (k, v) on conflict (key) do update set value = excluded.value;
+    end if;
+  end loop;
+end $$;
+
+-- Admin: this subject is dealt with (the knowledge text now covers it)
+create or replace function public.admin_assistant_gap_done(p_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  delete from public.assistant_gaps where id = p_id;
+end $$;
+
+revoke execute on function public._assistant_on() from public, anon, authenticated;
+revoke execute on function public._assistant_left() from public, anon, authenticated;
+revoke execute on function public._assistant_context() from public, anon, authenticated;
+revoke execute on function public.assistant_reply(uuid, text, jsonb, text, text, bigint, bigint, bigint) from public, anon, authenticated;
+revoke execute on function public.assistant_undo(uuid, bigint) from public, anon, authenticated;
+grant execute on function public.assistant_reply(uuid, text, jsonb, text, text, bigint, bigint, bigint) to service_role;
+grant execute on function public.assistant_undo(uuid, bigint) to service_role;
+revoke execute on function public.assistant_state(boolean) from public, anon;
+revoke execute on function public.assistant_begin(text) from public, anon;
+revoke execute on function public.assistant_free_hours(text, date, integer) from public, anon;
+revoke execute on function public.assistant_clear() from public, anon;
+revoke execute on function public.admin_assistant() from public, anon;
+revoke execute on function public.admin_assistant_save(jsonb) from public, anon;
+revoke execute on function public.admin_assistant_gap_done(bigint) from public, anon;
+grant execute on function public.assistant_state(boolean) to authenticated;
+grant execute on function public.assistant_begin(text) to authenticated;
+grant execute on function public.assistant_free_hours(text, date, integer) to authenticated;
+grant execute on function public.assistant_clear() to authenticated;
+grant execute on function public.admin_assistant() to authenticated;
+grant execute on function public.admin_assistant_save(jsonb) to authenticated;
+grant execute on function public.admin_assistant_gap_done(bigint) to authenticated;

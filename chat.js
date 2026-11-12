@@ -26,6 +26,9 @@ const state = {
   results: null,      // chat_search rows (null = searching)
   searchSeq: 0
 };
+// Levelupy, the assistant: the first conversation in the list for who has it (see "Levelupy" in game.js)
+const BOT = LevelUp.ASSISTANT_ID;
+const bot = { on: false, face: "", busy: false, waiting: "" };
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
 
 // What the address asks for: a conversation (t) or the one with a coach
@@ -138,7 +141,7 @@ function renderList() {
       </span>
       ${t.unread ? `<span class="chat-row-badge">${t.unread > 9 ? "9+" : t.unread}</span>` : ""}
     </a>`).join("");
-  box.innerHTML = LevelUp.pushCalloutHtml("Get a notification on this phone when a message comes in.") + rows + startHtml();
+  box.innerHTML = LevelUp.pushCalloutHtml("Get a notification on this phone when a message comes in.") + botRowHtml() + rows + startHtml();
 }
 
 // Members found by name: tap one to open (or start) the conversation
@@ -215,6 +218,7 @@ function renderThread() {
       </div>`;
     return;
   }
+  if (t.bot) { renderBot(box); return; }
   const coach = t.trainerId ? LevelUp.trainerById(t.trainerId) : null;
   if (!box.querySelector(".chat-messages") || box.dataset.openThread !== t.id) {
     box.dataset.openThread = t.id;
@@ -347,6 +351,160 @@ function scrollToEnd() {
   if (list.clientHeight) list.dataset.scrolled = "1"; // only counts once the list is on screen
 }
 
+// ---------- Levelupy: the conversation with the mascot ----------
+const botAvatar = (size = "") => (bot.face
+  ? `<span class="avatar has-photo bot-avatar ${size}" aria-hidden="true"><img src="${bot.face}" alt=""></span>`
+  : `<span class="avatar bot-avatar ${size}" aria-hidden="true">🤸</span>`);
+function botRowHtml() {
+  if (!bot.on || state.search.trim().length >= 2) return "";
+  return `
+    <a href="?t=${BOT}" class="chat-row chat-row-bot ${state.active?.bot ? "active" : ""}" data-thread="${BOT}">
+      ${botAvatar()}
+      <span class="chat-row-main">
+        <span class="chat-row-top"><b data-no-i18n>Levelupy <i class="chat-bot-tag">AI</i></b></span>
+        <span class="chat-row-last"><em>Your guide at LEVEL-UP: ask me anything</em></span>
+      </span>
+      <span class="chat-row-plus" aria-hidden="true">›</span>
+    </a>`;
+}
+// Is Levelupy there for this member? Then he gets his row, with his face in the colour of your rank
+async function loadBot() {
+  const s = await LevelUp.hasAssistant();
+  bot.on = Boolean(s.on);
+  if (bot.on && !bot.face) bot.face = await LevelUp.mascotFace(128);
+  renderList();
+}
+const BOT_CHIPS = ["When is my next session?", "What do I still have to pay?", "Which group classes are coming up?", "When is a coach free this week?", "How do XP and levels work?"];
+
+function renderBot(box) {
+  if (!box.querySelector(".chat-messages") || box.dataset.openThread !== BOT) {
+    box.dataset.openThread = BOT;
+    box.innerHTML = `
+      <header class="chat-head">
+        <a href="chat.html" class="chat-back" data-back aria-label="All conversations">${BACK_ICON}</a>
+        <span class="chat-head-who">
+        ${botAvatar("head")}
+        <div class="chat-head-info">
+          <b data-no-i18n>Levelupy</b>
+          <span>The LEVEL-UP mascot · AI assistant</span>
+        </div>
+        </span>
+        <button type="button" class="chat-tool" data-bot-clear title="Clear this conversation" aria-label="Clear this conversation">🧹</button>
+      </header>
+      <div class="chat-messages chat-bot" id="chatMessages" data-no-i18n></div>
+      <p class="chat-bot-note" id="chatBotNote" data-no-i18n></p>
+      <form class="chat-compose" id="chatCompose">
+        <label class="sr-only" for="chatInput">Your question</label>
+        <textarea id="chatInput" rows="1" maxlength="600" placeholder="Ask Levelupy…" autocomplete="off"></textarea>
+        <button type="submit" class="chat-send" aria-label="Send">${SEND_ICON}</button>
+      </form>`;
+    const input = box.querySelector("#chatInput");
+    input.addEventListener("input", () => grow(input));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !window.matchMedia("(pointer: coarse)").matches) {
+        event.preventDefault();
+        box.querySelector("#chatCompose").requestSubmit();
+      }
+    });
+    box.querySelector("#chatCompose").addEventListener("submit", (event) => {
+      event.preventDefault();
+      askBot(input.value);
+    });
+    if (!isPhone()) input.focus();
+  }
+  renderBotMessages();
+}
+
+function renderBotMessages() {
+  const list = document.getElementById("chatMessages");
+  if (!list || !state.active?.bot) return;
+  const a = LevelUp.getAssistant();
+  const messages = a.messages;
+  const note = document.getElementById("chatBotNote");
+  if (note) {
+    const left = Number(a.left);
+    note.textContent = [LevelUp_t("Levelupy is an AI assistant and can get things wrong."),
+      Number.isFinite(left) ? (left === 1 ? LevelUp_t("1 question left today.") : LevelUp_t(`${left} questions left today.`)) : "",
+      a.trial ? LevelUp_t("Trial: only the coaches see him for now.") : ""].filter(Boolean).join(" ");
+  }
+  if (!messages) { list.innerHTML = `<p class="chat-hello">${esc(LevelUp_t("Loading…"))}</p>`; return; }
+  const first = String(LevelUp.getPlayer()?.name || "").trim().split(/\s+/)[0] || "";
+  let html = "";
+  if (!messages.length) {
+    html += `
+      <div class="chat-bot-hello">
+        ${botAvatar("big")}
+        <p><b>${esc(LevelUp_t(`Hey ${first}! I'm Levelupy 👋`))}</b></p>
+        <p>${esc(LevelUp_t("I know my way around LEVEL-UP: the coaches and their hours, the group classes, the shop, and your own sessions and what is still to pay. What can I do for you?"))}</p>
+      </div>`;
+  }
+  let prev = null;
+  messages.forEach((m) => {
+    const mine = m.role === "user";
+    const at = new Date(m.at);
+    if (!prev || !sameDay(new Date(prev.at), at)) html += `<p class="chat-day"><span>${esc(LevelUp_t(dayLabel(m.at)))}</span></p>`;
+    const buttons = (m.buttons || []).map((b) => `<button type="button" class="btn btn-small btn-ghost" data-bot-act="${esc(b.action)}" data-bot-arg="${esc(b.arg || "")}">${esc(b.label)} ▸</button>`).join("");
+    html += `
+      <div class="chat-msg ${mine ? "mine" : "theirs bot"} end">
+        <div class="chat-line"><p>${esc(m.body)}</p></div>
+        ${buttons ? `<div class="chat-bot-btns">${buttons}</div>` : ""}
+        <span class="chat-meta">${timeLabel(m.at)}</span>
+      </div>`;
+    prev = m;
+  });
+  if (bot.waiting) {
+    html += `
+      <div class="chat-msg mine end pending"><div class="chat-line"><p>${esc(bot.waiting)}</p></div></div>
+      <div class="chat-msg theirs bot end typing" role="status" aria-label="${esc(LevelUp_t("Levelupy is thinking"))}"><div class="chat-line"><p><i></i><i></i><i></i></p></div></div>`;
+  } else if (!messages.length || messages.at(-1).role === "assistant") {
+    // a few questions to tap: at the start, and fewer after an answer
+    const chips = messages.length ? BOT_CHIPS.slice(0, 3) : BOT_CHIPS;
+    html += `<div class="chat-bot-chips">${chips.map((c) => `<button type="button" data-bot-chip>${esc(LevelUp_t(c))}</button>`).join("")}</div>`;
+  }
+  list.innerHTML = html;
+  scrollToEnd();
+}
+
+async function askBot(value) {
+  const text = String(value || "").trim();
+  if (!text || bot.busy || !state.active?.bot) return;
+  const input = document.getElementById("chatInput");
+  bot.busy = true;
+  bot.waiting = text;
+  if (input) { input.value = ""; grow(input); }
+  renderBotMessages();
+  try {
+    await LevelUp.askAssistant(text);
+  } catch (err) {
+    if (input && !input.value) { input.value = text; grow(input); } // keep the question so it can be sent again
+    LevelUp.toast({ title: "Levelupy", text: err.message, icon: "🤸", tone: "gold" });
+  }
+  bot.busy = false;
+  bot.waiting = "";
+  renderBotMessages();
+}
+
+async function openBot({ push = true } = {}) {
+  if (!bot.on) await loadBot();
+  if (!bot.on) { // not there for this member: the list of conversations
+    if (route().t === BOT) history.replaceState({}, "", address(""));
+    if (state.active) closeThread({ push: false });
+    return;
+  }
+  clearInterval(state.threadTimer);
+  state.active = { id: BOT, bot: true };
+  state.messages = [];
+  state.pending = [];
+  LevelUp.setChatActive(null);
+  if (push && route().t !== BOT) history.pushState({ t: BOT }, "", address(BOT));
+  render();
+  await LevelUp.loadAssistant(true);
+  if (!state.active?.bot) return;
+  if (!LevelUp.getAssistant().on) { bot.on = false; closeThread(); return; }
+  renderBotMessages();
+  requestAnimationFrame(scrollToEnd);
+}
+
 // ---------- Data ----------
 async function loadList() {
   try {
@@ -360,6 +518,7 @@ async function loadList() {
 
 async function openThread(id, { push = true } = {}) {
   if (!id) return;
+  if (id === BOT) { await openBot({ push }); return; }
   try {
     const data = await LevelUp.chatThread(id, 0);
     state.active = { ...data, messages: undefined };
@@ -394,7 +553,7 @@ function closeThread({ push = true } = {}) {
 
 let polling = false;
 async function poll() {
-  if (!state.active || polling || document.visibilityState !== "visible") return;
+  if (!state.active || state.active.bot || polling || document.visibilityState !== "visible") return;
   polling = true;
   try {
     const data = await LevelUp.chatThread(state.active.id, state.lastId);
@@ -493,6 +652,18 @@ root.addEventListener("click", async (event) => {
     closeThread();
     return;
   }
+  // Levelupy: a question to tap, a button under an answer, clearing the conversation
+  const chip = event.target.closest("[data-bot-chip]");
+  if (chip) { askBot(chip.textContent); return; }
+  const act = event.target.closest("[data-bot-act]");
+  if (act) { LevelUp.assistantGo(act.dataset.botAct, act.dataset.botArg); return; }
+  if (event.target.closest("[data-bot-clear]") && state.active?.bot) {
+    if (!LevelUp.getAssistant().messages?.length || bot.busy) return;
+    if (!confirm(LevelUp_t("Clear your conversation with Levelupy? This can't be undone."))) return;
+    try { await LevelUp.clearAssistant(); } catch (err) { alert(err.message); }
+    renderBotMessages();
+    return;
+  }
   const heart = event.target.closest("[data-chat-like]");
   if (heart) { likeMessage(heart.dataset.chatLike); return; }
   // Group chat: notifications off / on for yourself
@@ -577,6 +748,7 @@ async function start() {
   if (!started) {
     started = true;
     await loadList(); // in the home page too: the list is there when you swipe to it
+    loadBot();
     if (!EMBED) {
       // chat.html?coach=pieter (the Chat button on a coach card) or ?t=<conversation> (a notification)
       const r = route();
@@ -609,7 +781,7 @@ function watch(fresh = false) {
 document.addEventListener("levelup:view", () => watch());
 
 document.addEventListener("levelup:change", () => {
-  if (!LevelUp.getPlayer()) { started = false; awake = false; state.threads = null; state.active = null; }
+  if (!LevelUp.getPlayer()) { started = false; awake = false; state.threads = null; state.active = null; bot.on = false; bot.face = ""; }
   start();
 });
 start();

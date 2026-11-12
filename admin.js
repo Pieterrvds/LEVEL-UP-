@@ -204,6 +204,7 @@ async function render() {
     <section class="panel admin-panel" data-pane="classes" id="adminKinds"></section>
 
     <div data-pane="room" id="adminRoom"></div>
+    <div data-pane="levelupy" id="adminLevelupy"></div>
 
     <div data-pane="shop">
     <section class="panel admin-panel" id="tabsPanel"></section>
@@ -274,6 +275,7 @@ async function render() {
   renderNewsPanel();
   LevelUpClasses.mount(document.getElementById("adminClasses"), { admin: true });
   window.LevelUpRoom?.mount(document.getElementById("adminRoom"));
+  window.LevelUpAssistantAdmin?.mount(document.getElementById("adminLevelupy"));
   renderKinds();
 }
 
@@ -348,7 +350,8 @@ const ADMIN_TABS = [
   { id: "finances", label: "Finances" },
   { id: "shop", label: "Shop" },
   { id: "team", label: "Team" },
-  { id: "members", label: "Members" }
+  { id: "members", label: "Members" },
+  { id: "levelupy", label: "Levelupy" }
 ];
 
 // Counters on the tabs: things waiting for the admin

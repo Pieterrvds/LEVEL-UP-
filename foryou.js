@@ -55,7 +55,8 @@
       <div class="fy-rank"><span class="rank-badge"></span></div>
       <div class="fy-bar" role="progressbar" aria-valuemin="0"><i></i></div>
       <p class="fy-xp"><span data-fy-xp></span><span data-fy-left></span></p>
-      <div class="fy-mascot" role="img" aria-label="${esc(T("The mascot on his rings: tap him for a rep"))}"><canvas></canvas></div>`;
+      <button type="button" class="fy-bubble" hidden aria-hidden="true" tabindex="-1"></button>
+      <div class="fy-mascot" role="button" tabindex="0" aria-label="${esc(T("The mascot on his rings: tap him for a rep"))}"><canvas></canvas></div>`;
     return el;
   }
   function updateHello(player) {
@@ -75,52 +76,210 @@
     el.querySelector("[data-fy-left]").innerHTML = T("{0} XP to LVL {1}", `<b>${num(p.toNext)}</b>`, p.level + 1);
   }
 
-  // The mascot is the gymnast of the celebrations (levelup-celebrate.js), drawn on a small canvas: he hangs on his
-  // rings, does a rep when you tap him and a muscle-up when you check in. Without the file the corner stays empty.
+  // ---------- The mascot: Levelupy on his rings ----------
+  // He is the gymnast of the celebrations (levelup-celebrate.js, used as it is), drawn on a small canvas. He hangs
+  // and breathes, and every now and then he trains: a pull-up or two, a muscle-up, an L-sit, a straddle or an iron
+  // cross, sweating while he works. A speech bubble pops up once in a while with an offer to help or a few words of
+  // motivation. Tap him: the conversation with Levelupy opens (for who has it; else he does a rep). A check-in
+  // gets a muscle-up. Without the file the corner stays empty; with "reduce motion" he just hangs.
+  // How he moves: the engine has one timeline (t): 0.7 hang, 1.35 pulled up, 2.12 in support, 4.25 iron cross.
+  // sim.step(0) works out his pose for a t; the legs (L-sit, straddle), the breathing and the blinking are put on
+  // top of that pose here, and the sweat is drawn after him.
+  const HELP_LINES = ["Can I help you?", "Questions about LEVEL-UP?", "Tap me, I'll show you around!", "Want to know when your coach is free?", "Need a hand finding something?"];
+  const QUOTES = ["Every rep counts.", "Stronger than yesterday.", "Small steps, big levels.", "No excuses, just XP!", "You don't have to be the best, just better than last week.",
+    "One session at a time.", "Sweat is just your muscles cheering.", "Showing up is half the workout.", "Level up!", "Your future self says thanks."];
+  const PUFFS = ["Phew… one more!", "Feel that? That's progress.", "Your turn!", "That one was for you."];
   async function startMascot() {
-    const box = parts.hello.querySelector(".fy-mascot");
+    const hello = parts.hello;
+    const box = hello.querySelector(".fy-mascot");
     const cv = box.querySelector("canvas");
+    const bubble = hello.querySelector(".fy-bubble");
     try {
       const lib = await LevelUp.loadCelebrate();
-      const sim = lib._createSim({ type: "rank", accent: LevelUp.themeAccent() || "#C6FF3D", glow: "#ffd23f", short: false, hold: 999 }, 10, 10);
-      let ctx = null, w = 0, h = 0, raf = 0;
-      const HANG = 0.7, REP = 1.2, TOP = 2.1;
+      const sim = lib._createSim({ type: "rank", accent: LevelUp.themeAccent() || "#C6FF3D", glow: "transparent", short: false, hold: 999 }, 10, 10);
+      sim.gripped = true; sim.burst = true; // his pose only: no chalk, no confetti, no rays
+      let ctx = null, w = 0, h = 0, raf = 0, last = 0, base = 1;
+      const HANG = 0.7, UP = 1.35, TOP = 2.12, HELD = 3.45, CROSS = 4.25;
+      const me = { t: 0.02, l: 0, s: 0, sweat: 0 };        // the timeline, L-sit and straddle (0 to 1), how hard he works
+      let plan = [];                                          // the steps of the move he is doing
+      let blinkAt = performance.now() + 2500, nextMove = 0, nextSay = 0, saidHelp = false;
+      const drops = [];
+      let nextDrop = 0, lastSide = 1, painted = 0;
       const fit = () => {
         const r = box.getBoundingClientRect();
-        if (!r.width || !r.height || (r.width === w && r.height === h)) return Boolean(ctx);
+        if (!r.width || !r.height) return Boolean(ctx);
+        if (r.width === w && r.height === h) return Boolean(ctx);
         w = r.width; h = r.height;
         const q = Math.min(window.devicePixelRatio || 1, 2);
         cv.width = Math.round(w * q); cv.height = Math.round(h * q);
         ctx = cv.getContext("2d");
         ctx.setTransform(q, 0, 0, q, 0, 0);
         sim.resize(w, h, 1);
-        sim.s = Math.min(w / 190, h / 440); sim.ox = w / 2; sim.top = -22 * sim.s;
-        sim.draw(ctx);
+        base = Math.min(w / 190, h / 440);
+        paint(performance.now());
         return true;
       };
-      const move = (from, to, ms, then) => {
-        cancelAnimationFrame(raf);
+      const ease = (u) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
+      // his pose at this moment, with what makes him look alive
+      function paint(now) {
+        if (!ctx) return;
+        // in the iron cross his arms are wider than his corner: he steps back a little
+        const wide = Math.max(0, Math.min(1, (me.t - HELD) / (CROSS - HELD)));
+        sim.s = base * (1 - 0.17 * ease(wide)); sim.ox = w / 2; sim.top = -22 * base + 30 * base * ease(wide);
+        sim.t = me.t; sim.step(0);
+        const R = sim.R, sec = now / 1000, calm = !plan.length;
+        R.legs.forEach((leg, i) => {
+          const side = i ? 1 : -1;
+          const sway = calm && !STILL.matches ? 0.035 * Math.sin(sec * 1.4 + i) : 0;
+          const shake = me.sweat > 0.5 ? 0.012 * Math.sin(sec * 38 + i * 2) : 0;   // trembling in a hold
+          const phi = leg.phi * (1 - me.l) * (1 - me.s) + side * (0.05 * me.l + 1.02 * me.s) + sway + shake;
+          leg.psi = leg.psi * (1 - me.l) * (1 - me.s) + side * (0.05 * me.l + 1.02 * me.s) + sway + shake;
+          leg.phi = phi;
+          leg.len = leg.len * (1 - 0.86 * me.l) * (1 - 0.06 * me.s);                 // an L-sit: the legs point at you
+        });
+        R.hem = Math.sin((R.legs[0].phi + R.legs[1].phi) / 2) * 34;
+        if (!STILL.matches) {
+          if (calm) { R.rigY += 1.1 * Math.sin(sec * 2.1); R.headTilt += 0.04 * Math.sin(sec * 0.8); }
+          if (now > blinkAt) { R.blink = 1; if (now > blinkAt + 130) blinkAt = now + 2200 + Math.random() * 3800; }
+        }
+        if (me.l > 0.5 || me.s > 0.5) R.moving = true;      // the face of someone who is working
+        sim.draw(ctx);
+        // sweat: drops from his temples
+        const s = sim.s, hx = sim.ox + R.cx * s, hy = sim.top + (R.rigY + R.sy - 35.5 + R.headDy) * s;
+        if (me.sweat > 0 && !STILL.matches && drops.length < 5 && now > nextDrop) {
+          const side = lastSide = -lastSide;
+          drops.push({ x: hx + side * 15 * s, y: hy - (2 + Math.random() * 8) * s, vx: side * (30 + Math.random() * 26) * s, vy: -(34 + Math.random() * 26) * s, life: 0 });
+          nextDrop = now + (520 - 300 * me.sweat) * (0.7 + Math.random() * 0.6);
+        }
+        for (let i = drops.length - 1; i >= 0; i--) {
+          const d = drops[i];
+          if (d.life > 0.62) { drops.splice(i, 1); continue; }
+          const r = 3.9 * s, a = Math.atan2(d.vy, d.vx) - Math.PI / 2;
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (0.62 - d.life) * 4);
+          ctx.translate(d.x, d.y); ctx.rotate(a);
+          ctx.beginPath(); ctx.moveTo(0, -r * 2.1); ctx.quadraticCurveTo(r * 1.25, -r * 0.1, 0, r); ctx.quadraticCurveTo(-r * 1.25, -r * 0.1, 0, -r * 2.1);
+          ctx.fillStyle = "#8fd8ff"; ctx.fill();
+          ctx.lineWidth = Math.max(0.6, 0.7 * s); ctx.strokeStyle = "#2f7fb5"; ctx.stroke();
+          ctx.beginPath(); ctx.arc(-r * 0.3, r * 0.1, r * 0.3, 0, 6.3); ctx.fillStyle = "#ffffff"; ctx.fill();
+          ctx.restore();
+        }
+      }
+      // A move is a list of steps: go to these values in this many ms (hold: stay, run: let the timeline run on)
+      const step = (to, ms, sweat = 0) => ({ to, ms, sweat });
+      const MOVES = {
+        pullup: () => [step({ t: UP }, 460, 0.5), step({}, 200, 0.6), step({ t: HANG }, 520, 0.3)],
+        pullups: () => [...MOVES.pullup(), step({}, 160, 0.3), ...MOVES.pullup(), step({}, 160, 0.4), step({ t: UP }, 520, 0.8), step({}, 260, 0.9), step({ t: HANG }, 600, 0.4)],
+        muscleup: () => [step({ t: TOP }, 1150, 0.7), step({ run: 0.9 }, 900, 0.3), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
+        lsit: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.5 }, 500, 0.3), step({ l: 1 }, 520, 0.8), step({}, 1900, 1), step({ l: 0 }, 480, 0.5), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
+        straddle: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.5 }, 500, 0.3), step({ s: 1 }, 600, 0.8), step({}, 1700, 1), step({ s: 0 }, 520, 0.5), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
+        cross: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.6 }, 600, 0.3), step({ t: HELD, jump: true }, 0), step({ t: CROSS }, 900, 0.9), step({ run: 1.7 }, 1700, 1), step({ t: HELD }, 950, 0.9), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
+        drop: () => [step({ t: HANG }, 650, 0)]
+      };
+      const pickMove = () => { const r = Math.random(); return r < 0.34 ? "pullup" : r < 0.5 ? "pullups" : r < 0.7 ? "muscleup" : r < 0.82 ? "lsit" : r < 0.93 ? "straddle" : "cross"; };
+      let cur = null; // the step under way: { from, to, ms, at }
+      function begin(name, then) {
         if (!fit()) return;
-        if (STILL.matches) { sim.t = HANG; sim.R = null; sim.draw(ctx); return; }
-        const t0 = performance.now();
-        const step = (now) => {
-          const u = Math.min(1, (now - t0) / ms), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
-          sim.t = from + (to - from) * e; sim.R = null; sim.draw(ctx);
-          if (u < 1) raf = requestAnimationFrame(step); else if (then) then();
-        };
-        raf = requestAnimationFrame(step);
-      };
-      sim.t = HANG;
+        if (STILL.matches) { me.t = HANG; me.l = 0; me.s = 0; paint(performance.now()); return; }
+        plan = MOVES[name]();
+        if (then) plan.push({ then });
+        cur = null;
+        box.dataset.move = name;
+        loop();
+      }
+      // one frame: move along the step, draw, and decide what comes next
+      function frame(now) {
+        raf = 0;
+        if (!on()) { last = 0; return; } // off screen: he waits
+        // just hanging and breathing: half the frames are enough (kinder to the battery)
+        if (!cur && !plan.length && !drops.length && now - painted < 31) { loop(); return; }
+        painted = now;
+        const dt = Math.min(0.05, (now - (last || now)) / 1000);
+        last = now;
+        if (!cur && plan.length) {
+          const next = plan.shift();
+          if (next.then) { next.then(); }
+          else if (next.to.jump) { me.t = next.to.t; }
+          else cur = { ...next, at: now, from: { ...me } };
+        }
+        if (cur) {
+          const u = cur.ms ? Math.min(1, (now - cur.at) / cur.ms) : 1, e = ease(u);
+          if (cur.to.run !== undefined) me.t = cur.from.t + cur.to.run * u; // the timeline runs on (the rings settle, the cross trembles)
+          else if (cur.to.t !== undefined) me.t = cur.from.t + (cur.to.t - cur.from.t) * (cur.from.t < HANG ? u : e);
+          if (cur.to.l !== undefined) me.l = cur.from.l + (cur.to.l - cur.from.l) * e;
+          if (cur.to.s !== undefined) me.s = cur.from.s + (cur.to.s - cur.from.s) * e;
+          me.sweat = cur.sweat;
+          if (u >= 1) cur = null;
+        }
+        if (!cur && !plan.length) {
+          me.sweat = Math.max(0, me.sweat - dt * 1.5);
+          if (box.dataset.move) { delete box.dataset.move; nextMove = now + 16000 + Math.random() * 26000; if (Math.random() < 0.4) say(PUFFS, 400); }
+          if (now > nextMove && nextMove) begin(pickMove());
+          if (now > nextSay && nextSay) speak();
+        }
+        drops.forEach((d) => { d.life += dt; d.vy += 300 * sim.s * dt; d.x += d.vx * dt; d.y += d.vy * dt; });
+        paint(now);
+        loop();
+      }
+      const on = () => document.visibilityState === "visible" && box.isConnected && box.getClientRects().length > 0 && (!home || LevelUp.getView() === "foryou");
+      const loop = () => { if (!raf && !STILL.matches && on()) raf = requestAnimationFrame(frame); };
+
+      // ---- the speech bubble ----
+      let hideSay = 0;
+      function say(lines, delay = 0, help = false) {
+        if (!bubble) return;
+        clearTimeout(hideSay);
+        hideSay = setTimeout(() => {
+          bubble.textContent = T(lines[Math.floor(Math.random() * lines.length)]);
+          bubble.dataset.help = help ? "1" : "";
+          bubble.hidden = false;
+          requestAnimationFrame(() => bubble.classList.add("in"));
+          hideSay = setTimeout(() => { bubble.classList.remove("in"); hideSay = setTimeout(() => { bubble.hidden = true; }, 260); }, 5200);
+        }, delay);
+        nextSay = performance.now() + 38000 + Math.random() * 42000;
+      }
+      // now and then: an offer to help (for who has Levelupy), else a few words of motivation
+      function speak() {
+        const canHelp = Boolean(LevelUp.getAssistant().on);
+        const help = canHelp && (!saidHelp || Math.random() < 0.45);
+        if (help) saidHelp = true;
+        say(help ? HELP_LINES : QUOTES, 0, help);
+      }
+      const chat = () => LevelUp.gotoChat({ t: LevelUp.ASSISTANT_ID });
+      box.addEventListener("click", () => {
+        if (LevelUp.getAssistant().on) { chat(); return; }
+        if (!plan.length && !cur) begin(pickMove());
+      });
+      bubble?.addEventListener("click", () => {
+        if (bubble.dataset.help && LevelUp.getAssistant().on) chat();
+        else { bubble.classList.remove("in"); bubble.hidden = true; }
+      });
+
       mascot = {
-        fit,
-        rep: () => move(HANG, REP, 260, () => move(REP, HANG, 340)),
-        cheer: () => move(HANG, TOP, 900, () => setTimeout(() => move(TOP, HANG, 700), 650))
+        fit: () => { const ok = fit(); loop(); return ok; },
+        rep: () => { if (!plan.length && !cur) begin("pullup"); },
+        cheer: () => begin("muscleup", () => say(["Checked in! That deserves a muscle-up.", "Nice one. See you next week!"])),
+        wake: loop,
+        move: (name) => { if (MOVES[name]) begin(name); },   // for a look at one move (LevelUpForYou.move("lsit"))
+        say: (help) => say(help ? HELP_LINES : QUOTES, 0, Boolean(help))
       };
-      box.addEventListener("click", () => mascot.rep());
       window.addEventListener("resize", fit);
-      if (fit() && !STILL.matches) { sim.t = 0.02; move(0.02, HANG, 650, () => setTimeout(mascot.rep, 500)); }
+      document.addEventListener("visibilitychange", loop);
+      LevelUp.hasAssistant().then((a) => {
+        box.setAttribute("aria-label", T(a.on ? "Levelupy, the mascot: tap him to chat" : "The mascot on his rings: tap him for a rep"));
+        box.classList.toggle("can-chat", Boolean(a.on));
+      });
+      if (!fit()) { me.t = HANG; return; }
+      if (STILL.matches) { me.t = HANG; paint(performance.now()); return; }
+      // he drops in, does one pull-up, and after a moment says hello
+      const start = performance.now();
+      plan = [step({ t: HANG }, 650, 0), step({}, 500, 0), ...MOVES.pullup()];
+      box.dataset.move = "hello";
+      nextSay = start + 3600;
+      loop();
     } catch (err) {
       box.hidden = true;
+      if (bubble) bubble.hidden = true;
       parts.hello.classList.add("no-mascot");
     }
   }
@@ -220,34 +379,73 @@
     const next = c?.done ? LevelUp.startOfWeek(1) : null;
     return `
       <p class="fy-k">${T("Your streak")}</p>
-      <p class="fy-big"><span aria-hidden="true">🔥</span> ${weeks} <small>${weeks === 1 ? T("week") : T("weeks")}</small></p>
-      <div class="fy-week" aria-hidden="true">${dashes}</div>
+      <div class="fy-streak">
+      <div><p class="fy-big"><span aria-hidden="true">🔥</span> ${weeks} <small>${weeks === 1 ? T("week") : T("weeks")}</small></p>
+      <div class="fy-week" aria-hidden="true">${dashes}</div></div>
       <p class="fy-note">${note}</p>
+      </div>
       ${c ? `<div class="fy-acts">${c.done
         ? `<button type="button" class="btn btn-small fy-checked" disabled>${T("Checked in ✓")}</button>`
         : `<button type="button" class="btn btn-small btn-primary" data-fy-checkin>${T("Check in")} · +${c.xp} XP</button>`}</div>
         ${c.done ? `<p class="fy-note fy-again">${T("Next check-in from {0}", esc(next.toLocaleDateString("en-GB", { weekday: "long" })))}</p>` : ""}` : ""}`;
   }
 
-  // ---------- Your race: you between the players just above and below you on the high scores ----------
+  // ---------- Your race: you and the players just above and below you on the high scores ----------
+  // All time or this month (the two buttons). Each runner is a lane: the bar is their XP next to the others in the
+  // race, the green chip what they earned in the last 7 days. Under it: how far the next one is, in XP and in
+  // sessions, and who is coming up behind you.
+  let racePeriod = "all";
   function raceHtml(player, data) {
     if (!data) return `<p class="fy-k">${T("Your race")}</p><p class="fy-note">${T("Loading…")}</p>`;
-    const rows = data.race || [];
-    const list = `<ol class="fy-race">${rows.map((r) => `
-      <li class="${r.isMe ? "me" : ""}"><span>${r.place}</span><b>${r.isMe ? T("You") : esc(r.name)}</b><em>${num(r.xp)}</em></li>`).join("")}</ol>`;
     const more = `<a class="text-link fy-more" href="${link("scores")}">${T("High scores ▸")}</a>`;
+    const board = data.board ? data.board[racePeriod] || data.board.all : { rows: data.race || [], place: (data.race || []).find((r) => r.isMe)?.place ?? null, total: 0 };
+    const rows = board.rows || [];
+    const sessionXp = Number(data.board?.sessionXp) || LevelUp.SESSION_XP || 75;
+    const top = Math.max(...rows.map((r) => r.xp), 1), low = Math.min(...rows.map((r) => r.xp), top);
+    const width = (xp) => (top === low ? 100 : 38 + 62 * (xp - low) / (top - low));
+    const lanes = rows.length ? `<ol class="fy-lanes">${rows.map((r) => `
+      <li class="${r.isMe ? "me" : ""}" ${r.isMe || !r.userId ? "" : `data-profile="${esc(r.userId)}" tabindex="0" role="button"`}>
+        <span class="fy-place">${r.place}</span>
+        ${LevelUp.avatarHtml({ name: r.name, xp: r.totalXp ?? r.xp, avatarUrl: r.avatarUrl })}
+        <div class="fy-lane">
+          <p><b>${r.isMe ? T("You") : esc(r.name)}</b><em>${num(r.xp)} XP</em></p>
+          <div class="fy-track"><i style="--w:${width(r.xp).toFixed(1)}%"></i></div>
+          ${Number(r.week) > 0 ? `<small class="fy-up">▲ ${T("{0} XP this week", num(r.week))}</small>` : `<small>${T("No XP this week")}</small>`}
+        </div>
+      </li>`).join("")}</ol>` : "";
+    const tabs = data.board ? `<span class="fy-tabs" role="tablist">
+        <button type="button" role="tab" data-fy-race="all" aria-selected="${racePeriod === "all"}">${T("All time")}</button>
+        <button type="button" role="tab" data-fy-race="month" aria-selected="${racePeriod === "month"}">${T("This month")}</button></span>` : "";
+    const head = (title) => `<p class="fy-k">${title}${tabs}</p>`;
     if (!data.ranked) {
-      return `<p class="fy-k">${T("High scores")}</p>${rows.length ? list : ""}
+      return `${head(T("High scores"))}${lanes}
         <p class="fy-note">${LevelUp.isTrainer() ? T("Coaches aren't ranked: this is the top 3 right now.")
           : `${T("You're hidden from the high scores.")} <a class="text-link" ${tabLink("me")}>${T("Change this in your settings")}</a>`}</p>${more}`;
     }
     const i = rows.findIndex((r) => r.isMe);
-    const me = rows[i], above = rows[i - 1], below = rows[i + 1];
+    if (i < 0) { // this month, and no XP yet this month
+      return `${head(T("Your race"))}
+        <p class="fy-rank-line"><b>–</b><span>${T("Not on this month's board yet")}</span></p>${lanes}
+        <p class="fy-note">${T("One session or a check-in and you're in this month's race.")}</p>${more}`;
+    }
+    const meRow = rows[i], above = rows[i - 1], below = rows[i + 1];
+    const sessions = (gap) => { const n = Math.max(1, Math.ceil(gap / sessionXp)); return n === 1 ? T("1 session") : T("{0} sessions", n); };
     let note = T("You're the first on the board. Keep going!");
-    if (above) note = above.xp > me.xp ? T("{0} to go and you pass {1}.", `<b>${num(above.xp - me.xp)} XP</b>`, `<span>${esc(above.name)}</span>`)
+    if (above) note = above.xp > meRow.xp
+      ? T("{0} to go and you pass {1}: that's {2}.", `<b>${num(above.xp - meRow.xp + 1)} XP</b>`, `<span>${esc(above.name)}</span>`, `<b>${sessions(above.xp - meRow.xp + 1)}</b>`)
       : T("You're level with {0}: your next XP puts you ahead.", `<span>${esc(above.name)}</span>`);
-    else if (below) note = T("You're in the lead, {0} ahead of {1}.", `<b>${num(me.xp - below.xp)} XP</b>`, `<span>${esc(below.name)}</span>`);
-    return `<p class="fy-k">${T("Your race")}</p>${list}<p class="fy-note">${note}</p>${more}`;
+    else if (below) note = T("You're in the lead, {0} ahead of {1}.", `<b>${num(meRow.xp - below.xp)} XP</b>`, `<span>${esc(below.name)}</span>`);
+    let chase = "";
+    if (below && above) {
+      const gap = meRow.xp - below.xp;
+      chase = Number(below.week) > Number(meRow.week) && gap <= Number(below.week) * 2
+        ? T("Watch out: {0} earned {1} this week and is {2} behind you.", `<span>${esc(below.name)}</span>`, `<b>${num(below.week)} XP</b>`, `<b>${num(gap)} XP</b>`)
+        : T("{0} is {1} behind you.", `<span>${esc(below.name)}</span>`, `<b>${num(gap)} XP</b>`);
+    }
+    return `${head(T("Your race"))}
+      <p class="fy-rank-line"><b>#${meRow.place}</b><span>${T("of {0} players", board.total)}${racePeriod === "month" ? ` · ${T("this month")}` : ""}</span></p>
+      ${lanes}
+      <p class="fy-note">${note}</p>${chase ? `<p class="fy-note fy-chase">${chase}</p>` : ""}${more}`;
   }
 
   // ---------- Almost there: the rewards and achievements you are closest to ----------
@@ -392,12 +590,7 @@
       parts[name] = el;
       return el;
     };
-    host.appendChild(card("next"));
-    const duo = document.createElement("div");
-    duo.className = "fy-duo";
-    duo.append(card("streak"), card("race"));
-    host.appendChild(duo);
-    host.append(card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
+    host.append(card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
     built = true;
     startMascot();
   }
@@ -484,6 +677,8 @@
   function onClick(event) {
     const check = event.target.closest("[data-fy-checkin]");
     if (check) { checkIn(check); return; }
+    const period = event.target.closest("[data-fy-race]");
+    if (period) { racePeriod = period.dataset.fyRace; draw(); return; }
     if (event.target.closest("[data-fy-post]")) { LevelUpPosts.compose(); return; }
     if (event.target.closest("[data-post]")) { LevelUpPosts.handleClick(event, postStore); return; }
     const cls = event.target.closest("[data-fy-class]");
@@ -502,13 +697,16 @@
     host = el;
     host.classList.add("fy");
     host.addEventListener("click", onClick);
+    host.addEventListener("keydown", (event) => { // the mascot and a runner in the race, with the keyboard
+      if ((event.key === "Enter" || event.key === " ") && event.target.matches?.(".fy-mascot, .fy-lanes li[data-profile]")) { event.preventDefault(); event.target.click(); }
+    });
     host.addEventListener("submit", (event) => LevelUpPosts.handleSubmit(event, postStore));
     draw();
   }
 
   document.addEventListener("levelup:change", () => draw());
-  document.addEventListener("levelup:view", () => draw()); // the phone page comes into view
+  document.addEventListener("levelup:view", () => { draw(); mascot?.wake(); }); // the phone page comes into view
   PHONE.addEventListener?.("change", () => draw());
   if (home) mount(document.getElementById("fyHome"));
-  window.LevelUpForYou = { mount, draw };
+  window.LevelUpForYou = { mount, draw, move: (name) => mascot?.move(name), say: (help) => mascot?.say(help) };
 })();

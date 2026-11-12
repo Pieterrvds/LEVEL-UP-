@@ -1709,6 +1709,11 @@ const LevelUp = (() => {
       forYou = {
         race: (d?.race || []).map((r) => ({ ...r, place: Number(r.place), xp: Number(r.xp), isMe: Boolean(r.isMe) })),
         ranked: Boolean(d?.ranked),
+        // the race of all time and of this month: { place, total, rows: [{ place, name, xp, week, isMe … }] } (null: older database)
+        board: d?.board ? Object.fromEntries(["all", "month"].map((k) => [k, {
+          place: d.board[k]?.place == null ? null : Number(d.board[k].place), total: Number(d.board[k]?.total) || 0,
+          rows: (d.board[k]?.rows || []).map((r) => ({ ...r, place: Number(r.place), xp: Number(r.xp), week: Number(r.week) || 0, isMe: Boolean(r.isMe) }))
+        }]).concat([["sessionXp", Number(d.board.sessionXp) || 0]])) : null,
         // the latest posts of the club: { id, urls, caption, name, userId, likes, liked, comments: [...] }
         photos: (d?.photos || []).map((ph) => ({ ...ph, urls: ph.urls || (ph.url ? [ph.url] : []), comments: ph.comments || [],
           ownerTrainerId: ph.ownerTrainerId || ph.trainerId || null, likes: Number(ph.likes) || 0, liked: Boolean(ph.liked), commentCount: Number(ph.commentCount) || 0 })),
@@ -2174,6 +2179,104 @@ const LevelUp = (() => {
   const chatSeenKey = () => `levelup.chatSeen.${player?.id || ""}`;
 
   const chatList = () => call("chat_list");
+
+  // ---------- Levelupy: the assistant in the chat (the mascot) ----------
+  // The Edge Function "assistant" answers (supabase/functions/assistant, a Claude model); supabase/schema.sql decides
+  // who has it (assistant_mode), what it knows and how many questions a day. It only reads: its answers can carry
+  // buttons that open the right screen. chat.js shows the conversation, foryou.js the mascot that leads to it.
+  const ASSISTANT_URL = `${SUPABASE_URL}/functions/v1/assistant`;
+  const ASSISTANT_ID = "levelupy"; // the conversation: chat.html?t=levelupy, #chat/t/levelupy
+  let assistant = { on: false };
+  let assistantFor = null, assistantWait = null;
+  // Is Levelupy there for this member (asked once per login), and with messages: the conversation so far
+  async function loadAssistant(withMessages = false) {
+    if (!player) { assistant = { on: false }; assistantFor = null; return assistant; }
+    const who = player.id;
+    try {
+      const s = await call("assistant_state", { p_messages: Boolean(withMessages) });
+      if (who !== player?.id) return assistant;
+      assistant = { ...s, messages: s.messages || (assistant.on && assistantFor === who ? assistant.messages : null) || null };
+    } catch { assistant = { on: false }; } // an older database: no Levelupy
+    assistantFor = who;
+    return assistant;
+  }
+  function hasAssistant() {
+    if (!player) return Promise.resolve({ on: false });
+    if (assistantFor === player.id) return Promise.resolve(assistant);
+    assistantWait = assistantWait || loadAssistant().finally(() => { assistantWait = null; });
+    return assistantWait;
+  }
+  async function askAssistant(message) {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Log in first.");
+    let res;
+    try {
+      res = await fetch(ASSISTANT_URL, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ message, lang: window.LEVELUP_LANG === "en" ? "en" : "nl" })
+      });
+    } catch { throw new Error("Can't reach the server. Check your connection and try again."); }
+    const out = await res.json().catch(() => ({}));
+    if (res.status === 404) throw new Error("Levelupy is not switched on yet.");
+    if (!res.ok || !out.reply) throw new Error(out.error || "Levelupy can't answer right now. Try again in a moment.");
+    assistant.left = Number(out.left);
+    if (assistant.messages) assistant.messages.push({ role: "user", body: message, at: new Date().toISOString() }, out.reply);
+    return out.reply;
+  }
+  const adminAssistant = () => call("admin_assistant");
+  const adminAssistantSave = async (p) => { await call("admin_assistant_save", { p }); assistantFor = null; };
+  const adminAssistantGapDone = (id) => call("admin_assistant_gap_done", { p_id: id });
+  async function clearAssistant() {
+    await call("assistant_clear");
+    assistant.messages = [];
+  }
+  // Where a button under an answer of Levelupy goes
+  function assistantGo(action, arg = "") {
+    const coach = trainerById(arg) ? arg : "";
+    if (action === "chat_coach") { if (coach) openChatWith(coach); else gotoChat(); return; }
+    const to = {
+      book: "index.html#schedule", classes: "index.html#schedule", my_sessions: "profile.html#overview",
+      check_in: PHONE.matches ? "index.html#foryou" : "profile.html#foryou", scores: "index.html#scores", shop: "shop.html",
+      my_profile: "profile.html", contact: "index.html#contact"
+    }[action];
+    if (!to) return;
+    const [file, hash] = to.split("#");
+    const withCoach = action === "book" && coach;
+    if (onIndex && file === "index.html" && hash) { // already on the home page: go to that part of it
+      const el = document.getElementById(hash);
+      if (el) {
+        if (withCoach) window.LevelUpSchedule?.showTrainer(coach);
+        setView(viewOf(el), { target: el });
+        return;
+      }
+    }
+    location.href = withCoach ? `index.html?trainer=${encodeURIComponent(coach)}#schedule` : to;
+  }
+  // The mascot's face as a picture (his head on the rings, in the colour of your rank), for the chat
+  const mascotFaces = {};
+  async function mascotFace(px = 96) {
+    const accent = themeAccent() || "#C6FF3D";
+    const key = `${accent}|${px}`;
+    if (mascotFaces[key]) return mascotFaces[key];
+    try {
+      const lib = await loadCelebrate();
+      const sim = lib._createSim({ type: "rank", accent, glow: "#ffd23f", short: false, hold: 999 }, px, px);
+      sim.gripped = true; sim.burst = true; // no chalk, no confetti: just him
+      sim.t = 3.0;                          // up in support on the rings, with a grin
+      sim.step(0);
+      const R = sim.R, s = px / 64;
+      sim.W = px; sim.H = px; sim.s = s;
+      sim.ox = px / 2 - R.cx * s;
+      sim.top = px / 2 - (R.rigY + R.sy - 33) * s;
+      const cv = document.createElement("canvas");
+      cv.width = px; cv.height = px;
+      sim.draw(cv.getContext("2d"));
+      mascotFaces[key] = cv.toDataURL("image/png");
+    } catch { mascotFaces[key] = ""; }
+    return mascotFaces[key];
+  }
   const chatThread = (id, after = 0) => call("chat_thread", { p_thread: id, p_after: after });
   const chatSend = (id, body) => call("chat_send", { p_thread: id, p_body: body });
   const chatMute = (id, on) => call("chat_mute", { p_thread: id, p_on: Boolean(on) });
@@ -3815,6 +3918,34 @@ const LevelUp = (() => {
       menuProfile.classList.toggle("active", pageName === "profile.html");
     });
     initViews();
+    initAssistantButton();
+  }
+
+  // Levelupy within reach on every page: a small round button with his face (for who has him). Not on the chat
+  // itself, the start screen (there he hangs on his rings) or the admin dashboard.
+  function initAssistantButton() {
+    if (["chat.html", "admin.html", "privacy.html"].includes(pageName)) return;
+    let button = null, shownFor = null;
+    const sync = async () => {
+      const who = player?.id || null;
+      if (who === shownFor) return;
+      shownFor = who;
+      button?.remove(); button = null;
+      if (!who) return;
+      const a = await hasAssistant();
+      if (!a.on || who !== player?.id) return;
+      const face = await mascotFace(96);
+      if (who !== player?.id || button) return;
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "lvy-fab";
+      button.setAttribute("aria-label", tr("Ask Levelupy"));
+      button.title = tr("Ask Levelupy");
+      button.innerHTML = `${face ? `<img src="${face}" alt="">` : "<span aria-hidden=\"true\">🤸</span>"}<i aria-hidden="true">?</i>`;
+      button.addEventListener("click", () => gotoChat({ t: ASSISTANT_ID }));
+      document.body.appendChild(button);
+    };
+    document.addEventListener("levelup:change", () => { (window.requestIdleCallback || ((fn) => setTimeout(fn, 800)))(sync); });
   }
 
   initChrome();
@@ -3842,7 +3973,8 @@ const LevelUp = (() => {
     applyAsTrainer, reviewApplication, loadTrainerList,
     chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
-    openAuth, toast, setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
+    openAuth, toast, loadAssistant, hasAssistant, askAssistant, clearAssistant, assistantGo, mascotFace, adminAssistant, adminAssistantSave, adminAssistantGapDone, ASSISTANT_ID, getAssistant: () => assistant,
+    setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
