@@ -2991,8 +2991,8 @@ const LevelUp = (() => {
   let celebratedOnce = false;
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   function loadCelebrate() {
-    if (window.LevelUpCelebrate) return Promise.resolve(window.LevelUpCelebrate);
-    celebrateLib ||= new Promise((resolve, reject) => {
+    if (celebrateLib) return celebrateLib; // one answer for everyone: the engine and, right after it, his wardrobe
+    celebrateLib = new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = CELEBRATE_FILE;
       script.onload = () => {

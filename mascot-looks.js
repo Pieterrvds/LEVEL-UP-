@@ -433,7 +433,7 @@
       });
     } }
   };
-  Object.keys(LOOKS).forEach((id) => { LOOKS[id].id = id; });
+  Object.keys(LOOKS).forEach((id) => { LOOKS[id] = { up: 0, down: 0, side: 0, ...LOOKS[id], id }; });
 
   // ---------- the calendar ----------
   // Western Easter Sunday (anonymous Gregorian algorithm)
