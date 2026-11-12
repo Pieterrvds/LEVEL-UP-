@@ -309,3 +309,9 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .photo-add:hover { border-color: var(--accent); color: var(--text); }
 .photo-add.busy { opacity: 0.5; pointer-events: none; }
 .liked-by li[data-profile] { cursor: pointer; }
+
+/* Birthday (Settings → Account): two small pickers on one line */
+.birthday-setting { display: grid; gap: 6px; margin-top: 14px; font-size: 0.9rem; }
+.birthday-setting > span:first-child { font-weight: 700; }
+.birthday-picks { display: flex; gap: 8px; }
+.birthday-picks select { width: auto; min-width: 84px; min-height: 42px; padding: 8px 10px; }

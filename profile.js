@@ -878,6 +878,20 @@ function renderSettings() {
       <div>
         <h2>Account</h2>
         <p class="muted">Logged in as ${esc(LevelUp.getPlayer().email)}</p>
+        <div class="birthday-setting">
+          <span>My birthday</span>
+          <span class="birthday-picks" data-no-swipe>
+            <select id="birthdayDay" aria-label="Day">
+              <option value="">Day</option>
+              ${Array.from({ length: 31 }, (_, i) => `<option value="${String(i + 1).padStart(2, "0")}" ${(LevelUp.getPlayer().birthday || "").slice(3) === String(i + 1).padStart(2, "0") ? "selected" : ""}>${i + 1}</option>`).join("")}
+            </select>
+            <select id="birthdayMonth" aria-label="Month">
+              <option value="">Month</option>
+              ${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => `<option value="${String(i + 1).padStart(2, "0")}" ${(LevelUp.getPlayer().birthday || "").slice(0, 2) === String(i + 1).padStart(2, "0") ? "selected" : ""}>${m}</option>`).join("")}
+            </select>
+          </span>
+          <small class="muted">Levelupy puts a cake on his head that day 🎂 No year needed. Other members don't see it.</small>
+        </div>
         <div class="photo-setting">
           <span>Profile photo</span>
           <small class="muted">${LevelUp.getPlayer().trainerId
@@ -1280,6 +1294,22 @@ function bindEvents(player) {
       }
     });
   });
+
+  // birthday: saved as soon as both the day and the month are picked; both empty removes it
+  const bDay = document.getElementById("birthdayDay"), bMonth = document.getElementById("birthdayMonth");
+  const saveBirthday = async () => {
+    if (Boolean(bDay.value) !== Boolean(bMonth.value)) return; // half filled in: wait for the other one
+    const md = bDay.value ? `${bMonth.value}-${bDay.value}` : "";
+    if (md === (LevelUp.getPlayer().birthday || "")) return;
+    try {
+      await LevelUp.setBirthday(md);
+      LevelUp.toast(md ? { title: "Birthday saved", text: "Levelupy won't forget it.", icon: "🎂", tone: "green" } : { title: "Birthday removed", text: "", icon: "✓", tone: "green" });
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  bDay?.addEventListener("change", saveBirthday);
+  bMonth?.addEventListener("change", saveBirthday);
 
   document.getElementById("leaderboardToggle")?.addEventListener("change", async (event) => {
     event.target.disabled = true;

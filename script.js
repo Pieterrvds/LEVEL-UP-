@@ -385,7 +385,7 @@ foldToggle("formToggle", "contactForm", "✉ Hide the form ▲", "✉ Send us a 
       if (!s.width || !z.width) return;
       const q = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = Math.round(s.width * q); cv.height = Math.round(s.height * q);
-      ctx = cv.getContext("2d");
+      ctx = LevelUp.dressMascot(cv.getContext("2d"));
       ctx.setTransform(q, 0, 0, q, 0, 0);
       sim.resize(s.width, s.height, 1);
       // the engine centres its scene on the canvas; here the gymnast gets his own zone. He needs about 250 units

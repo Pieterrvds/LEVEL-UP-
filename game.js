@@ -2101,7 +2101,7 @@ const LevelUp = (() => {
       cv.className = "boot-mascot";
       cv.width = W * q; cv.height = H * q;
       cv.setAttribute("aria-hidden", "true");
-      const ctx = cv.getContext("2d");
+      const ctx = dressMascot(cv.getContext("2d"));
       ctx.setTransform(q, 0, 0, q, 0, 0);
       const sim = lib._createSim({ type: "rank", accent: themeAccent() || "#C6FF3D", glow: "transparent", short: false, hold: 999 }, W, H);
       sim.gripped = true; sim.burst = true; // his pose only: no chalk, no confetti
@@ -2296,21 +2296,27 @@ const LevelUp = (() => {
   const mascotFaces = {};
   async function mascotFace(px = 96) {
     const accent = themeAccent() || "#C6FF3D";
-    const key = `${accent}|${px}`;
+    let look = mascotLook();
+    let key = `${accent}|${px}|${look?.id || ""}`;
     if (mascotFaces[key]) return mascotFaces[key];
     try {
       const lib = await loadCelebrate();
+      look = mascotLook(); // his wardrobe came in with the engine
+      key = `${accent}|${px}|${look?.id || ""}`;
+      if (mascotFaces[key]) return mascotFaces[key];
       const sim = lib._createSim({ type: "rank", accent, glow: "#ffd23f", short: false, hold: 999 }, px, px);
       sim.gripped = true; sim.burst = true; // no chalk, no confetti: just him
       sim.t = 3.0;                          // up in support on the rings, with a grin
       sim.step(0);
-      const R = sim.R, s = px / 64;
+      // the frame: his face, plus what he wears on it (a tall hat, a beard) so nothing is cut off
+      const up = Math.max(30, (look?.up || 0) + 3), down = Math.max(34, (look?.down || 0) + 3), wide = Math.max(32, (look?.side || 0) + 3);
+      const R = sim.R, s = px / Math.max(up + down, wide * 2);
       sim.W = px; sim.H = px; sim.s = s;
       sim.ox = px / 2 - R.cx * s;
-      sim.top = px / 2 - (R.rigY + R.sy - 33) * s;
+      sim.top = px / 2 - (R.rigY + R.sy - 35.5 + (down - up) / 2) * s;
       const cv = document.createElement("canvas");
       cv.width = px; cv.height = px;
-      sim.draw(cv.getContext("2d"));
+      sim.draw(dressMascot(cv.getContext("2d")));
       mascotFaces[key] = cv.toDataURL("image/png");
     } catch { mascotFaces[key] = ""; }
     return mascotFaces[key];
@@ -2953,6 +2959,29 @@ const LevelUp = (() => {
   // (table "celebrations"); each one is claimed just before it plays, so it shows exactly once, on any device.
   // They play one after another, and never on top of a form, a dialog or a payment: then they wait.
   const CELEBRATE_FILE = "levelup-celebrate.js?v=1";
+  const LOOKS_FILE = "mascot-looks.js?v=1";
+  // ---------- What the mascot wears today (mascot-looks.js) ----------
+  // A hat, glasses or a moustache by season and feast day; a cake on the member's birthday and a laurel wreath on
+  // the day they joined. "?look=santa" (or "none") in the address shows one look, to try them out.
+  let lookNow = { at: 0, key: "", look: null };
+  function mascotLook() {
+    const L = window.LevelUpLooks;
+    if (!L) return null;
+    const key = `${player?.id || ""}|${player?.birthday || ""}`, now = Date.now();
+    if (now - lookNow.at < 60000 && lookNow.key === key) return lookNow.look;
+    let force = "";
+    try { force = new URLSearchParams(location.search).get("look") || ""; } catch {}
+    const look = force === "none" ? null : L.LOOKS[force] || L.pick(new Date(), { birthday: player?.birthday, joined: player?.createdAt });
+    lookNow = { at: now, key, look };
+    return look;
+  }
+  const dressMascot = (ctx) => (window.LevelUpLooks && ctx ? window.LevelUpLooks.dress(ctx, mascotLook, () => ({ accent: themeAccent() || "#5ee6a8" })) : ctx);
+  async function setBirthday(md) {
+    await call("set_birthday", { p_md: md || null });
+    await refreshPlayer();
+    lookNow.at = 0;
+    emit();
+  }
   const onAdminPage = /admin\.html$/.test(location.pathname);
   const celebrated = new Set();      // ids this page already handled
   const celebrateHolds = new Set();  // reasons to wait, e.g. "paypal" while the payment window is open
@@ -2971,7 +3000,21 @@ const LevelUp = (() => {
         // everywhere the calm, full version: a bit slower and never the short cut (set once, right after loading)
         window.LevelUpCelebrate.defaults.speed = 0.8;
         window.LevelUpCelebrate.defaults.short = false;
-        resolve(window.LevelUpCelebrate);
+        const lib = window.LevelUpCelebrate;
+        // the celebrations make their own canvas: whatever they create while they start gets dressed
+        ["play", "purchase", "like", "rankUp"].forEach((fn) => {
+          const run = lib[fn];
+          lib[fn] = (opts) => {
+            const proto = HTMLCanvasElement.prototype, get = proto.getContext;
+            proto.getContext = function (type, ...rest) { const ctx = get.call(this, type, ...rest); return type === "2d" && ctx ? dressMascot(ctx) : ctx; };
+            try { return run(opts); } finally { proto.getContext = get; }
+          };
+        });
+        // his wardrobe (mascot-looks.js); without it he is simply bareheaded
+        const looks = document.createElement("script");
+        looks.src = LOOKS_FILE;
+        looks.onload = looks.onerror = () => resolve(lib);
+        document.head.appendChild(looks);
       };
       script.onerror = () => { celebrateLib = null; reject(new Error("Celebration didn't load.")); };
       document.head.appendChild(script);
@@ -3991,7 +4034,7 @@ const LevelUp = (() => {
     TRAINER_SESSION_XP, TRAINER_CLIENT_XP, CHECKIN_XP, ACTIVITY_LEVELS, GOALS, computeStats, bmiCategory, nextCheckin,
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
-    getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, holdCelebrations, openProfile,
+    getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,

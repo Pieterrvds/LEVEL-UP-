@@ -59,6 +59,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `room.js`: the admin's Gym room tab: how busy the room is, rentals, the room's settings
 - `levelupy-admin.js`: the admin's Levelupy tab: who has the assistant, the model, the limits, what it knows, the use
 - `supabase/functions/assistant/index.ts`: the Edge Function behind Levelupy (see "Levelupy")
+- `mascot-looks.js`: what the mascot wears on his head through the year (see "The mascot's wardrobe")
 - `posts.js`: a post (photos with a text, hearts, comments) and the window to make one; used by the member page and "For you"
 - `foryou.js`: "For you", a member's own start screen (see "For you: the start screen and the weekly check-in")
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
@@ -709,6 +710,33 @@ end of `style.css`).
   the number of trainers you trained with; everything else comes from `my_data` (`checkin: { done, weeks, xp }`).
 - **A database without this yet** (schema not run): the screen still shows, without the check-in button, the race and
   the posts.
+
+## The mascot's wardrobe
+Levelupy wears something on his head every day of the year, by itself: 29 looks in `mascot-looks.js`.
+- **Feast days:** party hat (31 Dec–2 Jan), king's crown (5–6 Jan), heart glasses (12–14 Feb), jester hat (Aalst
+  Carnaval, Thursday to Shrove Tuesday), leprechaun hat (17 Mar), funny glasses (1 Apr), bunny ears (Good Friday to
+  Easter Monday), cycling cap (the week of the Tour of Flanders), hard hat (1 May), Flemish bucket hat (11 Jul),
+  Belgian top hat (21 Jul), graduation cap (1–7 Sep), alpine hat (19 Sep–4 Oct), witch hat (18–24 Oct), pumpkin head
+  (25–31 Oct), bishop's mitre with a beard (10–11 Nov for Sint-Maarten, 5–6 Dec for Sinterklaas), Santa hat (1–26 Dec),
+  reindeer antlers and a red nose (27–30 Dec).
+- **Seasons, when nothing special is on:** bobble hat (Jan), earmuffs and a scarf (Feb), rain hat (1–19 Mar and
+  5–17 Oct), flower crown (20 Mar–Apr), cap (May–20 Jun), sunglasses and a sunburn (21 Jun–Jul), straw hat (Aug),
+  headphones (8–18 Sep), Movember moustache (Nov).
+- **Personal:** a birthday cake on the member's birthday (they fill in day and month under Settings → Account; stored
+  as `profiles.birthday`, `MM-DD`, no year; RPC `set_birthday`) and a laurel wreath on the day they joined, every year.
+  A birthday goes before everything, then the join day, then feast days, then seasons (`pick` in `mascot-looks.js`).
+- **Where:** everywhere he is drawn: the loading screen, the start screen ("For you"), the demo on the home page,
+  his face in the chat and on the round button, and the celebrations. On "For you" his first speech bubble is a line
+  about what he wears (`say` per look, Dutch in `i18n-nl.js`).
+- **How it works:** `levelup-celebrate.js` draws the mascot and is not changed. `LevelUpLooks.dress(ctx, …)` listens
+  to a canvas context and draws the look right after the engine has drawn his head, in the head's own coordinates
+  (so it moves, tilts and bobs with him, and his arms stay in front of a wide brim). `game.js` loads the file with the
+  engine (`loadCelebrate`), and offers `LevelUp.mascotLook()` and `LevelUp.dressMascot(ctx)`.
+- **To see them all:** Admin → Levelupy → "His wardrobe" shows every look with the days he wears it this year. To try
+  one on the site, add `?look=santa` (or `?look=none`) to the address.
+- **A new look:** add an entry to `LOOKS` (a `draw(c, env)` in head coordinates, `up`/`down`/`side` for how far it
+  reaches, a `name` and one or two `say` lines), give it days in `FIXED` or `SEASONS`, and add the lines to
+  `i18n-nl.js`.
 
 ## Levelupy: the assistant in the chat
 The mascot as an AI assistant: a member asks, a Claude model answers with what the site knows.

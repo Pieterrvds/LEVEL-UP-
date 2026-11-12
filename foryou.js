@@ -112,7 +112,7 @@
         w = r.width; h = r.height;
         const q = Math.min(window.devicePixelRatio || 1, 2);
         cv.width = Math.round(w * q); cv.height = Math.round(h * q);
-        ctx = cv.getContext("2d");
+        ctx = LevelUp.dressMascot(cv.getContext("2d"));
         ctx.setTransform(q, 0, 0, q, 0, 0);
         sim.resize(w, h, 1);
         base = Math.min(w / 190, h / 440);
@@ -226,11 +226,11 @@
 
       // ---- the speech bubble ----
       let hideSay = 0;
-      function say(lines, delay = 0, help = false) {
+      function say(lines, delay = 0, help = false, arg = "") {
         if (!bubble) return;
         clearTimeout(hideSay);
         hideSay = setTimeout(() => {
-          bubble.textContent = T(lines[Math.floor(Math.random() * lines.length)]);
+          bubble.textContent = T(lines[Math.floor(Math.random() * lines.length)], arg);
           bubble.dataset.help = help ? "1" : "";
           bubble.hidden = false;
           requestAnimationFrame(() => bubble.classList.add("in"));
@@ -239,7 +239,19 @@
         nextSay = performance.now() + 38000 + Math.random() * 42000;
       }
       // now and then: an offer to help (for who has Levelupy), else a few words of motivation
+      // what he wears today comes with a line: first thing he says, and now and then after that
+      let saidLook = false;
+      function lookLine() {
+        const look = LevelUp.mascotLook();
+        if (!look?.say?.length || (saidLook && Math.random() > 0.2)) return false;
+        saidLook = true;
+        const first = String(LevelUp.getPlayer()?.name || "").trim().split(/\s+/)[0] || "";
+        const lines = look.id === "laurel" && look.years === 1 ? ["One year with LEVEL-UP today. Respect! 🏆", look.say[1]] : look.say;
+        say(lines, 0, false, look.id === "laurel" ? look.years : first);
+        return true;
+      }
       function speak() {
+        if (lookLine()) return;
         const canHelp = Boolean(LevelUp.getAssistant().on);
         const help = canHelp && (!saidHelp || Math.random() < 0.45);
         if (help) saidHelp = true;

@@ -38,9 +38,53 @@
     paint();
   }
 
+  // ---------- His wardrobe: every look with the days he wears it (mascot-looks.js) ----------
+  const DAY_MONTH = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  function when(look) {
+    if (look.id === "cake") return "A member's birthday (Settings → Account)";
+    if (look.id === "laurel") return "The day a member joined, every year";
+    const runs = [];
+    look.days.forEach((d) => { const last = runs[runs.length - 1]; if (last && d - last[1] < 1.5 * 864e5) last[1] = d; else runs.push([d, d]); });
+    return runs.map(([a, b]) => (a === b ? DAY_MONTH(a) : a.getMonth() === b.getMonth() ? `${a.getDate()}–${DAY_MONTH(b)}` : `${DAY_MONTH(a)} – ${DAY_MONTH(b)}`)).join(", ") || "Not this year";
+  }
+  function wardrobeHtml() {
+    const L = window.LevelUpLooks;
+    if (!L) return `<section class="panel admin-panel" id="lvWardrobe"><div class="panel-head"><h2>His wardrobe</h2></div><p class="muted">Loading…</p></section>`;
+    const year = new Date().getFullYear(), today = LevelUp.mascotLook();
+    return `<section class="panel admin-panel" id="lvWardrobe">
+      <div class="panel-head"><h2>His wardrobe <span class="count-chip">${Object.keys(L.LOOKS).length}</span></h2>${today ? `<span class="status-chip confirmed">Today: ${esc(today.name)}</span>` : ""}</div>
+      <p class="muted small">What Levelupy wears on his head, by itself, through ${year}: on the loading screen, the start screen, in the chat and in the celebrations.
+        Feast days go before seasons; a birthday goes before everything. To try one, add <code>?look=santa</code> (the name under the picture) to the address of the site.</p>
+      <ul class="lv-looks">${L.calendar(year).map((look) => `<li class="${today?.id === look.id ? "now" : ""}"><canvas data-lv-look="${look.id}" width="132" height="150" aria-hidden="true"></canvas>
+        <b>${esc(look.name)}</b><small>${esc(when(look))}</small><code>${look.id}</code></li>`).join("")}</ul>
+    </section>`;
+  }
+  async function drawWardrobe() {
+    if (!box?.querySelector("#lvWardrobe")) return;
+    let lib;
+    try { lib = await LevelUp.loadCelebrate(); } catch { return; }
+    const L = window.LevelUpLooks, old = box?.querySelector("#lvWardrobe");
+    if (!L || !old) return;
+    if (!old.querySelector("canvas")) { old.outerHTML = wardrobeHtml(); } // his wardrobe came in after the first paint
+    const accent = LevelUp.themeAccent() || "#5ee6a8", q = Math.min(window.devicePixelRatio || 1, 2), W = 132, H = 150;
+    box.querySelectorAll("canvas[data-lv-look]").forEach((cv) => {
+      const look = L.LOOKS[cv.dataset.lvLook];
+      cv.width = W * q; cv.height = H * q;
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(q, 0, 0, q, 0, 0);
+      const sim = lib._createSim({ type: "rank", accent, glow: "transparent", short: false, hold: 999 }, W, H);
+      sim.gripped = true; sim.burst = true; sim.t = 3.0; sim.step(0); // up in support, with a grin
+      const up = Math.max(30, look.up + 3), down = Math.max(34, look.down + 3), wide = Math.max(32, look.side + 3);
+      const R = sim.R, s = Math.min(H / (up + down), W / (wide * 2));
+      sim.W = W; sim.H = H; sim.s = s; sim.ox = W / 2 - R.cx * s; sim.top = H / 2 - (R.rigY + R.sy - 35.5 + (down - up) / 2) * s;
+      L.dress(ctx, () => look, () => ({ accent }));
+      sim.draw(ctx);
+    });
+  }
+
   function paint() {
     if (!box) return;
-    if (error) { box.innerHTML = `<section class="panel admin-panel"><div class="panel-head"><h2>Levelupy</h2></div><p class="form-error">${esc(error)}</p></section>`; return; }
+    if (error) { box.innerHTML = `<section class="panel admin-panel"><div class="panel-head"><h2>Levelupy</h2></div><p class="form-error">${esc(error)}</p></section>${wardrobeHtml()}`; drawWardrobe(); return; }
     if (!data) { box.innerHTML = `<section class="panel admin-panel"><p class="muted">Loading…</p></section>`; return; }
     const month = new Date().toISOString().slice(0, 7);
     const thisMonth = data.spend.filter((s) => String(s.month).slice(0, 7) === month);
@@ -107,7 +151,9 @@
           <li>In Supabase: <b>Edge Functions → Deploy a new function → Via Editor</b>, name it <code>assistant</code>, paste the file <code>supabase/functions/assistant/index.ts</code>, and switch <b>Verify JWT</b> off.</li>
           <li>Keep "Trial: you and the coaches" on, open the chat and ask Levelupy a few things. Happy? Choose "On for all members".</li>
         </ol>
-      </section>`;
+      </section>
+      ${wardrobeHtml()}`;
+    drawWardrobe();
   }
 
   document.addEventListener("submit", async (event) => {

@@ -373,3 +373,12 @@
 .lv-gaps li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 8px 12px; background: var(--inset); border: 1px solid var(--line); border-radius: 10px; }
 .lv-gaps small { color: var(--muted); }
 @media (max-width: 640px) { .lv-two { grid-template-columns: 1fr; } }
+
+/* Levelupy's wardrobe: every look with the days he wears it */
+.lv-looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.lv-looks li { display: grid; justify-items: center; gap: 3px; padding: 10px 8px 12px; text-align: center; background: var(--inset); border: 1px solid var(--line); border-radius: 12px; }
+.lv-looks li.now { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+.lv-looks canvas { width: 132px; height: 150px; border-radius: 10px; background: radial-gradient(120% 90% at 50% 0%, rgba(var(--level-rgb), 0.16), transparent 70%), var(--panel); }
+.lv-looks b { font-size: 0.9rem; }
+.lv-looks small { color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
+.lv-looks code { font-size: 0.7rem; color: var(--muted); background: none; }

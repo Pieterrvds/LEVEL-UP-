@@ -144,6 +144,11 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists show_on_leaderboard boolean not null default true;
 -- Profile photo: a public URL in the Storage bucket "avatars" (folder = the player's id)
 alter table public.profiles add column if not exists avatar_url text;
+-- Birthday, day and month only ('MM-DD', no year): the mascot wears a cake that day. Only the member sees it.
+alter table public.profiles add column if not exists birthday text;
+do $$ begin
+  alter table public.profiles add constraint profiles_birthday_check check (birthday is null or birthday ~ '^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+exception when duplicate_object then null; end $$;
 alter table public.profiles add column if not exists streak_reminded_week date;  -- training streak: last week a reminder went out
 
 -- Likes between players (the hearts on the high scores): one like per person per player per week
@@ -1012,6 +1017,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'pushNews', p.push_news,
     'bio', p.bio,
     'profileVisible', p.profile_visible,
+    'birthday', p.birthday,
     'celebrations', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'payload', c.payload, 'date', c.created_at) order by c.id)
                               from public.celebrations c where c.user_id = p.id and c.seen_at is null), '[]'::jsonb),
     'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'urls', to_jsonb(array[ph.url] || ph.more_urls),
@@ -2341,6 +2347,20 @@ create or replace function public.set_leaderboard_visibility(p_show boolean)
 returns void language sql security definer set search_path = public as $$
   update public.profiles set show_on_leaderboard = coalesce(p_show, true) where id = auth.uid();
 $$;
+
+-- The member's birthday as 'MM-DD' (no year), or null to remove it. A day that does not exist (31 April) is refused.
+create or replace function public.set_birthday(p_md text)
+returns void language plpgsql security definer set search_path = public as $$
+declare md text := nullif(trim(coalesce(p_md, '')), '');
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if md is not null then
+    if md !~ '^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' then raise exception 'Pick a day and a month.'; end if;
+    begin perform ('2024-' || md)::date; -- 2024 is a leap year: 29 February is a real birthday
+    exception when others then raise exception 'That day does not exist.'; end;
+  end if;
+  update public.profiles set birthday = md where id = auth.uid();
+end $$;
 
 -- ---------------------------------------------------------
 -- Workouts, body stats and orders
@@ -5232,6 +5252,8 @@ grant execute on function public.admin_inbox() to authenticated;
 grant execute on function public.trainer_list() to anon, authenticated;
 revoke execute on function public.set_leaderboard_visibility(boolean) from public, anon;
 grant execute on function public.set_leaderboard_visibility(boolean) to authenticated;
+revoke all on function public.set_birthday(text) from public, anon;
+grant execute on function public.set_birthday(text) to authenticated;
 grant execute on function public.leaderboard(text) to anon, authenticated;
 revoke execute on function public.give_like(uuid) from public, anon;
 revoke execute on function public._celebrate(uuid, text, jsonb) from public, anon, authenticated;
