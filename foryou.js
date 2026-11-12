@@ -213,7 +213,7 @@
         }
         if (!cur && !plan.length) {
           me.sweat = Math.max(0, me.sweat - dt * 1.5);
-          if (box.dataset.move) { delete box.dataset.move; nextMove = now + 16000 + Math.random() * 26000; if (Math.random() < 0.4) say(PUFFS, 400); }
+          if (box.dataset.move) { delete box.dataset.move; nextMove = now + 16000 + Math.random() * 26000; if (Math.random() < 0.4 && (saidLook || !LevelUp.mascotLook()?.say)) say(PUFFS, 400); } // first his line about what he wears
           if (now > nextMove && nextMove) begin(pickMove());
           if (now > nextSay && nextSay) speak();
         }
