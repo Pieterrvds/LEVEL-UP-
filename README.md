@@ -713,7 +713,7 @@ end of `style.css`).
 ## Levelupy: the assistant in the chat
 The mascot as an AI assistant: a member asks, a Claude model answers with what the site knows.
 - **Where a member finds him:** the first conversation in the chat ("Levelupy · AI"), the mascot on the start screen
-  (tap him, or the green speech bubble), and a small round button with his face on the other pages. The address is
+  (tap him, or the white speech bubble), and a small round button with his face on the other pages. The address is
   `chat.html?t=levelupy` on a computer and `#chat/t/levelupy` on a phone (`LevelUp.gotoChat({ t: "levelupy" })`).
 - **The conversation** (`chat.js`, "Levelupy"): a hello with five questions to tap, the answers with up to three
   buttons that open the right screen (`LevelUp.assistantGo`: book, with a coach filled in; the group classes; My
@@ -773,12 +773,24 @@ https://github.com/Pieterrvds/LEVEL-UP-/archive/refs/heads/style/pixel-arcade.zi
 "restore the pixel-arcade style from the branch style/pixel-arcade" (features added later are kept and only the look
 is put back). Don't delete that branch.
 
-## Colours (rank themes)
-The base look is "Carbon": real black with neutral grey cards and a neon green main colour (tokens at the top of
-`style.css`). When a player is logged in, the whole site takes the colours of their rank: Rookie green, Trainee
-blue, Athlete purple, Warrior orange, Champion red, Legend gold (see "Rank colours" at the bottom of `style.css`).
-`game.js` sets `<html data-rank="1…5">` and remembers it, so the next page opens straight in the right colour.
-Visitors, logged-out people and Rookies see green. Under Account, "Always use Carbon green" keeps the green look on that device. Rank badges and avatars keep their own rank colour.
+## Colours ("Carbon 2.0")
+The look is three tones of graphite (page `--bg`, card `--panel`, a box inside a card `--inset`) with **one fixed
+site colour: white** (`--accent`). White is for the main buttons, the active tab and whatever is picked; the text on
+it is dark. The second button (`.btn-ghost`) has a grey fill and a border you can see (`--btn2-bg`, `--btn2-line`).
+All tokens are at the top of `style.css`.
+
+Colour has a meaning, and only that meaning:
+- **Level colour** (`--level`): only for what is about a level: the rank badge, the XP bars, your own row in the
+  high scores and your lane in the race, the cover of a member page, the mascot. Rookie mint, Trainee blue, Athlete
+  purple, Warrior orange, Champion pink, Legend gold (`--tier-0` … `--tier-5`; the same six are in `TIER_COLORS` in
+  `game.js` and `HS_TIER_COLORS` in `schedule.js`). `game.js` sets `<html data-rank="1…5">` and remembers it, so the
+  next page opens straight in the right colour. Visitors and Rookies get mint.
+- **Gold** (`--gold`): XP and rewards, and "still to do" (requested, to pay).
+- **Pink** (`--heart`): hearts.
+- **Mint** (`--ok`): in order (confirmed, paid, done).
+- Trainers keep their own colour in the planning (set per trainer in the admin).
+
+The photos behind the pages do not depend on these colours (`--photo-o` and the `.hero-bg` layers).
 
 ## Profile photos
 Players upload a photo with the 📷 button on their photo at the top of their own page (the only place; Settings → Account

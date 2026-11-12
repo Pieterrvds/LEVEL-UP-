@@ -1058,7 +1058,7 @@ const HS_CONFETTI = (() => {
   return `<span class="hs-confetti" aria-hidden="true">${pieces}</span>`;
 })();
 const HS_ROW_COLORS = ["#4dd4ff", "#ff7eb6", "#7cff6b", "#ffd23f", "#b46cff"];
-const HS_TIER_COLORS = ["#7cff6b", "#4dd4ff", "#b46cff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
+const HS_TIER_COLORS = ["#5ee6a8", "#5ab0ff", "#b18cff", "#ff9a4d", "#ff6b9d", "#ffcf5a"]; // Rookie … Legend
 const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "TH" : ["TH", "ST", "ND", "RD"][n % 10] || "TH"}`;
 
 // Player of the Month: last month's winner of the "This month" board (crowned on the 1st)

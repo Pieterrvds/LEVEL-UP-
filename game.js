@@ -82,7 +82,6 @@ const LevelUp = (() => {
     { level: 16, title: "Legend" }
   ];
   // Phone status-bar colour per rank (applyRankTheme); up here so an early emit() can use it.
-  const RANK_BG = ["#070707", "#05070b", "#07060b", "#080606", "#080606", "#080706"];
 
   const ITEMS = [
     {
@@ -2481,22 +2480,15 @@ const LevelUp = (() => {
   animateLogos();
 
   // ---------- Events ----------
-  // The site's main colour follows the player's rank (Rookie green … Legend gold); see style.css "Rank colours".
+  // What is about a level (rank badge, XP bars, your own row, the mascot) takes the colour of the player's rank
+  // (Rookie mint … Legend gold); the site itself keeps its own colours. See style.css "Level colour".
   // Remembered so the next page load starts in the right colour (inline script in each page's <head>).
-  // "Always Carbon green" (Account): this device keeps the green look whatever the rank.
-  const carbonOnly = () => { try { return localStorage.getItem("levelup.carbon") === "1"; } catch { return false; } };
-  function setCarbonOnly(on) {
-    try { on ? localStorage.setItem("levelup.carbon", "1") : localStorage.removeItem("levelup.carbon"); } catch {}
-    applyRankTheme();
-  }
   function applyRankTheme() {
     if (!player && (!isReady || session)) return; // still loading: keep the colour the <head> script set
-    const tier = player && !carbonOnly() ? RANKS.indexOf(rankFor(levelFromXp(player.xp || 0))) : -1;
+    const tier = player ? RANKS.indexOf(rankFor(levelFromXp(player.xp || 0))) : -1;
     const root = document.documentElement;
     if (tier > 0) root.dataset.rank = String(tier);
     else delete root.dataset.rank;
-    const bar = document.querySelector('meta[name="theme-color"]'); // phone status bar
-    if (bar) bar.content = RANK_BG[Math.max(tier, 0)];
     try {
       if (tier > 0) localStorage.setItem("levelup.rank", String(tier));
       else localStorage.removeItem("levelup.rank");
@@ -2588,7 +2580,7 @@ const LevelUp = (() => {
   }
 
   // ---------- Player card image (Share my card) and the promotion screen ----------
-  const TIER_COLORS = ["#7cff6b", "#4fc3f7", "#c77dff", "#ff8a3d", "#ff5a5f", "#ffd23f"]; // Rookie … Legend
+  const TIER_COLORS = ["#5ee6a8", "#5ab0ff", "#b18cff", "#ff9a4d", "#ff6b9d", "#ffcf5a"]; // Rookie … Legend
   const SITE_LINK = "pieterrvds.github.io/LEVEL-UP-";
   const tr = (s) => (window.t ? window.t(s) : s); // Dutch/English (i18n.js) for text drawn on the card image
   const completedSessions = (p) => (p?.bookings || []).filter((b) => b.status === "completed").length;
@@ -3000,8 +2992,8 @@ const LevelUp = (() => {
       "textarea, select, [contenteditable=''], [contenteditable='true'], input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file])"));
   }
   const themeAccent = () => {
-    const c = getComputedStyle(document.documentElement).getPropertyValue("--green-bright").trim();
-    return /^#[0-9a-f]{6}$/i.test(c) ? c : undefined; // the site's own colour (it changes with the player's rank)
+    const c = getComputedStyle(document.documentElement).getPropertyValue("--level").trim() || "";
+    return /^#[0-9a-f]{6}$/i.test(c) ? c : undefined; // the colour of the player's level
   };
   function purchaseLine(p) {
     if (p.what === "pack") return `Your ${p.size}-session pack is ready.${p.gift ? ` · Your free ${p.gift} is waiting at the desk` : ""}`;
@@ -4000,7 +3992,7 @@ const LevelUp = (() => {
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, holdCelebrations, openProfile,
-    adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
