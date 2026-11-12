@@ -2090,6 +2090,45 @@ const LevelUp = (() => {
     const tip = document.getElementById("bootTip");
     if (tip) tip.textContent = `Tip: ${BOOT_TIPS[Math.floor(Math.random() * BOOT_TIPS.length)]}`;
   }
+  // The mascot on the loading screen: he drops in on his rings and does pull-ups while the data comes in. The logo
+  // stands there until he is ready (his file loads next to the data) and stays when there is no movement wanted.
+  function bootMascot() {
+    const logo = bootEl?.querySelector(".boot-inner img");
+    if (!logo || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    loadCelebrate().then((lib) => {
+      if (!bootEl.isConnected || bootEl.classList.contains("done")) return;
+      const W = 170, H = 210, q = Math.min(window.devicePixelRatio || 1, 2);
+      const cv = document.createElement("canvas");
+      cv.className = "boot-mascot";
+      cv.width = W * q; cv.height = H * q;
+      cv.setAttribute("aria-hidden", "true");
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(q, 0, 0, q, 0, 0);
+      const sim = lib._createSim({ type: "rank", accent: themeAccent() || "#C6FF3D", glow: "transparent", short: false, hold: 999 }, W, H);
+      sim.gripped = true; sim.burst = true; // his pose only: no chalk, no confetti
+      sim.resize(W, H, 1);
+      sim.s = Math.min(W / 190, H / 440); sim.ox = W / 2; sim.top = -22 * sim.s;
+      const ease = (u) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
+      const t0 = performance.now();
+      const frame = (now) => {
+        if (!bootEl.isConnected || bootEl.classList.contains("done")) return;
+        const ms = now - t0;
+        if (ms < 650) sim.t = 0.02 + 0.68 * (ms / 650);            // he drops in
+        else {                                                      // then pull-ups: up, a short hold, down, hang
+          const u = ((ms - 650) % 1500) / 1500;
+          sim.t = 0.7 + 0.65 * (u < 0.3 ? ease(u / 0.3) : u < 0.42 ? 1 : u < 0.78 ? 1 - ease((u - 0.42) / 0.36) : 0);
+        }
+        sim.step(0);
+        sim.draw(ctx);
+        requestAnimationFrame(frame);
+      };
+      sim.t = 0.02; sim.step(0); sim.draw(ctx);
+      logo.replaceWith(cv);
+      requestAnimationFrame(frame);
+    }).catch(() => { /* the logo stays */ });
+  }
+  if (bootEl) Promise.resolve().then(bootMascot); // after this file has run: loadCelebrate and the theme are further down
+
   function bootStep(text) {
     const el = document.getElementById("bootStep");
     if (el) el.textContent = text;
@@ -3596,7 +3635,11 @@ const LevelUp = (() => {
     const float = incoming || outgoing;
     // the parts of the other page (the home page: everything but For you and the chat)
     const other = incoming ? outgoing : null;
-    const rest = other ? [other] : [...main.children].filter((el) => el.tagName !== "DIALOG" && el.id !== "foryou" && el.id !== "chat");
+    const rest = other ? [other] : [...main.children].filter((el) => el.tagName !== "DIALOG" && el.id !== "foryou" && el.id !== "chat" && !el.dataset.photo);
+    // a page's own photo (For you, Book, Scores) slides along with it
+    const photo = (v) => main.querySelector(`.view-photo[data-photo="${v}"]`);
+    const oldPhoto = photo(from), newPhoto = photo(next);
+    [oldPhoto, newPhoto].forEach((el) => el?.classList.add("pg-on"));
     let top;
     const wanted = (inPage) => {
       if (target && target.id !== VIEW_HASH[next]) return Math.max(0, inPage(target) - hudHeight() - 12);
@@ -3617,9 +3660,9 @@ const LevelUp = (() => {
       top = wanted((el) => el.getBoundingClientRect().top + window.scrollY);
       window.scrollTo({ top, behavior: "instant" });
     }
-    const oldEls = incoming ? rest : [float];
-    const newEls = incoming ? [float] : rest;
-    const all = [float, ...rest];
+    const oldEls = [...(incoming ? rest : [float]), oldPhoto].filter(Boolean);
+    const newEls = [...(incoming ? [float] : rest), newPhoto].filter(Boolean);
+    const all = [...oldEls, ...newEls];
     let timer = 0, over = false;
     const s = {
       from, next, width, p: 0,
@@ -3645,6 +3688,7 @@ const LevelUp = (() => {
         all.forEach((el) => { el.style.transform = ""; el.style.transition = ""; });
         float.style.top = "";
         float.classList.remove("pg-solo", "pg-float");
+        [oldPhoto, newPhoto].forEach((el) => el?.classList.remove("pg-on"));
         slide = null;
         if (commit) {
           viewScroll[from] = y0;

@@ -229,6 +229,12 @@ screen): the hero text and every section after it slide over it as a second laye
 behind it (`img/shop-bg.jpg`, `img/shop-bg-small.jpg`: a free photo from Unsplash by Rick Barrett / Ambitious
 Studio, made black and white). The chat page has one too: a running track in a stadium (`img/chat-bg.jpg`,
 `img/chat-bg-small.jpg`: a free photo from Unsplash by Anisa Ryanda Putri, made black and white), with the chat as the see-through layer.
+The phone pages **For you**, **Book** and **Scores** and the **profile page** have one too: gymnastic rings like the
+mascot's (`img/foryou-bg.jpg`, `img/foryou-bg-small.jpg`: a free photo from Unsplash by Maysaa Ahmar; For you and the
+profile), a row of kettlebells (`img/book-bg-small.jpg`: by Heidi Erickson) and a runner on a track at night
+(`img/scores-bg-small.jpg`: by Christian Lue), all made black and white. On the phone pages they are layers of their
+own in `<main>` (`.view-photo[data-photo]`), so a page slides away together with its photo (`openSlide` in `game.js`);
+the cards on For you are dark glass so the photo shimmers through.
 How dark it all is sits in one place, at the top of that block in `style.css`: `--photo-o` (how strong the photo
 shows) and `--layer-o` / `--layer-alt-o` (how solid the sections over it are). Level 1 · How it works is an animated demo on a loop (`#howto`, `howItWorks` in `script.js`, `.hx-…` in `style.css`):
 six scenes (profile +50 XP, pick a coach, book an hour, train and level up, climb the high scores, the shop) in
@@ -253,6 +259,9 @@ jumps back by one set. Touching a row pauses it; it starts again 3 seconds after
 Every page has a game-style loading screen (`#boot`: logo, progress bar, current step and a random tip). It only
 appears when loading takes longer than 0.35 s, shows the real progress of the startup requests (which now run in
 parallel) and closes as soon as the data is in; CSS hides it after 12 s as a safety net. Tips: `BOOT_TIPS` in `game.js`.
+**The mascot is on it:** as soon as his file (`levelup-celebrate.js`) is in, the logo makes way for Levelupy, who
+drops in on his rings and does pull-ups in the colour of your rank until the data is there (`bootMascot` in `game.js`).
+On a slow connection the logo shows first; with "reduce motion", or when the file doesn't load, the logo stays.
 
 ### Animated logo
 `img/logo-anim.svg` is the logo stickman doing real pull-ups (SVG animation, 1.15 s per rep; each arm is one

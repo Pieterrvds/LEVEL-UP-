@@ -2,6 +2,11 @@
    account in tabs. Builds on style.css and profile.css. */
 
 .member-main { padding-top: var(--hud-h); min-height: 70vh; }
+/* Like the home page, the shop and the chat: a photo that hangs still behind the page (gymnastic rings; a free
+   photo from Unsplash, see README.md), with the page as a layer over it */
+.profile-photo { position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
+.profile-photo::before { content: ""; position: absolute; inset: 0; background: url(img/foryou-bg.jpg) center / cover no-repeat; opacity: calc(var(--photo-o) - 0.44); }
+@media (max-width: 700px) { .profile-photo::before { background-image: url(img/foryou-bg-small.jpg); opacity: calc(var(--photo-o) - 0.52); } }
 .mp-loading, .mp-gate { margin: 48px auto; max-width: 560px; }
 .mp-gate { padding: 28px; }
 

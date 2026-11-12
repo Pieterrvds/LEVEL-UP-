@@ -2319,6 +2319,8 @@ textarea { resize: vertical; min-height: 130px; }
 .boot-inner { width: min(420px, 100%); display: grid; justify-items: center; gap: 16px; text-align: center; }
 /* The logo does pull-ups (img/logo-anim.svg animates itself) */
 .boot-inner img { width: 150px; height: 150px; border-radius: 24px; border: 1px solid var(--frame); box-shadow: var(--shadow); }
+/* the mascot does pull-ups there once his file is in (game.js bootMascot) */
+.boot-mascot { display: block; width: 170px; height: 210px; border-radius: 24px; border: 1px solid var(--frame); box-shadow: var(--shadow); background: radial-gradient(120% 90% at 50% 0%, rgba(var(--green-bright-rgb), 0.2), transparent 70%), var(--panel); }
 .boot-title { margin: 6px 0 0; font-family: var(--display); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .boot-dots::after { content: "..."; display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; animation: boot-dots 1.2s steps(4, jump-none) infinite; }
 .boot-bar { width: 100%; height: 20px; padding: 4px; border-radius: 99px; background: #000; border: 1px solid var(--frame); box-shadow: var(--shadow); }
@@ -3324,25 +3326,36 @@ body.fy-open #mpHero { display: none; }
    section; while it slides it "floats" (.pg-float: fixed to the screen) next to the other page, and .pg-solo gives
    it the looks of a page of its own. Home to Book or Scores (a section of the home page itself) can't float: there
    the browser slides a picture of the page (html[data-slide] = "next" or "prev"). */
-.chat-view { display: none; }
+.chat-view, .view-photo { display: none; }
 @media (max-width: 760px) {
   .fy-page, .chat-view { display: block; }
+  /* For you, Book and Scores: a photo that hangs still behind the page, like the home page and the chat have
+     (gymnastic rings, kettlebells, a running track at night; free photos from Unsplash, see README.md) */
+  .view-photo { display: block; position: fixed; inset: 0 0 auto; height: 100vh; height: 100lvh; transform: translateZ(0); pointer-events: none; }
+  .view-photo::before { content: ""; position: absolute; inset: 0; background: center / cover no-repeat; }
+  .view-photo[data-photo="foryou"]::before { background-image: url(img/foryou-bg-small.jpg); opacity: calc(var(--photo-o) - 0.3); }
+  .view-photo[data-photo="book"]::before { background-image: url(img/book-bg-small.jpg); opacity: calc(var(--photo-o) - 0.12); }
+  .view-photo[data-photo="scores"]::before { background-image: url(img/scores-bg-small.jpg); opacity: calc(var(--photo-o) - 0.14); }
+  main > .view-photo.pg-on { display: block !important; position: fixed !important; top: 0 !important; content-visibility: visible !important; }
+  /* For you: the cards are dark glass, so the rings behind them shimmer through (as the sections of the home page do) */
+  .fy-page .fy-card { background-color: rgba(var(--bg-rgb), 0.78); background-color: color-mix(in srgb, var(--panel) 80%, transparent); }
+  .fy-page .fy-hello { background: radial-gradient(120% 120% at 100% 0%, rgba(var(--green-bright-rgb), 0.16), transparent 60%), rgba(var(--bg-rgb), 0.78); background: radial-gradient(120% 120% at 100% 0%, rgba(var(--green-bright-rgb), 0.16), transparent 60%), color-mix(in srgb, var(--panel) 80%, transparent); }
   html[data-view="foryou"] .footer, html[data-view="chat"] .footer, html[data-view="book"] .footer, html[data-view="scores"] .footer { display: none; }
   /* The pages that are not on screen stay built but are not drawn (content-visibility), out of the way above the
      page: so one can slide in the moment a finger asks for it. Browsers that don't know it: simply gone.
      [data-pg] = every part of <main> (index.html, and game.js marks one that was forgotten). It is named here on
      purpose: with "main > *" the browser would work out the looks of the whole page again at every page change. */
-  html[data-view="home"] main > #foryou, html[data-view="home"] main > #chat,
-  html[data-view="foryou"] main > [data-pg]:not(#foryou),
+  html[data-view="home"] main > #foryou, html[data-view="home"] main > #chat, html[data-view="home"] main > .view-photo,
+  html[data-view="foryou"] main > [data-pg]:not(#foryou):not([data-photo="foryou"]),
   html[data-view="chat"] main > [data-pg]:not(#chat),
-  html[data-view="book"] main > [data-pg]:not(#schedule),
-  html[data-view="scores"] main > [data-pg]:not(#scores) { position: absolute; top: -300vh; left: 0; width: 100%; content-visibility: hidden; }
+  html[data-view="book"] main > [data-pg]:not(#schedule):not([data-photo="book"]),
+  html[data-view="scores"] main > [data-pg]:not(#scores):not([data-photo="scores"]) { position: absolute; top: -300vh; left: 0; width: 100%; content-visibility: hidden; }
   @supports not (content-visibility: hidden) {
-    html[data-view="home"] main > #foryou, html[data-view="home"] main > #chat,
-    html[data-view="foryou"] main > [data-pg]:not(#foryou),
+    html[data-view="home"] main > #foryou, html[data-view="home"] main > #chat, html[data-view="home"] main > .view-photo,
+    html[data-view="foryou"] main > [data-pg]:not(#foryou):not([data-photo="foryou"]),
     html[data-view="chat"] main > [data-pg]:not(#chat),
-    html[data-view="book"] main > [data-pg]:not(#schedule),
-    html[data-view="scores"] main > [data-pg]:not(#scores) { display: none; }
+    html[data-view="book"] main > [data-pg]:not(#schedule):not([data-photo="book"]),
+    html[data-view="scores"] main > [data-pg]:not(#scores):not([data-photo="scores"]) { display: none; }
   }
   .fy-page { padding: calc(var(--hud-h) + 14px) 14px 26px; } /* always: a page that waits off screen keeps its measures */
   html[data-view="foryou"] .fy-page, .fy-page.pg-solo { min-height: calc(100vh - var(--tabbar-h)); min-height: calc(100svh - var(--tabbar-h)); }
