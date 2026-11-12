@@ -253,6 +253,7 @@ function renderThread() {
       }
     });
     box.querySelector("#chatCompose").addEventListener("submit", onSend);
+    keepAtEnd(box.querySelector("#chatMessages"));
     if (!isPhone()) input.focus();
   }
   renderMessages();
@@ -351,6 +352,20 @@ function scrollToEnd() {
   if (list.clientHeight) list.dataset.scrolled = "1"; // only counts once the list is on screen
 }
 
+// The list gets lower or taller (a smaller window, the phone keyboard, a message box that grows):
+// whoever was at the newest message stays there; whoever is reading back is left alone.
+function keepAtEnd(list) {
+  if (!list || !window.ResizeObserver) return;
+  let atEnd = true;
+  let height = 0;
+  list.addEventListener("scroll", () => { atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 80; }, { passive: true });
+  new ResizeObserver(() => {
+    const h = list.clientHeight;
+    if (h && height && h !== height && atEnd) list.scrollTop = list.scrollHeight;
+    height = h;
+  }).observe(list);
+}
+
 // ---------- Levelupy: the conversation with the mascot ----------
 const botAvatar = (size = "") => (bot.face
   ? `<span class="avatar has-photo bot-avatar ${size}" aria-hidden="true"><img src="${bot.face}" alt=""></span>`
@@ -410,6 +425,7 @@ function renderBot(box) {
       event.preventDefault();
       askBot(input.value);
     });
+    keepAtEnd(box.querySelector("#chatMessages"));
     if (!isPhone()) input.focus();
   }
   renderBotMessages();

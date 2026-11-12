@@ -47,20 +47,6 @@ revealTargets.forEach(el => {
   revealObserver.observe(el);
 });
 
-// ===== Replays dialog: photos and video, kept off the main page =====
-const replayDialog = document.getElementById("replayDialog");
-if (replayDialog) {
-  const replayVideo = replayDialog.querySelector("video");
-  document.querySelectorAll("[data-replays]").forEach((btn) => btn.addEventListener("click", () => {
-    replayDialog.showModal();
-    if (replayVideo && !prefersReducedMotion) replayVideo.play().catch(() => {});
-  }));
-  replayDialog.addEventListener("click", (event) => {
-    if (event.target === replayDialog || event.target.closest("[data-close]")) replayDialog.close();
-  });
-  replayDialog.addEventListener("close", () => replayVideo?.pause());
-}
-
 // ===== "Select class" buttons pre-fill the contact form =====
 const subjectSelect = document.getElementById("subject");
 document.addEventListener("click", (event) => {

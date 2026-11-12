@@ -1115,7 +1115,6 @@ a { color: inherit; }
   .class-filters .filter-tabs button { white-space: nowrap; padding: 10px 12px; }
   .training-dialog { width: 100%; max-width: 100%; max-height: 94vh; margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 }
-.gallery-cta { justify-content: center; margin-top: 28px; }
 
 /* Stats calculator */
 .stats-grid {
@@ -1591,50 +1590,6 @@ textarea { resize: vertical; min-height: 130px; }
 .team-photo-new span { font-family: var(--display); font-size: 3rem; color: var(--c, var(--accent)); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .team-card-recruit .team-photo { object-fit: contain; background: var(--panel-2); padding: 30px; filter: invert(1) opacity(0.35); border-bottom-color: var(--line); }
 
-/* Replays dialog */
-.replay-dialog { width: min(980px, calc(100% - 32px)); max-height: 90vh; overflow-y: auto; }
-.replay-dialog .gallery { margin-top: 20px; }
-.replay-open {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 0;
-  font-family: var(--display);
-  font-size: 0.6rem;
-  color: var(--gold);
-  background: none;
-  border: 0;
-  cursor: pointer;
-  line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800;
-}
-.replay-open span { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); font-size-adjust: none; font-style: normal; }
-.replay-open:hover { color: var(--accent); }
-.footer-replay { padding: 0; font: inherit; color: var(--gold); background: none; border: 0; cursor: pointer; }
-.footer-replay:hover { color: var(--accent); }
-
-/* Gallery */
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-.gallery-item {
-  margin: 0;
-  border: 1px solid var(--frame);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  aspect-ratio: 3 / 4;
-  background: var(--inset);
-}
-.gallery-item img, .gallery-item video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s;
-}
-.gallery-item:hover img { transform: scale(1.04); }
-
 /* Calendar */
 .calendar { padding: 8px; margin-bottom: 1.25rem; }
 .calendar iframe {
@@ -1794,7 +1749,6 @@ textarea { resize: vertical; min-height: 130px; }
   .hud-admin-label { display: none; }
   .hud-admin { height: 42px; padding: 0 10px; margin-left: 6px; font-size: 0.8rem; }
   .hud-login { padding: 10px; font-size: 0.5rem; }
-  .gallery { grid-template-columns: 1fr 1fr; }
 
   .field-row { grid-template-columns: 1fr; }
 
@@ -2842,7 +2796,7 @@ input, select, textarea { border-radius: 8px; }
 @media (max-width: 1140px) { .nav { border-radius: 16px 0 0 16px; } }
 /* …and the boxes that only appear in some situations (dialogs, the bag, forms, coach tools) */
 .session-row, .coach-item, .booking-trainer, .loot-items > li, .hours-dates > li, .health-list > li, .bag-line { border-radius: 10px; }
-.pack-open, .statement-box, .booking-login, .reward-use, .hs-empty, .loot-reward, .save-stats, .gallery-item, .pl-popover,
+.pack-open, .statement-box, .booking-login, .reward-use, .hs-empty, .loot-reward, .save-stats, .pl-popover,
 .chart-tip, .bag-login, .list-empty, .quest-empty, .quest-loading, .xp-sources > li, .inventory > li, .pack-option,
 .push-callout, .player-photo, .calendar iframe { border-radius: 12px; }
 .inventory > li, .pl-grid { overflow: hidden; }
