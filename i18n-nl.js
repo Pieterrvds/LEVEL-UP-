@@ -1699,6 +1699,13 @@
   "Your free {0} is waiting at the desk": "Je gratis {0} ligt klaar aan de balie",
   "This is you: your clients can start a chat with you.": "Dit ben jij: je klanten kunnen een chat met jou starten.",
   // Your own start screen ("For you", foryou.js) and the weekly check-in
+  "Your own start screen": "Je eigen startscherm",
+  "Create your free player and this page becomes yours.": "Maak je gratis speler aan en deze pagina wordt van jou.",
+  "Your next session or group class, one tap away.": "Je volgende sessie of groepsles, één tik verwijderd.",
+  "Check in every week: +25 XP and your streak grows.": "Check elke week in: +25 XP en je reeks groeit.",
+  "See who is just ahead of you on the high scores.": "Zie wie net voor je staat in het klassement.",
+  "Free sessions and achievements you are close to.": "Gratis sessies en prestaties waar je dichtbij zit.",
+  "Create your player": "Maak je speler aan",
   "Check in every week on your start screen: +25 XP": "Check elke week in op je startscherm: +25 XP",
   "Last updated: {0}": "Laatst bijgewerkt: {0}",
   "For you": "Voor jou",

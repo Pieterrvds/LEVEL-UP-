@@ -14,10 +14,19 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `archive/img/`: photos no longer used on the site
 
 ## Phones
-- **Logged in, the home page opens on "For you"**, your own start screen, in the place of the title screen (see
-  "For you: the start screen and the weekly check-in"). Visitors keep the normal home page.
-- A bar at the bottom (Home · Book · Scores · Chat · Menu) replaces the ☰ button; Scores jumps to the high scores, Chat opens
-  the conversations (red badge = unread), Menu opens the same menu with **My profile** at the top (and Contact).
+- **Five pages next to each other**, with a bar at the bottom: **For you · Home · Chat · Book · Scores**. Tap one, or
+  swipe sideways: the page slides to its neighbour (swipe to the left = the page on the right). For you, Home, Book and
+  Scores are parts of `index.html` (only that part shows, `html[data-view]`); Chat is `chat.html`. The home page still
+  holds everything, so scrolling it also passes the high scores and the schedule; Book and Scores are the same sections
+  on their own. Each page remembers where you were. `game.js` "Phones: five pages", `style.css` same title.
+  - A logged-in member **starts on For you**; a visitor on Home (For you then tells what an account gives). Links keep
+    working: `index.html#schedule` opens Book, `#scores` / `#highScores` Scores, anything else its place on Home.
+  - A swipe does nothing on a row that scrolls sideways itself (trainings, coaches, the cards on For you, price cards),
+    in a window, a form field or an open conversation, with the menu open, or from the very edge of the screen (the
+    phone's own back gesture). Visitors skip Chat when swiping (it needs an account).
+  - The slide uses the browser's view transitions (also from and to the chat); older browsers slide the new page in,
+    and "reduce motion" changes the page at once.
+- The menu (☰) sits at the **top right** in the header, with **My profile** at the top (and Contact).
 - Section descriptions (and the price cards in Level 5 · Schedule) sit behind a "Read more" button; elements marked
   `data-more` in `index.html` are hidden on phones until it's tapped.
 - Shorter home page: one main button, two upcoming sessions, the steps and classes as swipe rows, the XP table and
@@ -602,11 +611,12 @@ day. Everything goes through `give_like` in `supabase/schema.sql` (table `player
 ## For you: the start screen and the weekly check-in
 A member's own screen, made to give a reason to open the app every week (`foryou.js`, styles under "For you" at the
 end of `style.css`).
-- **Where:** on a phone it takes the place of the title screen at the top of the home page for a logged-in member
-  (the rest of the home page follows under it; "Home" in the bottom bar goes there). On a computer the home page
-  stays as it is and "For you" is the first tab of your account, so one click on your name in the header.
+- **Where:** on a phone it is a page of its own, the first one in the bar at the bottom and to the left of Home (see
+  "Phones"), and where a logged-in member starts. On a computer the home page stays as it is and "For you" is the
+  first tab of your account, so one click on your name in the header.
   The phone remembers that you are logged in (`levelup.fy` in the browser, set next to the rank colour), so the next
-  visit starts on the start screen without first showing the title screen.
+  visit starts on For you from the first moment. A visitor sees there what an account gives, with the buttons to
+  create one or log in.
 - **What is on it, top to bottom:**
   1. *Hello:* your first name, level, XP bar and the mascot on his rings (the gymnast of `levelup-celebrate.js`; tap
      him for a rep, he does a muscle-up when you check in; with "reduce motion" he hangs still).

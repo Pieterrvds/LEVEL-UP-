@@ -2315,9 +2315,8 @@ const LevelUp = (() => {
       if (tier > 0) localStorage.setItem("levelup.rank", String(tier));
       else localStorage.removeItem("levelup.rank");
     } catch {}
-    // Logged in: on a phone the home page opens on your own start screen (foryou.js). Remembered like the colour,
-    // so the next visit starts that way without first showing the page for visitors.
-    root.toggleAttribute("data-fy", Boolean(player));
+    // Logged in: on a phone the app opens on your own start screen ("For you"). Remembered like the colour, so the
+    // next visit starts there at once (the script in the <head> of index.html reads it).
     try {
       if (player) localStorage.setItem("levelup.fy", "1");
       else localStorage.removeItem("levelup.fy");
@@ -3169,7 +3168,7 @@ const LevelUp = (() => {
     const year = document.getElementById("year");
     if (year) year.textContent = new Date().getFullYear();
 
-    initTabBar(menuToggle);
+    initTabBar();
     initApp(nav);
     renderHud();
   }
@@ -3361,32 +3360,181 @@ const LevelUp = (() => {
     setTimeout(() => { if (canInstall()) document.body.appendChild(banner); }, 2500);
   }
 
-  // ---------- Phones: app-style bar at the bottom (Home · Book · Scores · Chat · Menu) ----------
-  // The profile moved into the menu (and stays on the player chip in the header).
+  // ---------- Phones: five pages next to each other, with a bar at the bottom ----------
+  // For you · Home · Chat · Book · Scores. Tap one in the bar or swipe sideways: the page slides to its neighbour.
+  // For you, Home, Book and Scores are parts of index.html (a "view": only that part shows); Chat is chat.html.
+  // The home page still holds everything, so scrolling it also passes the high scores and the schedule.
+  // The menu (☰) sits at the top right, in the header. A computer has no views: there it is one long page.
   const TAB_ICONS = {
+    foryou: '<path d="M12 3l2.4 5.6L20 9.3l-4.2 3.9L17 19l-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     book: '<rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/>',
     scores: '<path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 20h8M9 17h6"/>',
-    profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.5-6 8-6s7 1.5 8 6"/>',
-    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
+    profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.5-6 8-6s7 1.5 8 6"/>'
   };
   const tabIcon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square">${TAB_ICONS[name]}</svg>`;
 
-  function initTabBar(menuToggle) {
-    const page = location.pathname.split("/").pop() || "index.html";
-    const home = page === "index.html" || page === "";
-    const link = (hash) => home ? `#${hash}` : `index.html#${hash}`;
+  const VIEWS = ["foryou", "home", "chat", "book", "scores"];           // left to right
+  const VIEW_HASH = { foryou: "foryou", home: "home", book: "schedule", scores: "scores" };
+  const PHONE = window.matchMedia("(max-width: 760px)");
+  const pageName = location.pathname.split("/").pop() || "index.html";
+  const onIndex = pageName === "index.html";
+  const onChatPage = pageName === "chat.html";
+  const docRoot = document.documentElement;
+  let view = onChatPage ? "chat" : onIndex ? (VIEWS.includes(docRoot.dataset.view) ? docRoot.dataset.view : "home") : null;
+  const viewScroll = {};  // where you were on each page
+  let tabBar = null;
+
+  const viewOf = (el) => el?.closest?.("[data-v]")?.dataset.v || "home";
+  const markTab = () => tabBar?.querySelectorAll("[data-tab]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === view);
+    if (el.dataset.tab === view) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current");
+  });
+
+  // Show another page of index.html. target: an element on it to scroll to (else: where you were, or the top).
+  function setView(next, { target = null, animate = true } = {}) {
+    if (!onIndex || !VIEWS.includes(next) || next === "chat") return;
+    const from = view;
+    const apply = () => {
+      viewScroll[from] = window.scrollY;
+      view = next;
+      docRoot.dataset.view = next;
+      markTab();
+      let top = from === next ? window.scrollY : viewScroll[next] || 0;
+      if (target && target.id !== VIEW_HASH[next]) top = target.getBoundingClientRect().top + window.scrollY - (document.getElementById("hud")?.offsetHeight || 0) - 12;
+      else if (target) top = 0;
+      window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      document.dispatchEvent(new CustomEvent("levelup:view", { detail: next }));
+    };
+    const hash = target && target.id ? target.id : VIEW_HASH[next];
+    if (location.hash.slice(1) !== hash) history.replaceState(null, "", `${location.pathname}${location.search}#${hash}`);
+    if (!PHONE.matches) { // a computer: one page, just go to the section
+      view = next; docRoot.dataset.view = next;
+      (target || document.getElementById(VIEW_HASH[next]))?.scrollIntoView({ block: "start" });
+      return;
+    }
+    if (from === next) { apply(); return; }
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!animate || still) { apply(); return; }
+    const dir = VIEWS.indexOf(next) > VIEWS.indexOf(from) ? "next" : "prev";
+    if (document.startViewTransition) {
+      docRoot.dataset.slide = dir; // the old page slides out, the new one in (style.css "Phones: five pages")
+      const done = () => { delete docRoot.dataset.slide; };
+      try { document.startViewTransition(apply).finished.then(done, done); } catch { apply(); done(); }
+    } else {
+      apply();
+      const main = document.querySelector("main");
+      main?.classList.remove("view-in-next", "view-in-prev");
+      void main?.offsetWidth;
+      main?.classList.add(`view-in-${dir}`);
+      setTimeout(() => main?.classList.remove(`view-in-${dir}`), 400);
+    }
+  }
+  // Go to a page by name, from index.html or chat.html (another file = a new page load, sliding where the browser can)
+  function goView(next) {
+    if (next === view || !VIEWS.includes(next)) return;
+    if (next === "chat" && !player) { openAuth("login"); return; }
+    const dir = VIEWS.indexOf(next) > VIEWS.indexOf(view) ? "next" : "prev";
+    if (onIndex && next !== "chat") { setView(next); return; }
+    try { if (PHONE.matches && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) sessionStorage.setItem("levelup.slide", dir); } catch {}
+    location.href = next === "chat" ? "chat.html" : `index.html#${VIEW_HASH[next]}`;
+  }
+  // The page next to this one (step -1 = to the left). Visitors have no chat: they skip it.
+  function stepView(step) {
+    let i = VIEWS.indexOf(view) + step;
+    if (VIEWS[i] === "chat" && !player) i += step;
+    if (i >= 0 && i < VIEWS.length) goView(VIEWS[i]);
+  }
+  // A page load that slides in from another page: only when we asked for it (goView); other links change as always
+  window.addEventListener("pageswap", (event) => {
+    if (!event.viewTransition) return;
+    let dir = null;
+    try { dir = sessionStorage.getItem("levelup.slide"); } catch {}
+    if (dir) docRoot.dataset.slide = dir; else event.viewTransition.skipTransition();
+  });
+
+  function initViews() {
+    if (onIndex) {
+      // the page the address points to: a section, or something inside one (#highScores, #team-maxim …)
+      const fromHash = () => {
+        const id = decodeURIComponent(location.hash.slice(1));
+        const el = id ? document.getElementById(id) : null;
+        return el ? { view: viewOf(el), el } : null;
+      };
+      const first = fromHash();
+      if (first) {
+        view = first.view; docRoot.dataset.view = view;
+        if (PHONE.matches && first.el.id !== VIEW_HASH[view]) requestAnimationFrame(() => setView(view, { target: first.el, animate: false }));
+      } else docRoot.dataset.view = view;
+      window.addEventListener("hashchange", () => {
+        const to = fromHash();
+        if (to && PHONE.matches && to.view !== view) setView(to.view, { target: to.el });
+      });
+      // a link to a section: on a phone that can be another page
+      document.addEventListener("click", (event) => {
+        const a = event.target.closest?.("a[href]");
+        if (!a || event.defaultPrevented || !PHONE.matches || a.target === "_blank") return;
+        const url = new URL(a.href, location.href);
+        if (url.pathname !== location.pathname || url.search !== location.search || !url.hash) return;
+        const el = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+        if (!el) return;
+        const to = viewOf(el);
+        if (to === view && !(a.dataset.tab && el.id === VIEW_HASH[to])) return; // same page: the browser scrolls to it
+        event.preventDefault();
+        setView(to, { target: el });
+      });
+    }
+    if (!onIndex && !onChatPage) return;
+    // Swipe sideways to the page next to this one. Not on something that scrolls sideways itself (a row of cards,
+    // the days of the schedule, tabs), not in a window, a form field or an open conversation, and not from the very
+    // edge of the screen (there the phone's own back gesture lives).
+    const sideways = (el) => {
+      for (let n = el; n && n !== document.body && n.nodeType === 1; n = n.parentElement) {
+        if (n.matches("input, textarea, select, [contenteditable], [data-no-swipe], iframe")) return true;
+        if (n.scrollWidth > n.clientWidth + 8 && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+      }
+      return false;
+    };
+    let start = null;
+    document.addEventListener("touchstart", (event) => {
+      start = null;
+      if (!PHONE.matches || event.touches.length !== 1 || docRoot.dataset.slide) return;
+      if (document.querySelector("dialog[open], .nav.open, .lu-cel, .chat-app.show-thread")) return;
+      const t = event.touches[0];
+      if (t.clientX < 24 || t.clientX > window.innerWidth - 24 || sideways(event.target)) return;
+      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      if (!start) return;
+      const t = event.touches[0];
+      const dx = Math.abs(t.clientX - start.x), dy = Math.abs(t.clientY - start.y);
+      if (event.touches.length !== 1 || (dy > 24 && dy > dx)) start = null; // scrolling up or down, or a pinch
+    }, { passive: true });
+    document.addEventListener("touchend", (event) => {
+      if (!start) return;
+      const t = event.changedTouches[0];
+      const dx = t.clientX - start.x, dy = t.clientY - start.y, ms = Date.now() - start.at;
+      start = null;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || ms > 800) return;
+      stepView(dx < 0 ? 1 : -1); // swipe to the left = the page on the right
+    }, { passive: true });
+    document.addEventListener("touchcancel", () => { start = null; }, { passive: true });
+  }
+
+  function initTabBar() {
+    const link = (v) => (onIndex ? `#${VIEW_HASH[v]}` : `index.html#${VIEW_HASH[v]}`);
     const bar = document.createElement("nav");
     bar.className = "tabbar";
     bar.setAttribute("aria-label", "Quick menu");
     bar.innerHTML = `
+      <a href="${link("foryou")}" data-tab="foryou">${tabIcon("foryou")}<span>For you</span></a>
       <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
-      <a href="${link("schedule")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
-      <a href="${link("scores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>
       <a href="chat.html" data-tab="chat">${CHAT_ICON}<span>Chat</span><i class="chat-badge" data-chat-badge hidden></i></a>
-      <button type="button" data-tab="menu" aria-controls="nav" aria-expanded="false">${tabIcon("menu")}<span>Menu</span></button>`;
+      <a href="${link("book")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
+      <a href="${link("scores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>`;
     document.body.appendChild(bar);
     document.body.classList.add("has-tabbar");
+    tabBar = bar;
 
     // Profile in the menu (phones), first in the list
     const nav = document.getElementById("nav");
@@ -3401,30 +3549,15 @@ const LevelUp = (() => {
       openAuth("login");
     });
 
-    const setActive = (tab) => bar.querySelectorAll("[data-tab]").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
-    if (page === "chat.html") setActive("chat");
-    else if (home) {
-      // Highlight the tab of the section on screen
-      const sections = { home: "home", about: "home", programs: "home", team: "home", scores: "scores", reviews: "home", schedule: "book", contact: "home", faq: "home" };
-      const onScreen = () => {
-        let current = "home";
-        Object.keys(sections).forEach((id) => {
-          const el = document.getElementById(id);
-          if (el && el.getBoundingClientRect().top < window.innerHeight * 0.45) current = sections[id];
-        });
-        setActive(current);
-      };
-      window.addEventListener("scroll", onScreen, { passive: true });
-      onScreen();
-    }
-
+    markTab();
     bar.addEventListener("click", (event) => {
       const tab = event.target.closest("[data-tab]");
       if (!tab) return;
-      if (tab.dataset.tab === "menu") {
-        event.stopPropagation();
-        menuToggle?.click(); // same menu as the ☰ button
-        bar.querySelector('[data-tab="menu"]').setAttribute("aria-expanded", String(document.getElementById("nav")?.classList.contains("open")));
+      // from index.html or the chat: the page slides in the right direction; the other pages just open it
+      if ((onIndex || onChatPage) && PHONE.matches) {
+        event.preventDefault();
+        if (tab.dataset.tab === view) { if (onIndex) setView(view, { target: document.getElementById(VIEW_HASH[view]) }); return; }
+        goView(tab.dataset.tab);
       } else if (tab.dataset.tab === "chat" && !player) {
         event.preventDefault();
         openAuth("login");
@@ -3432,8 +3565,9 @@ const LevelUp = (() => {
     });
     document.addEventListener("levelup:change", () => {
       menuProfile.querySelector("[data-menu-profile]").textContent = player ? "My profile" : "Log in";
-      menuProfile.classList.toggle("active", page === "profile.html");
+      menuProfile.classList.toggle("active", pageName === "profile.html");
     });
+    initViews();
   }
 
   initChrome();
@@ -3461,7 +3595,7 @@ const LevelUp = (() => {
     applyAsTrainer, reviewApplication, loadTrainerList,
     chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
-    openAuth, toast,
+    openAuth, toast, setView, goView, getView: () => view,
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,

@@ -1,5 +1,6 @@
 // LEVEL-UP: your own start screen ("For you").
-// On a phone it is where a logged-in member lands: the top of the home page (visitors keep the normal home page).
+// On a phone it is a page of its own, to the left of the home page (the first one in the bar at the bottom), and
+// where a logged-in member lands. A visitor sees there what an account gives.
 // On a computer it is the first tab of your account (profile.html), so one click on your name in the header.
 // On it: your level with the mascot, your next step, your streak with the weekly check-in, your race on the high
 // scores, what you have almost earned, group classes picked for you and what is new in the club.
@@ -17,7 +18,7 @@
     return out;
   };
   const num = (n) => Number(n || 0).toLocaleString("en-US");
-  const home = Boolean(document.getElementById("forYou"));          // the home page: only on a phone
+  const home = Boolean(document.getElementById("fyHome"));          // index.html: only on a phone
   const link = (hash) => (home ? `#${hash}` : `index.html#${hash}`); // a section of the home page
   const tabLink = (tab) => `href="profile.html#${tab}" data-fy-tab="${tab}"`; // a tab of your account
 
@@ -392,18 +393,46 @@
     lastHtml[name] = html;
     parts[name].innerHTML = html;
   };
-  const shown = () => host && !host.hidden && (!home || (PHONE.matches && document.documentElement.hasAttribute("data-fy")));
+  const shown = () => host && !host.hidden && (!home || (PHONE.matches && LevelUp.getView() === "foryou"));
+
+  // A visitor on the phone page: what an account gives, and the way in
+  function guestHtml() {
+    const row = (icon, title, text) => `<li><span class="fy-ico" aria-hidden="true">${icon}</span><div><b>${title}</b><span class="fy-note">${text}</span></div></li>`;
+    return `
+      <section class="fy-card fy-guest">
+        <p class="fy-k">${T("For you")}</p>
+        <h2 class="fy-hi">${T("Your own start screen")}</h2>
+        <p class="fy-note">${T("Create your free player and this page becomes yours.")}</p>
+        <ul class="fy-perks">
+          ${row("📅", T("Your next step"), T("Your next session or group class, one tap away."))}
+          ${row("🔥", T("Your streak"), T("Check in every week: +25 XP and your streak grows."))}
+          ${row("🏆", T("Your race"), T("See who is just ahead of you on the high scores."))}
+          ${row("🎁", T("Almost there"), T("Free sessions and achievements you are close to."))}
+        </ul>
+        <div class="fy-acts">
+          <button type="button" class="btn btn-small btn-primary" data-auth-open="signup">${T("Create your player")}</button>
+          <button type="button" class="btn btn-small btn-ghost" data-auth-open="login">${T("Log in")}</button>
+        </div>
+      </section>`;
+  }
 
   function draw() {
     if (!host) return;
     const player = LevelUp.getPlayer();
     if (!player || !LevelUp.isReady()) {
-      if (LevelUp.isReady()) { host.hidden = home; loadedFor = null; }
+      if (LevelUp.isReady()) {
+        loadedFor = null;
+        if (home && shown()) { // a visitor: the page says what an account gives
+          built = false; mascot = null;
+          Object.keys(lastHtml).forEach((k) => delete lastHtml[k]);
+          host.setAttribute("data-no-i18n", "");
+          if (lastHtml.guest !== "1") { lastHtml.guest = "1"; host.innerHTML = guestHtml(); }
+        }
+      }
       return;
     }
-    if (home) host.hidden = false;
-    if (!shown()) return; // on a computer the home page stays the home page
-    if (!built) build();
+    if (!shown()) return; // on a computer, and on the other phone pages, nothing is built here
+    if (!built) { delete lastHtml.guest; build(); }
     if (loadedFor !== player.id) {
       loadedFor = player.id;
       LevelUp.loadForYou().then(draw);
@@ -480,7 +509,8 @@
   }
 
   document.addEventListener("levelup:change", draw);
+  document.addEventListener("levelup:view", draw); // the phone page comes into view
   PHONE.addEventListener?.("change", draw);
-  if (home) mount(document.getElementById("forYou"));
+  if (home) mount(document.getElementById("fyHome"));
   window.LevelUpForYou = { mount, draw };
 })();

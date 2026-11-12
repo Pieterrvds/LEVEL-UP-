@@ -2038,7 +2038,6 @@ textarea { resize: vertical; min-height: 130px; }
   .tabbar .tab-book svg { filter: none; }
 
   body.has-tabbar { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
-  body.has-tabbar .menu-toggle { display: none; }
   body.has-tabbar .nav { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .toast { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
   body.has-tabbar .footer-inner { padding-bottom: 32px; }
@@ -3252,13 +3251,11 @@ a.fy-goal:hover b { color: var(--green-bright); }
 .fy-news span span { color: var(--muted); }
 .fy-empty { display: grid; gap: 10px; justify-items: start; }
 
-/* a phone: the start screen takes the place of the title screen on the home page */
-#forYou { display: none; }
-@media (max-width: 760px) {
-  html[data-fy] #home.hero { display: block; min-height: 0; padding: calc(var(--hud-h) + 14px) 14px 26px; overflow: visible; }
-  html[data-fy] #home.hero > :not(#forYou):not(.hero-bg) { display: none; }
-  html[data-fy] #forYou { display: grid; }
-}
+.fy-perks { display: grid; gap: 12px; margin: 14px 0 4px; padding: 0; list-style: none; }
+.fy-perks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.fy-perks b { display: block; font-size: 0.95rem; }
+/* a phone: "For you" is a page of its own (see "Phones: five pages" below); a computer has it in the account */
+.fy-page { display: none; }
 @media (max-width: 380px) {
   .fy-duo { gap: 10px; }
   .fy-card { padding: 14px; }
@@ -3293,3 +3290,32 @@ body.fy-open #mpHero { display: none; }
   .fy-pane .fy-wide { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .fy-bar i, .fy-heart { transition: none; } }
+
+/* ---------- Phones: five pages next to each other (For you · Home · Chat · Book · Scores) ----------
+   game.js sets html[data-view]; of index.html only that page shows. The home page still holds everything.
+   Going to another page slides: the old one out, the new one in (html[data-slide] = "next" or "prev"). */
+@media (max-width: 760px) {
+  html[data-view="foryou"] main > :not(#foryou):not(dialog), html[data-view="foryou"] .footer,
+  html[data-view="book"] main > :not(#schedule):not(dialog), html[data-view="book"] .footer,
+  html[data-view="scores"] main > :not(#scores):not(dialog), html[data-view="scores"] .footer { display: none; }
+  html[data-view="foryou"] .fy-page { display: block; min-height: calc(100vh - var(--tabbar-h)); min-height: calc(100svh - var(--tabbar-h)); padding: calc(var(--hud-h) + 14px) 14px 26px; }
+  html[data-view="book"] #schedule, html[data-view="scores"] #scores { min-height: calc(100vh - var(--tabbar-h)); min-height: calc(100svh - var(--tabbar-h)); padding-top: calc(var(--hud-h) + 22px); }
+  .tabbar > a { position: relative; }
+  .tabbar .tab-book.active { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--green-bright); }
+  /* sliding from page to page */
+  @view-transition { navigation: auto; }
+  html[data-slide] .hud { view-transition-name: lu-hud; }
+  html[data-slide] .tabbar { view-transition-name: lu-tabbar; }
+  html[data-slide]::view-transition-old(root), html[data-slide]::view-transition-new(root) { animation-duration: 0.3s; animation-timing-function: cubic-bezier(0.3, 0.7, 0.2, 1); animation-fill-mode: both; mix-blend-mode: normal; }
+  html[data-slide="next"]::view-transition-old(root) { animation-name: lu-out-left; }
+  html[data-slide="next"]::view-transition-new(root) { animation-name: lu-in-right; }
+  html[data-slide="prev"]::view-transition-old(root) { animation-name: lu-out-right; }
+  html[data-slide="prev"]::view-transition-new(root) { animation-name: lu-in-left; }
+  /* browsers without it: the new page slides in */
+  main.view-in-next { animation: lu-in-right 0.3s cubic-bezier(0.3, 0.7, 0.2, 1) both; }
+  main.view-in-prev { animation: lu-in-left 0.3s cubic-bezier(0.3, 0.7, 0.2, 1) both; }
+}
+@keyframes lu-out-left { to { transform: translateX(-100%); } }
+@keyframes lu-out-right { to { transform: translateX(100%); } }
+@keyframes lu-in-right { from { transform: translateX(100%); } }
+@keyframes lu-in-left { from { transform: translateX(-100%); } }
