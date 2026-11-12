@@ -3454,7 +3454,8 @@ body.fy-open #mpHero { display: none; }
 .post-pick-note { grid-column: 1 / -1; margin: 0; }
 .post-left { margin: -8px 0 0; text-align: right; font-size: 0.76rem; color: var(--muted); }
 @media (max-width: 760px) { .post-photo img, .post-media[data-n="1"] .post-photo img { max-height: 560px; } }
-.auth-form .post-pick-add { font-family: var(--sans); font-size: 0.78rem; font-style: normal; letter-spacing: 0; text-transform: none; }
+.auth-form .post-pick-add { padding: 6px; font-family: var(--sans); font-size: 0.78rem; font-size-adjust: none; font-style: normal; line-height: 1.2; letter-spacing: 0; text-transform: none; }
+.post-pick-add > span { max-width: 100%; overflow-wrap: anywhere; } /* the label wraps inside its square, also in Dutch */
 
 /* ---------- Levelupy within reach: his face as a small button on every page (game.js initAssistantButton) ---------- */
 .lvy-fab { position: fixed; z-index: 980; right: 18px; bottom: 20px; width: 54px; height: 54px; padding: 0; overflow: visible; background: radial-gradient(circle at 50% 30%, rgba(var(--level-rgb), 0.4), #000 78%); border: 2px solid var(--level); border-radius: 50%; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); cursor: pointer; transition: transform 0.18s; }
