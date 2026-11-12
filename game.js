@@ -339,7 +339,8 @@ const LevelUp = (() => {
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
     "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp",
     "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish", "shop_tab_paid",
-    "class_create", "admin_shop_update", "admin_shop_sale", "admin_announce", "give_like"]);
+    "class_create", "admin_shop_update", "admin_shop_sale", "admin_announce", "give_like",
+    "book_series", "series_stop", "move_booking"]);
 
   // Player data comes back from the database in the shape the pages use
   function normalisePlayer(data) {
@@ -361,6 +362,8 @@ const LevelUp = (() => {
         trainerFee: Number(b.trainerFee ?? TRAINER_FEE)
       })),
       packs: (data.packs || []).map(normalisePack),
+      // weekly sessions: { id, trainerId, weekday (1 = Monday), hour, lastDay, status: requested | active | ended, upcoming, next }
+      series: (data.series || []).map((s) => ({ ...s, weekday: Number(s.weekday), hour: Number(s.hour), upcoming: Number(s.upcoming) || 0 })),
       classes: (data.classes || []).map(normaliseClass),
       rewards: normaliseRewards(data.rewards),
       introEligible: Boolean(data.introEligible),
@@ -1129,9 +1132,46 @@ const LevelUp = (() => {
   }
 
   // pay: "online" (Mollie, the request reaches the trainer once paid) or "in_person" (at the headquarters)
-  async function bookSession({ trainerId, date, hour, note = "", kind = "solo", partner = "", pay = "in_person" }) {
+  // ---------- Weekly sessions: the same hour with the same trainer every week ----------
+  const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  // "Every Monday · 18:00" and "until 7 Dec 2026" / "until someone stops it"
+  const seriesText = (s) => `Every ${WEEKDAYS[(Number(s.weekday) || 1) - 1]} · ${pad(Number(s.hour))}:00`;
+  const seriesUntil = (s) => (s.lastDay ? `until ${shortDate(`${s.lastDay}T12:00:00`)}` : "until someone stops it");
+  // One row per weekly request (its first week): the trainer answers a weekly request once
+  function oneRowPerSeries(list) {
+    const seen = new Set();
+    return [...list].sort((a, b) => slotStart(a.date, a.hour) - slotStart(b.date, b.hour))
+      .filter((b) => !b.series || b.series.status !== "requested" || (!seen.has(b.series.id) && seen.add(b.series.id)));
+  }
+  async function stopSeries(id) {
+    const r = await call("series_stop", { p_series: id });
+    await Promise.all([refreshPlayer(), loadSlots()]);
+    emit();
+    return r;
+  }
+  // The trainer moves a session after agreeing on it with the player. scope "series": this week and all after it.
+  async function moveBooking(id, date, hour, scope = "once") {
+    const b = await call("move_booking", { p_id: id, p_day: date, p_hour: Number(hour), p_scope: scope });
+    await Promise.all([refreshPlayer(), loadSlots()]);
+    emit();
+    return b;
+  }
+
+  // weeks: 0 = one session; a number of weeks or "open" (until someone stops it) = a weekly session
+  async function bookSession({ trainerId, date, hour, note = "", kind = "solo", partner = "", pay = "in_person", weeks = 0 }) {
     if (!player) throw new Error("Log in to book a session.");
     if (!trainerHours(trainerId, date).includes(hour)) throw new Error("This trainer isn't available at that time.");
+    if (weeks) {
+      const r = await call("book_series", {
+        p_trainer: trainerId, p_day: date, p_hour: hour, p_weeks: weeks === "open" ? null : Number(weeks),
+        p_note: String(note).slice(0, 300), p_kind: kind, p_partner: String(partner).trim().slice(0, 40)
+      });
+      await Promise.all([refreshPlayer(), loadSlots()]);
+      const first = { ...r.planned[0], hour: Number(r.planned[0].hour) };
+      notifyBooking(first, "requested"); // one email for the whole request
+      emit();
+      return { ...first, weekly: r };
+    }
     const booking = await call("book_session", {
       p_trainer: trainerId, p_day: date, p_hour: hour, p_note: String(note).slice(0, 300),
       p_kind: kind, p_partner: String(partner).trim().slice(0, 40), p_pay: pay
@@ -1555,7 +1595,7 @@ const LevelUp = (() => {
   // Confirmed sessions from today back to REWARD_WINDOW_DAYS ago still need a Reward or No-show
   const canSettle = (b, admin = false) => b.status === "confirmed" && daysAgo(b.date) >= 0 && (admin || daysAgo(b.date) <= REWARD_WINDOW_DAYS);
   const hasStarted = (b) => slotStart(b.date, b.hour) <= new Date();
-  const coachRequests = () => coachBookings.filter((b) => b.status === "pending" && slotStart(b.date, b.hour) > new Date());
+  const coachRequests = () => oneRowPerSeries(coachBookings.filter((b) => b.status === "pending" && slotStart(b.date, b.hour) > new Date()));
   const coachToReward = () => coachBookings.filter((b) => canSettle(b));
 
   const playerBookings = () =>
@@ -1621,6 +1661,7 @@ const LevelUp = (() => {
         name: booking.name,
         email: booking.email,
         note: booking.note || "-",
+        ...(booking.series ? { weekly: `${seriesText(booking.series)} · ${seriesUntil(booking.series)}` } : {}),
         price: priceLabel(booking),
         payment: booking.payMethod === "pack" ? "Pack credit" : booking.payMethod === "reward" ? "Free session (reward)" : booking.payStatus === "paid" ? `Paid ${booking.payMethod === "online" ? "online" : "at the HQ"}` : "Pays at the HQ",
         session: booking.kind === "duo" ? `Duo with ${booking.partner}` : "1:1",
@@ -1996,7 +2037,8 @@ const LevelUp = (() => {
       <li class="coach-item">
         <div>
           <p class="coach-who">${esc(b.name)}</p>
-          <p class="muted">${formatSlot(b.date, b.hour)}${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+          ${b.series && b.series.status === "requested" ? `<p class="weekly-line"><span class="weekly-chip">🔁 Weekly</span> <span>${seriesText(b.series)}</span> · <span>${seriesUntil(b.series)}</span></p>` : ""}
+          <p class="muted">${b.series && b.series.status === "requested" ? "First session: " : ""}${formatSlot(b.date, b.hour)}${b.note ? ` · “${esc(b.note)}”` : ""}</p>
           <p class="form-error" role="alert"></p>
         </div>
         <div class="coach-actions">${actions(b)}</div>
@@ -2240,7 +2282,7 @@ const LevelUp = (() => {
     setTimeout(() => card.classList.remove("coach-focus"), 2400);
   }
   document.addEventListener("click", (event) => {
-    const face = event.target.closest("[data-coach]");
+    const face = event.target.closest("img[data-coach]"); // photos only: the Coach tab has buttons with data-coach too
     if (!face || face.closest(".team-card")) return;
     event.preventDefault();
     event.stopPropagation(); // e.g. the photo inside a "next free session" button
@@ -3420,7 +3462,11 @@ const LevelUp = (() => {
     if (document.startViewTransition) {
       docRoot.dataset.slide = dir; // the old page slides out, the new one in (style.css "Phones: five pages")
       const done = () => { delete docRoot.dataset.slide; };
-      try { document.startViewTransition(apply).finished.then(done, done); } catch { apply(); done(); }
+      try {
+        const tr = document.startViewTransition(apply);
+        tr.ready.catch(() => {}); // skipped (e.g. the tab went to the background): the page still changed
+        tr.finished.then(done, done);
+      } catch { apply(); done(); }
     } else {
       apply();
       const main = document.querySelector("main");
@@ -3450,6 +3496,8 @@ const LevelUp = (() => {
     if (!event.viewTransition) return;
     let dir = null;
     try { dir = sessionStorage.getItem("levelup.slide"); } catch {}
+    event.viewTransition.ready?.catch(() => {});
+    event.viewTransition.finished?.catch(() => {});
     if (dir) docRoot.dataset.slide = dir; else event.viewTransition.skipTransition();
   });
 
@@ -3581,7 +3629,7 @@ const LevelUp = (() => {
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
-    bookSession, cancelBooking, playerBookings, trainerStats,
+    bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,

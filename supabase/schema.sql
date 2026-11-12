@@ -482,6 +482,33 @@ create unique index if not exists bookings_active_slot2 on public.bookings (trai
 create unique index if not exists bookings_active_user2 on public.bookings (user_id, day, hour)
   where status in ('awaiting_payment', 'pending', 'confirmed', 'completed');
 
+-- Weekly sessions: the same hour with the same trainer every week, for a number of weeks or until someone stops it.
+-- The series only says what repeats; every week is an ordinary booking (bookings.series_id) with the ordinary rules
+-- for price, cancelling and rewarding. Weeks further away than the booking window are added as they come closer.
+create table if not exists public.booking_series (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  trainer_id text not null references public.trainers (id),
+  weekday smallint not null check (weekday between 1 and 7),   -- 1 = Monday … 7 = Sunday
+  hour smallint not null check (hour between 0 and 23),
+  kind text not null default 'solo',
+  partner text not null default '',
+  note text not null default '',
+  first_day date not null,
+  last_day date,                              -- null = every week until someone stops it
+  next_day date not null,                     -- the next week that still has to be planned
+  status text not null default 'requested' check (status in ('requested', 'active', 'ended')),
+  ended_reason text,                          -- declined, expired, stopped, done
+  created_at timestamptz not null default now(),
+  ended_at timestamptz
+);
+create index if not exists booking_series_user_idx on public.booking_series (user_id);
+create index if not exists booking_series_open_idx on public.booking_series (status) where status <> 'ended';
+alter table public.booking_series enable row level security;  -- only through the functions below
+alter table public.bookings add column if not exists series_id uuid references public.booking_series (id) on delete set null;
+alter table public.bookings add column if not exists moved_from text;  -- "Mon 16 Nov 18:00": where it stood before the trainer moved it
+create index if not exists bookings_series_idx on public.bookings (series_id) where series_id is not null;
+
 -- Money per booking, fixed at the moment of booking (so later price changes don't rewrite history)
 alter table public.bookings add column if not exists price numeric(8, 2) not null default 60;
 alter table public.bookings add column if not exists trainer_fee numeric(8, 2) not null default 40;
@@ -529,8 +556,13 @@ returns jsonb language sql stable security definer set search_path = public as $
     'payMethod', b.pay_method, 'payStatus', b.pay_status, 'paidAt', b.paid_at, 'refundStatus', b.refund_status,
     'freeCancelUntil', ((b.day + make_interval(hours => b.hour)) at time zone 'Europe/Brussels')
                        - make_interval(hours => public._config('free_cancel_hours')::int),
-    'name', p.name, 'email', p.email, 'avatar', p.avatar_url,
-    'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id)
+    'name', p.name, 'email', p.email, 'avatar', p.avatar_url, 'userId', b.user_id,
+    'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id),
+    -- part of a weekly session? and did the trainer move it?
+    'movedFrom', b.moved_from,
+    'series', (select jsonb_build_object('id', s.id, 'weekday', s.weekday, 'hour', s.hour, 'firstDay', s.first_day,
+                                         'lastDay', s.last_day, 'status', s.status)
+               from public.booking_series s where s.id = b.series_id)
   )
   from public.profiles p where p.id = b.user_id;
 $$;
@@ -900,6 +932,28 @@ returns timestamptz language sql stable as $$
   select (p_day + make_interval(hours => p_hour)) at time zone 'Europe/Brussels';
 $$;
 
+-- Weekly sessions (booking_series): their names and how the website gets them (the rest is under "Weekly sessions")
+create or replace function public._weekday_name(p_weekday integer)
+returns text language sql immutable as $$
+  select (array['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])[p_weekday];
+$$;
+-- "every Monday 18:00"
+create or replace function public._series_label(s public.booking_series)
+returns text language sql immutable as $$
+  select 'every ' || public._weekday_name(s.weekday) || ' ' || lpad(s.hour::text, 2, '0') || ':00';
+$$;
+create or replace function public._series_json(s public.booking_series)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', s.id, 'trainerId', s.trainer_id, 'weekday', s.weekday, 'hour', s.hour, 'kind', s.kind,
+    'firstDay', s.first_day, 'lastDay', s.last_day, 'status', s.status, 'endedReason', s.ended_reason,
+    'name', (select p.name from public.profiles p where p.id = s.user_id),
+    'upcoming', (select count(*) from public.bookings k where k.series_id = s.id and k.status in ('pending', 'confirmed')
+                 and public._slot_start(k.day, k.hour) > now()),
+    'next', (select min(k.day) from public.bookings k where k.series_id = s.id and k.status in ('pending', 'confirmed')
+             and public._slot_start(k.day, k.hour) > now()));
+$$;
+
+
 -- Weeks in a row (Monday to Sunday, Brussels) with at least one completed session, a group class you were at,
 -- or the weekly check-in. This week counts as soon as it has one of those; until then the streak runs up to last week.
 create or replace function public._streak(p_user uuid)
@@ -980,6 +1034,10 @@ returns jsonb language sql stable security definer set search_path = public as $
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb),
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc)
                        from public.session_packs sp where sp.user_id = p.id), '[]'::jsonb),
+    -- weekly sessions that run, wait for the trainer, or ended in the last two weeks
+    'series', coalesce((select jsonb_agg(public._series_json(q) order by q.created_at)
+                        from public.booking_series q where q.user_id = p.id
+                          and (q.status <> 'ended' or q.ended_at > now() - interval '14 days')), '[]'::jsonb),
     'classes', public._class_mine_json(p.id),
     'healthForm', public._health_brief(p.id),
     'streak', public._streak(p.id),
@@ -1065,6 +1123,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null then return null; end if;
   perform public._expire_requests();
+  perform public._series_extend();
   perform public._settle_player_of_month();
   -- profile can be missing if the account was made before this schema existed
   insert into public.profiles (id, email, name)
@@ -1192,12 +1251,13 @@ end $$;
 
 drop function if exists public.book_session(text, date, integer, text);
 drop function if exists public.book_session(text, date, integer, text, text, text);
-create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '',
-                                               p_kind text default 'solo', p_partner text default '',
-                                               p_pay text default 'in_person')
-returns jsonb language plpgsql security definer set search_path = public as $$
+-- The booking itself, for a player: every check and the price. book_session (one session) and the weekly sessions
+-- (book_series, _series_extend) both go through here.
+create or replace function public._book(p_user uuid, p_trainer text, p_day date, p_hour integer, p_note text,
+                                        p_kind text, p_partner text, p_pay text, p_series uuid default null)
+returns public.bookings language plpgsql security definer set search_path = public as $$
 declare
-  uid uuid := auth.uid();
+  uid uuid := p_user;
   q jsonb;
   t public.trainers;
   horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
@@ -1258,9 +1318,9 @@ begin
                                 public._config('trainer_fee')::numeric) end);
   end if;
   begin
-    insert into public.bookings (user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee,
+    insert into public.bookings (series_id, user_id, trainer_id, day, hour, note, xp, status, price, trainer_fee,
                                  kind, partner, price_type, pack_id, voucher_id, pay_method, pay_status, request_at, request_notice_sent)
-    values (uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int,
+    values (p_series, uid, p_trainer, p_day, p_hour, left(coalesce(p_note, ''), 300), public._config('session_xp')::int,
             case when q ->> 'type' <> 'pack' and p_pay = 'online' then 'awaiting_payment' else 'pending' end,
             (q ->> 'price')::numeric, (q ->> 'fee')::numeric,
             p_kind, case when p_kind = 'duo' then left(trim(p_partner), 40) else '' end,
@@ -1274,6 +1334,290 @@ begin
     raise exception 'Someone just booked this slot. Pick another hour.';
   end;
 
+  return b;
+end $$;
+
+create or replace function public.book_session(p_trainer text, p_day date, p_hour integer, p_note text default '',
+                                               p_kind text default 'solo', p_partner text default '',
+                                               p_pay text default 'in_person')
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'Log in to book a session.'; end if;
+  return public._booking_json(public._book(auth.uid(), p_trainer, p_day, p_hour, p_note, p_kind, p_partner, p_pay));
+end $$;
+
+
+-- ---------------------------------------------------------
+-- Weekly sessions
+-- ---------------------------------------------------------
+-- Ask a trainer for the same hour every week. p_weeks: how many weeks (2 to 26), or null = until someone stops it.
+-- The first week must be free; a later week in which the hour is already taken is left out (and said so).
+-- Every week is paid like any session: with a pack credit when you have one, else at the headquarters.
+create or replace function public.book_series(p_trainer text, p_day date, p_hour integer, p_weeks integer default null,
+                                              p_note text default '', p_kind text default 'solo', p_partner text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  s public.booking_series;
+  b public.bookings;
+  horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
+                   + 7 * public._config('booking_weeks_ahead')::int);
+  d date := p_day;
+  planned jsonb := '[]'::jsonb;
+  skipped jsonb := '[]'::jsonb;
+  client text;
+begin
+  if uid is null then raise exception 'Log in to book a session.'; end if;
+  if p_weeks is not null and (p_weeks < 2 or p_weeks > 26) then raise exception 'Choose between 2 and 26 weeks.'; end if;
+  if (select count(*) from public.booking_series where user_id = uid and status <> 'ended') >= 4 then
+    raise exception 'You already have 4 weekly sessions. Stop one first.';
+  end if;
+  if exists (select 1 from public.booking_series where user_id = uid and status <> 'ended'
+             and weekday = extract(isodow from p_day)::int and hour = p_hour) then
+    raise exception 'You already have a weekly session at that time.';
+  end if;
+  insert into public.booking_series (user_id, trainer_id, weekday, hour, kind, partner, note, first_day, last_day, next_day)
+  values (uid, p_trainer, extract(isodow from p_day)::int, p_hour, p_kind,
+          case when p_kind = 'duo' then left(trim(coalesce(p_partner, '')), 40) else '' end, left(coalesce(p_note, ''), 300),
+          p_day, case when p_weeks is null then null else p_day + 7 * (p_weeks - 1) end, p_day)
+  returning * into s;
+  perform set_config('levelup.quiet', '1', true);  -- one message for the whole request, not one per week
+  b := public._book(uid, p_trainer, d, p_hour, p_note, p_kind, p_partner, 'in_person', s.id);
+  planned := planned || public._booking_json(b);
+  d := d + 7;
+  while d < horizon and (s.last_day is null or d <= s.last_day) loop
+    begin
+      b := public._book(uid, p_trainer, d, p_hour, p_note, p_kind, p_partner, 'in_person', s.id);
+      planned := planned || public._booking_json(b);
+    exception when others then
+      skipped := skipped || jsonb_build_object('date', d, 'reason', sqlerrm);
+    end;
+    d := d + 7;
+  end loop;
+  update public.booking_series set next_day = d where id = s.id returning * into s;
+  perform set_config('levelup.quiet', '', true);
+  select name into client from public.profiles where id = uid;
+  perform public._push(public._trainer_user(p_trainer), 'New weekly request',
+    client || ' · ' || public._series_label(s) || ' · from ' || to_char(p_day, 'Dy DD Mon')
+      || case when p_weeks is null then ' · until stopped' else ' · ' || p_weeks || ' weeks' end,
+    'profile.html#coach', 'series-' || s.id);
+  return jsonb_build_object('series', public._series_json(s), 'planned', planned, 'skipped', skipped);
+end $$;
+
+-- The trainer answers a weekly request: one answer for all its weeks
+create or replace function public._series_answer(b public.bookings, p_accept boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  s public.booking_series;
+  first date;
+  trainer text := (select split_part(name, ' ', 1) from public.trainers where id = b.trainer_id);
+begin
+  select * into s from public.booking_series where id = b.series_id for update;
+  select min(k.day) into first from public.bookings k where k.series_id = s.id and k.status = 'pending';
+  perform set_config('levelup.quiet', '1', true);
+  update public.bookings k
+    set status = case when p_accept then 'confirmed' else 'declined' end, responded_at = now(),
+        refund_status = case when p_accept then k.refund_status else public._refund_state(k) end
+    where k.series_id = s.id and k.status = 'pending' and public._slot_start(k.day, k.hour) > now();
+  update public.booking_series
+    set status = case when p_accept then 'active' else 'ended' end,
+        ended_reason = case when p_accept then null else 'declined' end,
+        ended_at = case when p_accept then null else now() end
+    where id = s.id returning * into s;
+  perform set_config('levelup.quiet', '', true);
+  if p_accept then
+    perform public._push(s.user_id, 'Weekly session confirmed ✓',
+      trainer || ' · ' || public._series_label(s) || ', from ' || to_char(first, 'Dy DD Mon'), 'profile.html#overview', 'series-' || s.id);
+  else
+    perform public._push(s.user_id, 'Weekly request declined',
+      trainer || ' can''t do ' || public._series_label(s) || '. Pick another hour.', 'index.html#schedule', 'series-' || s.id);
+  end if;
+  select * into b from public.bookings where id = b.id;
+  return public._booking_json(b);
+end $$;
+
+-- Keeps the weekly sessions going: plans the weeks that came inside the booking window (confirmed at once, the
+-- trainer said yes to the series), and closes series that are over or were never answered. Runs with every profile
+-- load and in the 10-minute job. A week whose hour is taken is left out; both hear about it.
+create or replace function public._series_extend()
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  s public.booking_series;
+  b public.bookings;
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  horizon date := (date_trunc('week', now() at time zone 'Europe/Brussels')::date
+                   + 7 * public._config('booking_weeks_ahead')::int);
+  notice interval := make_interval(hours => public._config('booking_notice_hours')::int);
+  trainer text;
+  client text;
+  n integer := 0;
+begin
+  for s in select * from public.booking_series where status = 'active' and next_day < horizon
+             and (last_day is null or next_day <= last_day) for update skip locked loop
+    trainer := (select split_part(name, ' ', 1) from public.trainers where id = s.trainer_id);
+    client := (select name from public.profiles where id = s.user_id);
+    while s.next_day < horizon and (s.last_day is null or s.next_day <= s.last_day) loop
+      if public._slot_start(s.next_day, s.hour) > now() + notice
+         and not exists (select 1 from public.bookings k where k.series_id = s.id and k.day = s.next_day) then
+        begin
+          perform set_config('levelup.quiet', '1', true);
+          b := public._book(s.user_id, s.trainer_id, s.next_day, s.hour, s.note, s.kind, s.partner, 'in_person', s.id);
+          update public.bookings set status = 'confirmed', responded_at = now() where id = b.id;
+          perform set_config('levelup.quiet', '', true);
+          n := n + 1;
+        exception when others then
+          perform set_config('levelup.quiet', '', true);
+          perform public._push(s.user_id, 'Weekly session not planned',
+            trainer || ' · ' || public._slot_label(s.next_day, s.hour) || ' is not free. Pick another hour for that week.',
+            'index.html#schedule', 'series-skip-' || s.id || '-' || s.next_day);
+          perform public._push(public._trainer_user(s.trainer_id), 'Weekly session not planned',
+            client || ' · ' || public._slot_label(s.next_day, s.hour) || ' is not free.',
+            'profile.html#coach', 'series-skip-' || s.id || '-' || s.next_day);
+        end;
+      end if;
+      s.next_day := s.next_day + 7;
+    end loop;
+    update public.booking_series set next_day = s.next_day where id = s.id;
+  end loop;
+  update public.booking_series set status = 'ended', ended_reason = 'done', ended_at = now()
+    where status = 'active' and last_day is not null and last_day < today;
+  update public.booking_series q set status = 'ended', ended_reason = 'expired', ended_at = now()
+    where q.status = 'requested'
+      and not exists (select 1 from public.bookings k where k.series_id = q.id and k.status in ('pending', 'awaiting_payment'));
+  return n;
+end $$;
+
+-- Stop a weekly session: the player, the trainer or an admin. The weeks that are still to come go away at no cost.
+-- When the player stops it, a confirmed week that starts within the free-cancellation time stays (cancel it yourself).
+create or replace function public.series_stop(p_series uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  s public.booking_series;
+  k public.bookings;
+  mine boolean;
+  free interval := make_interval(hours => public._config('free_cancel_hours')::int);
+  removed integer := 0;
+  kept integer := 0;
+  trainer text;
+  client text;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into s from public.booking_series where id = p_series for update;
+  if not found or not (s.user_id = auth.uid() or public._can_coach(s.trainer_id)) then
+    raise exception 'Weekly session not found.';
+  end if;
+  if s.status = 'ended' then raise exception 'This weekly session has already stopped.'; end if;
+  mine := s.user_id = auth.uid() and not public.is_admin();
+  perform set_config('levelup.quiet', '1', true);
+  for k in select * from public.bookings where series_id = s.id and status in ('pending', 'confirmed', 'awaiting_payment')
+             and public._slot_start(day, hour) > now() order by day loop
+    if mine and k.status = 'confirmed' and public._slot_start(k.day, k.hour) - free < now() then
+      kept := kept + 1;
+      continue;
+    end if;
+    if k.pay_status = 'paid' then
+      update public.bookings set status = 'cancelled', responded_at = now(), refund_status = public._refund_state(k) where id = k.id;
+    else
+      delete from public.bookings where id = k.id;
+    end if;
+    removed := removed + 1;
+  end loop;
+  update public.booking_series set status = 'ended', ended_reason = 'stopped', ended_at = now() where id = s.id returning * into s;
+  perform set_config('levelup.quiet', '', true);
+  trainer := (select split_part(name, ' ', 1) from public.trainers where id = s.trainer_id);
+  client := (select name from public.profiles where id = s.user_id);
+  if s.user_id = auth.uid() then
+    perform public._push(public._trainer_user(s.trainer_id), 'Weekly session stopped',
+      client || ' · ' || public._series_label(s), 'profile.html#coach', 'series-' || s.id);
+  else
+    perform public._push(s.user_id, 'Weekly session stopped',
+      trainer || ' · ' || public._series_label(s) || '. No costs for the weeks that were still to come.', 'profile.html#overview', 'series-' || s.id);
+  end if;
+  return jsonb_build_object('removed', removed, 'kept', kept, 'series', public._series_json(s));
+end $$;
+
+-- Why a trainer and a player can't meet at a moment (null = they can). p_skip: the booking that is being moved.
+create or replace function public._slot_taken(p_trainer text, p_user uuid, p_day date, p_hour integer, p_skip uuid)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare
+  t0 timestamptz := public._slot_start(p_day, p_hour);
+begin
+  if exists (select 1 from public.bookings where trainer_id = p_trainer and day = p_day and hour = p_hour and id <> p_skip
+             and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
+    return 'the trainer already has a session then';
+  end if;
+  if exists (select 1 from public.bookings where user_id = p_user and day = p_day and hour = p_hour and id <> p_skip
+             and status in ('awaiting_payment', 'pending', 'confirmed', 'completed')) then
+    return 'the player already has a session then';
+  end if;
+  if exists (select 1 from public.class_sessions c where c.trainer_id = p_trainer and c.status = 'scheduled'
+             and tstzrange(c.starts_at, c.starts_at + make_interval(mins => c.minutes)) && tstzrange(t0, t0 + interval '1 hour')) then
+    return 'the trainer leads a group class then';
+  end if;
+  if public._room_blocker(t0, t0 + interval '1 hour', false) is not null then return 'the gym is full then'; end if;
+  return null;
+end $$;
+
+-- The trainer (or an admin) moves a session to another day or hour, after agreeing on it with the player.
+-- p_scope 'once': only this session. 'series': this week and every week after it of a weekly session (same shift).
+-- The player gets a message that says which of the two it is.
+create or replace function public.move_booking(p_id uuid, p_day date, p_hour integer, p_scope text default 'once')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  b public.bookings;
+  s public.booking_series;
+  k public.bookings;
+  shift integer;
+  why text;
+  was text;
+  trainer text;
+  today date := (now() at time zone 'Europe/Brussels')::date;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  select * into b from public.bookings where id = p_id;
+  if not found or not public._can_coach(b.trainer_id) then raise exception 'Booking not found.'; end if;
+  if b.status not in ('pending', 'confirmed') then raise exception 'Only a session that is still to come can be moved.'; end if;
+  if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session has already started.'; end if;
+  if p_scope not in ('once', 'series') then raise exception 'Invalid choice.'; end if;
+  if p_day is null or p_hour is null or p_hour < 0 or p_hour > 23 then raise exception 'Invalid time.'; end if;
+  if public._slot_start(p_day, p_hour) <= now() then raise exception 'Pick a moment that is still to come.'; end if;
+  if p_day > today + 180 then raise exception 'Pick a day within six months.'; end if;
+  if p_day = b.day and p_hour = b.hour then raise exception 'Pick another day or hour.'; end if;
+  trainer := (select split_part(name, ' ', 1) from public.trainers where id = b.trainer_id);
+  was := public._slot_label(b.day, b.hour);
+  perform pg_advisory_xact_lock(hashtext('room-' || p_day::text));
+  begin
+    if p_scope = 'series' then
+      if b.series_id is null then raise exception 'This session is not part of a weekly session.'; end if;
+      select * into s from public.booking_series where id = b.series_id for update;
+      if s.status = 'ended' then raise exception 'This weekly session has stopped.'; end if;
+      shift := p_day - b.day;
+      -- later weeks first when moving forward, so a week never lands on the one after it
+      for k in select * from public.bookings where series_id = s.id and status in ('pending', 'confirmed') and day >= b.day
+               order by case when shift > 0 then -1 else 1 end * (day - date '2000-01-01') loop
+        why := public._slot_taken(k.trainer_id, k.user_id, k.day + shift, p_hour, k.id);
+        if why is not null then
+          raise exception '% is not possible: %.', public._slot_label(k.day + shift, p_hour), why;
+        end if;
+        update public.bookings set moved_from = public._slot_label(k.day, k.hour), day = k.day + shift, hour = p_hour,
+               reminder_pushed_at = null where id = k.id;
+      end loop;
+      update public.booking_series set weekday = extract(isodow from p_day)::int, hour = p_hour,
+             next_day = next_day + shift, last_day = last_day + shift where id = s.id returning * into s;
+      perform public._push(b.user_id, '📅 Weekly session changed',
+        trainer || ' · now ' || public._series_label(s) || ', from ' || to_char(p_day, 'Dy DD Mon'), 'profile.html#overview', 'move-' || b.id);
+    else
+      why := public._slot_taken(b.trainer_id, b.user_id, p_day, p_hour, b.id);
+      if why is not null then raise exception 'That moment is not possible: %.', why; end if;
+      update public.bookings set moved_from = was, day = p_day, hour = p_hour, reminder_pushed_at = null where id = b.id;
+      perform public._push(b.user_id, '📅 Session moved',
+        trainer || ' · ' || was || ' → ' || public._slot_label(p_day, p_hour)
+          || case when b.series_id is not null then ' · this week only' else '' end, 'profile.html#overview', 'move-' || b.id);
+    end if;
+  exception when unique_violation then
+    raise exception 'That moment is already taken.';
+  end;
+  select * into b from public.bookings where id = p_id;
   return public._booking_json(b);
 end $$;
 
@@ -1289,6 +1633,9 @@ begin
   if b.status = 'expired' then raise exception 'This request expired because it wasn''t answered in time.'; end if;
   if b.status <> 'pending' then raise exception 'This request has already been handled.'; end if;
   if public._slot_start(b.day, b.hour) <= now() then raise exception 'This session time has already passed.'; end if;
+  if b.series_id is not null and exists (select 1 from public.booking_series q where q.id = b.series_id and q.status = 'requested') then
+    return public._series_answer(b, p_accept);  -- a weekly request: one answer for all its weeks
+  end if;
   update public.bookings
     set status = case when p_accept then 'confirmed' else 'declined' end, responded_at = now(),
         refund_status = case when p_accept then refund_status else public._refund_state(b) end
@@ -3168,6 +3515,17 @@ declare
   tag text := 'booking-' || b.id;
   by_player boolean := auth.uid() = b.user_id;
 begin
+  -- a weekly session answered, stopped or planned as a whole sends its own single message
+  if coalesce(current_setting('levelup.quiet', true), '') = '1' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  -- a weekly request that expires: one message, for its first week
+  if tg_op = 'UPDATE' and new.status = 'expired' and new.series_id is not null
+     and exists (select 1 from public.bookings o where o.series_id = new.series_id and o.id <> new.id
+                 and o.status = 'expired' and o.day < new.day and o.responded_at > now() - interval '1 minute') then
+    return new;
+  end if;
   if tg_op = 'DELETE' then
     if was in ('pending', 'confirmed') then
       perform public._push(coach, case when was = 'pending' then 'Request withdrawn' else 'Session cancelled' end,
@@ -3589,6 +3947,7 @@ begin
   n := n + public._push_request_reminders();
   perform public._settle_player_of_month();
   n := n + public._push_streak_reminders();
+  perform public._series_extend();
   return n;
 end $$;
 
@@ -4964,6 +5323,18 @@ revoke execute on function public.delete_trainer_hours(uuid) from public, anon;
 grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) to authenticated;
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
+revoke execute on function public._book(uuid, text, date, integer, text, text, text, text, uuid) from public, anon, authenticated;
+revoke execute on function public._series_json(public.booking_series) from public, anon, authenticated;
+revoke execute on function public._series_label(public.booking_series) from public, anon, authenticated;
+revoke execute on function public._series_answer(public.bookings, boolean) from public, anon, authenticated;
+revoke execute on function public._series_extend() from public, anon, authenticated;
+revoke execute on function public._slot_taken(text, uuid, date, integer, uuid) from public, anon, authenticated;
+revoke execute on function public.book_series(text, date, integer, integer, text, text, text) from public, anon;
+revoke execute on function public.series_stop(uuid) from public, anon;
+revoke execute on function public.move_booking(uuid, date, integer, text) from public, anon;
+grant execute on function public.book_series(text, date, integer, integer, text, text, text) to authenticated;
+grant execute on function public.series_stop(uuid) to authenticated;
+grant execute on function public.move_booking(uuid, date, integer, text) to authenticated;
 grant execute on function public.save_body_stats(jsonb) to authenticated;
 revoke execute on function public._week_checkin(uuid) from public, anon, authenticated;
 revoke execute on function public.check_in() from public, anon;

@@ -102,6 +102,33 @@ and approves the application in the admin dashboard: either linked to an existin
 new trainer card, which then appears in the team, the schedule filter and the booking board automatically. Coaching
 XP goes to the trainer's own account, so the level on the team card and in the profile is the same.
 
+## Weekly sessions and moving a session
+A player who found their trainer can ask for the same hour every week, and a trainer can move a session.
+- **Asking:** in the booking window, "How often?": just this once (default), every week for 4, 8 or 12 weeks, or every
+  week until I stop it. The request goes to the trainer as **one** request. The first week must be free; a later week
+  whose hour is already taken is left out and named. Every week is an ordinary booking (`bookings.series_id`): the same
+  price rules (first-session price for the first one, pack credits when there are any), paid per session at the
+  headquarters (no online payment and no free-session voucher for a weekly request), free cancellation per week up to
+  24 hours before, rewarded per session. The series itself (`booking_series`) only says what repeats.
+- **Answering:** the trainer sees one row (Coach tab and the pop-up), "Confirm all weeks" or Decline: one answer for
+  every week, and one message to the player. A request that isn't answered in time expires as a whole.
+- **The weeks that follow:** bookings exist up to the booking window (4 weeks ahead). As a new week comes inside it,
+  `_series_extend()` plans it, confirmed at once and without a message (it runs with every profile load and in the
+  10-minute job). If the hour is taken that week, the week is left out and both hear it ("Weekly session not planned").
+  A series closes by itself after its last week.
+- **Moving (trainer or admin):** "Move" next to an upcoming session in the Coach tab, after agreeing on it with the
+  client in the chat (the window links to it). Pick the new day and hour; for a weekly session choose **only this
+  week** or **every week from then on** (then the series gets the new day and hour, also for the weeks still to be
+  planned). The new moment must be free for the trainer, the player and the room. The player gets a message that says
+  which of the two it is ("📅 Session moved · this week only" / "📅 Weekly session changed · now every Tuesday 19:00"),
+  and "My sessions" shows "Moved by your trainer · was …". A single session can be moved the same way.
+- **Stopping:** the player ("Stop weekly" under My sessions) or the trainer (in the move window). The weeks to come
+  go away at no cost; when the player stops, a confirmed session that starts within 24 hours stays (cancel that one
+  yourself, with the usual rule). The other side gets one message.
+- Server: `book_series`, `_series_answer` (through `respond_booking`), `_series_extend`, `move_booking`, `series_stop`;
+  `book_session` and the weekly sessions share `_book` (all checks and the price). Limits: 2 to 26 weeks or open-ended,
+  at most 4 weekly sessions per player.
+
 ## Group classes
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every
 `class_*` function is in `supabase/schema.sql` ("Group classes"). Settings in `app_config`: `class_price` (12),

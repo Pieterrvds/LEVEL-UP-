@@ -3319,3 +3319,16 @@ body.fy-open #mpHero { display: none; }
 @keyframes lu-out-right { to { transform: translateX(100%); } }
 @keyframes lu-in-right { from { transform: translateX(100%); } }
 @keyframes lu-in-left { from { transform: translateX(-100%); } }
+
+/* ---------- Weekly sessions: the same hour with the same trainer every week ---------- */
+.weekly-chip { display: inline-block; padding: 2px 8px; font-family: var(--sans); font-size: 0.7rem; font-style: normal; font-weight: 700; letter-spacing: 0; text-transform: none; white-space: nowrap; color: #000; background: var(--gold); border-radius: 99px; vertical-align: middle; }
+.weekly-line { margin: 4px 0 2px; font-size: 0.9rem; }
+.weekly-list { margin-bottom: 14px; }
+.weekly-row { border-left-style: dashed; }
+.moved-note { margin: 4px 0 0; font-size: 0.82rem; color: var(--gold); }
+.repeat-field select, .move-when select, .move-when input { width: 100%; }
+.repeat-note { margin: -4px 0 4px; padding: 10px 12px; font-size: 0.86rem; line-height: 1.45; color: var(--muted); background: #000; border: 1px dashed var(--gold); border-radius: 10px; }
+.repeat-note b { color: var(--text); }
+.move-when { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.move-dialog .link-btn { white-space: nowrap; }
+@media (max-width: 420px) { .move-when { grid-template-columns: 1fr; } }

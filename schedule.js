@@ -504,6 +504,16 @@ function renderBookingDialog(message = "") {
         <label class="partner-field" hidden>Who do you train with?
           <input type="text" name="partner" maxlength="40" placeholder="Name of your training buddy">
         </label>
+        <label class="repeat-field">How often?
+          <select name="repeat">
+            <option value="">Just this once</option>
+            <option value="4">Every week · 4 weeks</option>
+            <option value="8">Every week · 8 weeks</option>
+            <option value="12">Every week · 12 weeks</option>
+            <option value="open">Every week · until I stop it</option>
+          </select>
+        </label>
+        <p class="repeat-note" id="repeatNote" hidden><b>${LevelUp.seriesText({ weekday: ((LevelUp.parseDate(date).getDay() + 6) % 7) + 1, hour })}</b>. <span>Your trainer answers once for all weeks. You pay per session at the headquarters, or with your pack credits. Every week can be cancelled for free up to ${LevelUp.FREE_CANCEL_HOURS} hours before, and you stop the weekly session whenever you want.</span></p>
         ${paymentOptions(trainerId)}
         <label>Note for your trainer (optional)
           <textarea name="note" rows="3" maxlength="300" placeholder="Your goal, experience level or preferred location…"></textarea>
@@ -529,9 +539,11 @@ function renderBookingDialog(message = "") {
     submit.textContent = "Booking…";
     try {
       const form = event.target.elements;
-      const pay = usesReward(form.kind.value) ? "reward"
+      const weeks = form.repeat?.value || 0;
+      const pay = weeks ? "in_person" : usesReward(form.kind.value) ? "reward"
         : needsPayment(pendingSlot.trainerId, form.kind.value) ? (form.pay?.value || "in_person") : "in_person";
-      const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value, pay });
+      const booked = await LevelUp.bookSession({ ...pendingSlot, note: form.note.value.trim(), kind: form.kind.value, partner: form.partner.value, pay, weeks });
+      if (booked.weekly) { showBookedWeekly(booked); return; }
       if (booked.status === "awaiting_payment") {
         submit.textContent = "To the payment page…";
         try {
@@ -596,7 +608,15 @@ function updateSubmitLabel() {
   const form = document.getElementById("bookingForm");
   if (!form || !pendingSlot) return;
   const kind = form.elements.kind.value;
-  const pays = needsPayment(pendingSlot.trainerId, kind);
+  // a weekly session: no free-session voucher and no online payment (every week is paid on its own)
+  const weekly = Boolean(form.elements.repeat?.value);
+  const reward = form.querySelector('[name="useReward"]');
+  if (reward) {
+    reward.disabled = weekly || kind === "duo";
+    if (reward.disabled) reward.checked = false;
+  }
+  document.getElementById("repeatNote").hidden = !weekly;
+  const pays = !weekly && needsPayment(pendingSlot.trainerId, kind);
   form.querySelector(".pay-picker").hidden = !pays;
   const q = LevelUp.quote(pendingSlot.trainerId, kind);
   const free = form.querySelector("[data-solo-free]");
@@ -604,7 +624,8 @@ function updateSubmitLabel() {
     free.hidden = !usesReward("solo");
     form.querySelector("[data-solo-price]").hidden = !free.hidden;
   }
-  document.getElementById("bookSubmit").textContent = pays && form.elements.pay?.value === "online"
+  document.getElementById("bookSubmit").textContent = weekly ? "Send weekly request ▶"
+    : pays && form.elements.pay?.value === "online"
     ? `Pay ${LevelUp.euro(q.price)} & send request ▶`
     : usesReward(kind) ? "Book my free session ▶" : "Send booking request ▶";
 }
@@ -621,7 +642,7 @@ bookingDialog.addEventListener("change", (event) => {
       if (reward.disabled) reward.checked = false;
     }
   }
-  if (["kind", "pay", "useReward"].includes(event.target.name)) updateSubmitLabel();
+  if (["kind", "pay", "useReward", "repeat"].includes(event.target.name)) updateSubmitLabel();
 });
 
 // Online payment couldn't start: offer to pay at the HQ so the request still goes out
@@ -670,6 +691,28 @@ function showBooked(booked) {
     <div class="btn-row">
       <a class="btn btn-small btn-primary" href="${LevelUp.googleCalendarLink(pendingSlot)}" target="_blank" rel="noopener">Add to Google Calendar</a>
       <a href="profile.html#overview" class="btn btn-small">My sessions</a>
+      <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
+    </div>`;
+  pendingSlot = null;
+}
+
+// A weekly request is out: which weeks are planned now, and which could not be
+function showBookedWeekly(booked) {
+  const trainer = LevelUp.trainerById(pendingSlot.trainerId);
+  const { series, planned, skipped } = booked.weekly;
+  const dayText = (key) => LevelUp.parseDate(key).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  bookingContent.innerHTML = `
+    <p class="section-kicker">Weekly session</p>
+    <h2 class="auth-title" id="bookingTitle">Weekly request sent!</h2>
+    <p class="booking-when"><span>${LevelUp.seriesText(series)}</span> · <span>${LevelUp.seriesUntil(series)}</span></p>
+    <p><span class="status-chip pending">Pending</span> ${esc(trainer.name)} has been notified and answers once for all weeks. You'll get an email and see the status in your profile.</p>
+    <p class="booking-price"><strong>${planned.length === 1 ? "1 week is planned now" : `${planned.length} weeks are planned now`}</strong>: <span data-no-i18n>${planned.map((b) => dayText(b.date)).join(" · ")}</span>. <span>The weeks after that are added by themselves, ${LevelUp.BOOKING_WEEKS_AHEAD} weeks ahead.</span></p>
+    ${skipped.length ? `<p class="booking-warning"><span>Not planned, that hour is already taken:</span> <span data-no-i18n>${skipped.map((x) => dayText(x.date)).join(" · ")}</span>. <span>Pick another hour for that week if you want.</span></p>` : ""}
+    <p class="booking-price">You pay per session at the headquarters (${esc(LevelUp.HQ_ADDRESS)}), or with your pack credits. Every week can be cancelled for free up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
+    <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after every session, when ${esc(trainer.short)} rewards it</span></div>
+    ${LevelUp.pushCalloutHtml(`Get a notification as soon as ${trainer.short} confirms.`)}
+    <div class="btn-row">
+      <a href="profile.html#overview" class="btn btn-small btn-primary">My sessions</a>
       <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
     </div>`;
   pendingSlot = null;

@@ -139,10 +139,27 @@ function renderSessions() {
       <li class="session-row" style="--c:${trainer.color}">
         <img src="${trainer.img}" alt="" data-coach="${trainer.id}">
         <div>
-          <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}</p>
+          <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}${b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
           <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${price}${note ? ` · ${note}` : ""}</p>
+          ${b.movedFrom && open ? `<p class="moved-note">📅 <span>Moved by your trainer</span> · <span>was ${esc(b.movedFrom)}</span></p>` : ""}
         </div>
         <div class="session-actions">${side}</div>
+      </li>`;
+  };
+
+  // weekly sessions that wait for the trainer or run
+  const weekly = (LevelUp.getPlayer().series || []).filter((w) => w.status !== "ended");
+  const weeklyRow = (w) => {
+    const trainer = LevelUp.trainerById(w.trainerId);
+    return `
+      <li class="session-row weekly-row" style="--c:${trainer?.color || ""}">
+        ${trainer ? `<img src="${trainer.img}" alt="" data-coach="${trainer.id}">` : ""}
+        <div>
+          <p class="session-trainer"><span class="weekly-chip">🔁 Weekly</span> <span>${LevelUp.seriesText(w)}</span> ${w.status === "requested" ? `<span class="status-chip pending">Waiting for confirmation</span>` : `<span class="status-chip confirmed">Running</span>`}</p>
+          <p class="muted"><span data-no-i18n>${esc(trainer?.name || "")}</span> · <span>${LevelUp.seriesUntil(w)}</span> · <span>${w.upcoming === 1 ? "1 week planned" : `${w.upcoming} weeks planned`}</span></p>
+          <p class="form-error" role="alert"></p>
+        </div>
+        <div class="session-actions"><button type="button" class="btn btn-small btn-ghost" data-series-stop="${w.id}">${w.status === "requested" ? "Withdraw" : "Stop weekly"}</button></div>
       </li>`;
   };
 
@@ -152,6 +169,7 @@ function renderSessions() {
         <h2>My sessions</h2>
         <a href="index.html#schedule" class="btn btn-small btn-primary">Book a trainer</a>
       </div>
+      ${weekly.length ? `<ul class="session-list weekly-list">${weekly.map(weeklyRow).join("")}</ul>` : ""}
       ${upcoming.length
         ? `<ul class="session-list">${upcoming.map(row).join("")}</ul>`
         : `<p class="muted">No upcoming sessions. Book an hour with one of our trainers.</p>`}
@@ -394,9 +412,12 @@ function renderCoachPanel() {
   const now = new Date();
   const today = LevelUp.dateKey();
   const all = LevelUp.getCoachBookings();
-  const requests = all.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now);
+  const requests = LevelUp.oneRowPerSeries(all.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now));
   const toSettle = all.filter((b) => LevelUp.canSettle(b));
-  const upcoming = all.filter((b) => b.status === "confirmed" && b.date > today);
+  const upcoming = all.filter((b) => b.status === "confirmed" && LevelUp.slotStart(b.date, b.hour) > now && !LevelUp.canSettle(b));
+  const asked = (b) => b.series && b.series.status === "requested"; // a weekly request: one answer for all its weeks
+  const weeksOf = (b) => all.filter((x) => x.series && x.series.id === b.series.id && x.status === "pending").length;
+  const moveBtn = (b) => `<button type="button" class="btn btn-small btn-ghost" data-move-booking="${b.id}">Move</button>`;
   const missed = all.filter((b) => b.status === "confirmed" && b.date < today && !LevelUp.canSettle(b));
   const settledToday = all.filter((b) => b.date === today && ["completed", "no_show", "late_cancel"].includes(b.status));
 
@@ -404,9 +425,10 @@ function renderCoachPanel() {
     <li class="session-row coach-row">
       ${LevelUp.avatarHtml({ name: b.name, avatar: b.avatar })}
       <div>
-        <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}</p>
+        <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}${b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
+        ${asked(b) ? `<p class="weekly-line"><b>${LevelUp.seriesText(b.series)}</b> · <span>${LevelUp.seriesUntil(b.series)}</span> · <span>${weeksOf(b) === 1 ? "1 week planned now" : `${weeksOf(b)} weeks planned now`}</span></p>` : ""}
         ${LevelUp.healthFlagHtml(b.health)}
-        <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : b.payMethod === "reward" ? " · free session 🎁" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+        <p class="muted">${asked(b) ? "First session: " : ""}${LevelUp.formatSlot(b.date, b.hour)}${b.movedFrom && b.status === "confirmed" ? ` · moved, was ${esc(b.movedFrom)}` : ""}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : b.payMethod === "reward" ? " · free session 🎁" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
         <p class="form-error" role="alert"></p>
       </div>
       <div class="coach-actions">${actions}</div>
@@ -423,7 +445,7 @@ function renderCoachPanel() {
       <div class="gc-wrap" id="coachClasses"></div>
       <h3 class="panel-sub">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
       ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
-          <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">Confirm</button>
+          <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">${asked(b) ? "Confirm all weeks" : "Confirm"}</button>
           <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
         : `<p class="muted">No open requests.</p>`}
       <h3 class="panel-sub">To settle ${toSettle.length ? `<span class="count-chip">${toSettle.length}</span>` : ""}</h3>
@@ -433,13 +455,100 @@ function renderCoachPanel() {
           ${LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-coach="noshow" data-id="${b.id}">No-show</button>` : ""}`)).join("")}</ul>`
         : `<p class="muted">Nothing to settle.</p>`}
       ${settledToday.length ? `<h3 class="panel-sub">Settled today</h3><ul class="session-list">${settledToday.map((b) => row(b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul>` : ""}
-      ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3><ul class="session-list">${upcoming.map((b) => row(b)).join("")}</ul>` : ""}
+      ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3>
+        <p class="muted small-text">Can't make it? Agree on another moment with your client in the chat, then move the session here: they get a message.</p>
+        <ul class="session-list">${upcoming.map((b) => row(b, moveBtn(b))).join("")}</ul>` : ""}
       <details class="my-hours" id="myHoursBox" ${state.hoursOpen ? "open" : ""}>
         <summary><span class="panel-sub">My opening hours</span> <span class="muted small-text">${esc(LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId) || "no weekly hours yet: players can't book you")}</span></summary>
         <div id="myHours"></div>
       </details>
       ${missed.length ? `<h3 class="panel-sub">Past the ${LevelUp.REWARD_WINDOW_DAYS}-day window</h3><p class="muted small-text">Ask Pieter to settle these in the admin dashboard.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
     </section>`;
+}
+
+// ---------- The trainer moves a session (after agreeing on it with the client in the chat) ----------
+let moveDialog = null;
+function openMove(id) {
+  const b = LevelUp.getCoachBookings().find((x) => x.id === id);
+  if (!b) return;
+  if (!moveDialog) {
+    moveDialog = document.createElement("dialog");
+    moveDialog.className = "auth-dialog move-dialog";
+    moveDialog.setAttribute("aria-labelledby", "moveTitle");
+    document.body.appendChild(moveDialog);
+    moveDialog.addEventListener("click", (event) => {
+      if (event.target === moveDialog || event.target.closest("[data-close]")) moveDialog.close();
+    });
+  }
+  const first = esc(String(b.name || "").split(" ")[0]);
+  const weekly = b.series && b.series.status === "active";
+  moveDialog.innerHTML = `
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <p class="section-kicker">Coach</p>
+    <h2 class="auth-title" id="moveTitle">Move this session</h2>
+    <p class="booking-when"><span data-no-i18n>${esc(b.name)}</span> · ${LevelUp.formatSlot(b.date, b.hour)}</p>
+    ${weekly ? `<p class="weekly-line"><span class="weekly-chip">🔁 Weekly</span> <span>${LevelUp.seriesText(b.series)}</span> · <span>${LevelUp.seriesUntil(b.series)}</span></p>` : ""}
+    <p class="muted">Agree on the new moment with your client first. They get a message when you move it.
+      ${b.userId ? `<button type="button" class="link-btn" data-move-chat>💬 Open the chat</button>` : ""}</p>
+    <form class="auth-form" id="moveForm">
+      <div class="move-when">
+        <label>New day
+          <input type="date" name="date" required min="${LevelUp.dateKey()}" value="${esc(b.date)}">
+        </label>
+        <label>New hour
+          <select name="hour">${Array.from({ length: 17 }, (_, i) => i + 6).map((h) => `<option value="${h}" ${h === b.hour ? "selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("")}</select>
+        </label>
+      </div>
+      ${weekly ? `
+        <fieldset class="kind-picker">
+          <legend>What moves?</legend>
+          <label class="kind-option"><input type="radio" name="scope" value="once" checked>
+            <span><strong>Only this week</strong><span class="kind-price"><small>the other weeks stay as they are</small></span></span></label>
+          <label class="kind-option"><input type="radio" name="scope" value="series">
+            <span><strong>Every week from then on</strong><span class="kind-price"><small>the weekly session gets this new day and hour</small></span></span></label>
+        </fieldset>` : ""}
+      <p class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-block">Move and tell <span data-no-i18n>${first}</span> ▶</button>
+    </form>
+    ${weekly ? `<p class="auth-note"><button type="button" class="link-btn" data-move-stop>Stop this weekly session</button></p>` : ""}`;
+  moveDialog.querySelector("[data-move-chat]")?.addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    try {
+      const t = await LevelUp.chatOpenUser(b.userId);
+      location.href = `chat.html?t=${encodeURIComponent(t?.id || t)}`;
+    } catch (err) {
+      event.target.disabled = false;
+      moveDialog.querySelector(".form-error").textContent = err.message;
+    }
+  });
+  moveDialog.querySelector("[data-move-stop]")?.addEventListener("click", async (event) => {
+    if (!confirm(`Stop the weekly session with ${b.name}? Every week that is still to come is cancelled, and they get a message.`)) return;
+    event.target.disabled = true;
+    try {
+      await LevelUp.stopSeries(b.series.id);
+      moveDialog.close();
+      LevelUp.toast({ title: "Weekly session stopped", text: `${b.name} has been told.`, icon: "🔁", tone: "green" });
+    } catch (err) {
+      event.target.disabled = false;
+      moveDialog.querySelector(".form-error").textContent = err.message;
+    }
+  });
+  moveDialog.querySelector("#moveForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const scope = form.elements.scope?.value || "once";
+      await LevelUp.moveBooking(b.id, form.elements.date.value, form.elements.hour.value, scope);
+      moveDialog.close();
+      LevelUp.toast({ title: scope === "series" ? "Weekly session changed" : "Session moved", text: `${b.name} has been told.`, icon: "📅", tone: "green" });
+    } catch (err) {
+      form.querySelector(".form-error").textContent = err.message;
+      submit.disabled = false;
+    }
+  });
+  if (!moveDialog.open) moveDialog.showModal();
 }
 
 // Trainer's own opening hours: the week planner on desktop, the list editor on small screens
@@ -889,7 +998,7 @@ window.LevelUpProfile = {
 function profileTabs(player) {
   const now = new Date();
   const coach = LevelUp.isTrainer() ? LevelUp.getCoachBookings() : [];
-  const requests = coach.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length;
+  const requests = LevelUp.oneRowPerSeries(coach.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now)).length; // a weekly request counts once
   const toSettle = coach.filter((b) => LevelUp.canSettle(b)).length;
   const needsSetup = !LevelUp.healthValid() ? 1 : 0;
   return [
@@ -979,6 +1088,27 @@ function bindEvents(player) {
         button.closest(".session-row").querySelector(".form-error").textContent = err.message;
       }
     });
+  });
+
+  // a weekly session: the player stops it (or withdraws the request)
+  root.querySelectorAll("[data-series-stop]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const w = (player.series || []).find((x) => x.id === button.dataset.seriesStop);
+      if (!w) return;
+      if (!confirm(w.status === "requested" ? "Withdraw this weekly request?"
+        : "Stop this weekly session? The weeks that are still to come are cancelled at no cost. A session that starts within 24 hours stays: cancel that one yourself if needed.")) return;
+      button.disabled = true;
+      try {
+        const r = await LevelUp.stopSeries(w.id);
+        LevelUp.toast({ title: "Weekly session stopped", text: r.kept ? "One session starts within 24 hours and stays planned." : "The weeks to come are cancelled at no cost.", icon: "🔁", tone: "green" });
+      } catch (err) {
+        button.disabled = false;
+        button.closest(".session-row").querySelector(".form-error").textContent = err.message;
+      }
+    });
+  });
+  root.querySelectorAll("[data-move-booking]").forEach((button) => {
+    button.addEventListener("click", () => openMove(button.dataset.moveBooking));
   });
 
   const applyForm = document.getElementById("applyForm");
