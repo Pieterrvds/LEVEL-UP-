@@ -346,26 +346,39 @@
         </article>`).join("")}</div>`;
   }
 
-  // ---------- From the club: the latest photos of other members (with a heart) and the latest news ----------
+  // ---------- From the club: the latest posts (photos with a text, hearts and comments) and the latest news ----------
   function clubHtml(player, data) {
-    const photos = (data?.photos || []).slice(0, 4);
+    const posts = (data?.photos || []).slice(0, 6);
     const news = (LevelUp.getNews() || [])[0];
-    const photoHtml = photos.map((ph) => `
-      <figure class="fy-post">
-        <a href="${esc(LevelUp.memberLink(ph.trainerId ? { trainerId: ph.trainerId } : { userId: ph.userId }))}#photo-${esc(ph.id)}" aria-label="${esc(T("Open the photo of {0}", String(ph.name || "").split(" ")[0]))}">
-          <img src="${esc(ph.url)}" alt="" loading="lazy" decoding="async">
-          <figcaption><b>${esc(String(ph.name || "").split(" ")[0])}</b>${esc(ph.caption || "")}</figcaption>
-        </a>
-        <button type="button" class="fy-heart ${ph.liked ? "on" : ""}" data-fy-like="${esc(ph.id)}" aria-pressed="${ph.liked}" aria-label="${esc(ph.liked ? T("Take your heart back") : T("Give this photo a heart"))}"><span aria-hidden="true">♥</span> <span>${ph.likes || ""}</span></button>
-      </figure>`).join("");
     const newsHtml = news ? `
       <button type="button" class="fy-news" data-fy-news>${/^[A-Za-z0-9]/.test(news.title || "") ? `<span aria-hidden="true">📣</span>` : ""}<span><b>${esc(T(news.title || ""))}</b><span>${esc(T(news.body || ""))}</span></span></button>` : "";
-    const empty = !photos.length ? `
-      <div class="fy-empty"><p class="fy-note">${T("No photos from other members yet. Be the first to show how you train.")}</p>
-        <a class="btn btn-small btn-ghost" ${tabLink("page")}>📷 ${T("Add a photo to your page")}</a></div>` : "";
-    return `<p class="fy-k">${T("From the club")}</p>
-      <div class="fy-in">${photos.length ? `<div class="fy-posts" data-n="${photos.length}">${photoHtml}</div>` : empty}${newsHtml}</div>`;
+    const empty = !posts.length ? `
+      <div class="fy-empty"><p class="fy-note">${T("No posts yet. Be the first to show how you train.")}</p></div>` : "";
+    return `<p class="fy-k">${T("From the club")}<button type="button" class="btn btn-small btn-ghost fy-post-new" data-fy-post>＋ ${T("New post")}</button></p>
+      ${newsHtml}${empty}
+      <div class="fy-posts">${posts.map((ph, i) => LevelUpPosts.cardHtml(ph, { owner: true, remove: ph.mine ? "mine" : "", size: postSize(ph, i, posts) })).join("")}</div>`;
   }
+  // A computer shows the posts as a grid of big and small ones, at most three next to each other. Which post is big
+  // looks random but follows from the post itself, so it doesn't jump around every time the screen draws again.
+  // (A phone ignores it: there the posts stand under each other, all as wide as the screen.)
+  function postSize(post, i, all) {
+    const hash = (id) => [...String(id)].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7);
+    const big = (p) => hash(p.id) % 3 === 0;
+    if (!all.some(big)) return i === (hash(all[0].id) % Math.min(all.length, 3)) ? "l" : "s"; // never all the same size
+    return big(post) ? "l" : "s";
+  }
+  // The posts on this screen, for posts.js
+  const postStore = {
+    find: (id) => (LevelUp.getForYou()?.photos || []).find((ph) => ph.id === id),
+    put(fresh) {
+      const data = LevelUp.getForYou();
+      if (!data) return;
+      data.photos = data.photos.map((ph) => (ph.id === fresh.id ? { ...ph, ...fresh, urls: fresh.urls || ph.urls, comments: fresh.comments || [], ownerTrainerId: fresh.ownerTrainerId || ph.ownerTrainerId } : ph));
+      draw(true);
+    },
+    removed() { draw(true); },
+    askRemove: () => "Remove this post from your page?"
+  };
 
   // ---------- Drawing ----------
   function build() {
@@ -388,8 +401,10 @@
     built = true;
     startMascot();
   }
-  const set = (name, html) => {
+  const set = (name, html, now = false) => {
     if (lastHtml[name] === html) return; // unchanged: the card (and a swipe row halfway) stays as it is
+    // someone is writing a comment: the posts stay as they are until it is sent (or they tapped something themselves)
+    if (name === "club" && !now && parts.club.querySelector(".mp-comment-form input:focus, .mp-comment-form input:not(:placeholder-shown)")) return;
     lastHtml[name] = html;
     parts[name].innerHTML = html;
   };
@@ -416,7 +431,7 @@
       </section>`;
   }
 
-  function draw() {
+  function draw(now = false) {
     if (!host) return;
     const player = LevelUp.getPlayer();
     if (!player || !LevelUp.isReady()) {
@@ -445,7 +460,7 @@
     set("race", raceHtml(player, data));
     set("goals", goalsHtml(player, data));
     set("picks", picksHtml(player));
-    set("club", clubHtml(player, data));
+    set("club", clubHtml(player, data), now === true);
     mascot?.fit();
   }
 
@@ -466,29 +481,11 @@
       draw();
     }
   }
-  async function likePhoto(id) {
-    const data = LevelUp.getForYou();
-    const ph = data?.photos.find((x) => String(x.id) === String(id));
-    if (!ph || ph.busy) return;
-    ph.busy = true;
-    ph.liked = !ph.liked; ph.likes = Math.max(0, ph.likes + (ph.liked ? 1 : -1)); // show it right away
-    draw();
-    try {
-      const r = await LevelUp.photoLike(ph.id);
-      ph.liked = Boolean(r?.liked); ph.likes = Number(r?.likes) || 0;
-    } catch (err) {
-      ph.liked = !ph.liked; ph.likes = Math.max(0, ph.likes + (ph.liked ? 1 : -1));
-      LevelUp.toast({ title: T("No heart sent"), text: err.message, icon: "!", tone: "gold" });
-    } finally {
-      ph.busy = false;
-      draw();
-    }
-  }
   function onClick(event) {
     const check = event.target.closest("[data-fy-checkin]");
     if (check) { checkIn(check); return; }
-    const like = event.target.closest("[data-fy-like]");
-    if (like) { event.preventDefault(); likePhoto(like.dataset.fyLike); return; }
+    if (event.target.closest("[data-fy-post]")) { LevelUpPosts.compose(); return; }
+    if (event.target.closest("[data-post]")) { LevelUpPosts.handleClick(event, postStore); return; }
     const cls = event.target.closest("[data-fy-class]");
     if (cls) {
       if (window.LevelUpSchedule?.openClass && LevelUp.classById(cls.dataset.fyClass)) window.LevelUpSchedule.openClass(cls.dataset.fyClass);
@@ -505,12 +502,13 @@
     host = el;
     host.classList.add("fy");
     host.addEventListener("click", onClick);
+    host.addEventListener("submit", (event) => LevelUpPosts.handleSubmit(event, postStore));
     draw();
   }
 
-  document.addEventListener("levelup:change", draw);
-  document.addEventListener("levelup:view", draw); // the phone page comes into view
-  PHONE.addEventListener?.("change", draw);
+  document.addEventListener("levelup:change", () => draw());
+  document.addEventListener("levelup:view", () => draw()); // the phone page comes into view
+  PHONE.addEventListener?.("change", () => draw());
   if (home) mount(document.getElementById("fyHome"));
   window.LevelUpForYou = { mount, draw };
 })();

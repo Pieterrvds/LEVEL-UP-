@@ -42,6 +42,7 @@ Desktop is unchanged. The phone rules live in the `@media (max-width: 640px / 76
 - `admin.js`: admin dashboard
 - `classes.js`: group classes for trainers and the admin: plan, who's coming, tick off, finish (profile Coach tab + admin)
 - `room.js`: the admin's Gym room tab: how busy the room is, rentals, the room's settings
+- `posts.js`: a post (photos with a text, hearts, comments) and the window to make one; used by the member page and "For you"
 - `foryou.js`: "For you", a member's own start screen (see "For you: the start screen and the weekly check-in")
 - `script.js`, `shop.js`, `profile.js`, `chat.js`: page-specific behaviour
 - `levelup-celebrate.js`: the celebration animation, loaded by `game.js` when one is due (see "Celebrations")
@@ -591,20 +592,22 @@ card ("Meet the team": the photo or name, and the small coach faces on the train
   a coach the classes they give. A tap opens the sign-up window.
 - **Achievements** with their names, and **Lately**: group classes done, achievements unlocked, photos posted and
   Player of the Month, newest first.
-- **Photos:** big, one under the other, each with a ♥ (tap again to take it back) and **comments**. A comment can
-  get a ♥ too. The owner of the photo gets a notification for a comment (never for likes, and there is no celebration
-  for these). You remove your own comment, any comment under your own photo, and an admin removes anything.
-  At most 300 characters and 6 comments a minute.
+- **Posts:** a post is one to six photos with a text (up to 500 characters). Big, one under the other; several photos
+  swipe sideways with a counter ("2 / 3"). Each post has a ♥ (tap again to take it back) and **comments**; a comment
+  can get a ♥ too. The owner gets a notification for a comment (never for likes, and there is no celebration for
+  these). You remove your own comment, any comment under your own post, and an admin removes anything. At most 300
+  characters and 6 comments a minute. The same post, with the same hearts and comments, shows on the start screen
+  ("From the club"), where members react too. `posts.js` draws a post and holds the window for a new one.
 - **What it never shows:** email, body stats, health questionnaire, payments, orders or 1:1 sessions.
 - **Who sees it:** members see each other only when logged in. A coach page is public, like the coach card; visitors
   see the photos and counts but not the comments. A member can make their page private (Settings → Account →
   "Other members can see my page"): others then only see name and photo, and can't react to the photos.
 - **Your own text and photos:** a text about yourself (up to 1200 characters, blank lines are kept; on your own
-  page it shows the way others read it, with a ✎ Change button that opens it for writing), up to 12 photos with a caption, and
+  page it shows the way others read it, with a ✎ Change button that opens it for writing), up to 30 posts ("New post": pick up to six photos, write a text), and
   on the My page tab; the private switch is under Settings → Account. Photos are shrunk in the browser (longest side 1280 px) and stored in the Storage bucket
   `avatars`, in the member's own folder, like the profile photo.
-- **Moderation:** an admin sees every page and can remove any photo or comment; a removed photo's file is deleted too.
-- Files: `profile.html`, `member.js`, `member.css` (the page), `profile.js`, `profile.css` (the account tabs). Server: `public_profile`, `set_profile`, `photo_add`,
+- **Moderation:** an admin sees every page and can remove any post or comment; the files of a removed post are deleted too.
+- Files: `profile.html`, `member.js`, `member.css` (the page), `profile.js`, `profile.css` (the account tabs). Server: `public_profile`, `set_profile`, `post_add` (`photo_add` is the older call with one photo),
   `photo_delete`, `photo_like`, `photo_comment`, `photo_comment_delete`, `photo_comment_like` and the tables
   `profile_photos`, `photo_likes`, `photo_comments`, `photo_comment_likes` in `supabase/schema.sql`.
   The privacy policy (`privacy.html`) describes all this.
@@ -655,16 +658,18 @@ end of `style.css`).
   5. *Almost there:* the three goals you are closest to (loyalty card, next rank, achievements with their progress).
   6. *Picked for you:* group classes you are not in yet, one card per kind: a class you did before first, then your
      coach's, then by date. "Sign up" opens the same window as the schedule. No class planned: the coaches.
-  7. *From the club:* the latest photos other members and coaches put on their page (heart them here, a tap opens the
-     page) and the latest news item.
+  7. *From the club:* the latest news item and the latest posts of members and coaches, your own too: whole posts,
+     as wide as the screen, with their photos (swipe sideways), the text, the ♥ and the comments. You write a comment
+     and give hearts right there; the name opens the member's page, a tap on a photo opens it large. "＋ New post"
+     makes a post from here (it lands on your page and in this list).
 - **Weekly check-in:** one per week (Monday–Sunday, Brussels time), +25 XP, and the week counts for the streak. The tap
   on the start screen and saving your body stats are the same check-in: whichever comes first that week gets the XP
   (table `checkins`, `_week_checkin`, `check_in()`). The achievement "On track" counts those weeks. When the schema
   runs, weeks with saved body stats from before are taken over as check-ins.
-- **Server:** `for_you()` gives the race, the photos (only from pages that are open to members, never your own) and
+- **Server:** `for_you()` gives the race, the latest posts (only from pages that are open to members, plus your own) and
   the number of trainers you trained with; everything else comes from `my_data` (`checkin: { done, weeks, xp }`).
 - **A database without this yet** (schema not run): the screen still shows, without the check-in button, the race and
-  the photos.
+  the posts.
 
 ## Style (FC Ultimate) and the backup of the old look
 The site looks like a sports game menu: bold slanted letters (Barlow Condensed), slanted buttons and chips, rounded

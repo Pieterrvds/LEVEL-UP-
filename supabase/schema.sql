@@ -204,6 +204,8 @@ create table if not exists public.profile_photos (
   created_at timestamptz not null default now()
 );
 create index if not exists profile_photos_user_idx on public.profile_photos (user_id, created_at desc);
+-- A row is a post: one to six photos with a text. url is the first photo, more_urls the others; caption is the text.
+alter table public.profile_photos add column if not exists more_urls text[] not null default '{}';
 alter table public.profile_photos enable row level security;  -- only through the functions below
 -- Reactions on those photos: a heart on the photo, comments, and a heart on a comment
 create table if not exists public.photo_likes (
@@ -1012,7 +1014,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     'profileVisible', p.profile_visible,
     'celebrations', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'kind', c.kind, 'payload', c.payload, 'date', c.created_at) order by c.id)
                               from public.celebrations c where c.user_id = p.id and c.seen_at is null), '[]'::jsonb),
-    'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
+    'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'url', ph.url, 'urls', to_jsonb(array[ph.url] || ph.more_urls),
+                                  'caption', ph.caption, 'date', ph.created_at) order by ph.created_at desc)
                         from public.profile_photos ph where ph.user_id = p.id), '[]'::jsonb),
     'avatarUrl', p.avatar_url,
     'application', (select jsonb_build_object('status', a.status, 'role', a.role_title, 'specialties', a.specialties,
@@ -2089,7 +2092,15 @@ end $$;
 -- A photo as a member page shows it: likes and comments (with their own likes) for logged-in members
 create or replace function public._photo_json(ph public.profile_photos)
 returns jsonb language sql stable security definer set search_path = public as $$
-  select jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at, 'userId', ph.user_id,
+  select jsonb_build_object('id', ph.id, 'url', ph.url, 'urls', to_jsonb(array[ph.url] || ph.more_urls),
+    'caption', ph.caption, 'date', ph.created_at, 'userId', ph.user_id,
+    -- who posted it (for the start screen, where posts of different members stand under each other)
+    'name', (select coalesce((select t.name from public.trainers t where t.email is not null and lower(t.email) = lower(o.email) and t.active limit 1), o.name)
+             from public.profiles o where o.id = ph.user_id),
+    'avatarUrl', (select o.avatar_url from public.profiles o where o.id = ph.user_id),
+    'ownerTrainerId', (select t.id from public.profiles o join public.trainers t on t.email is not null and lower(t.email) = lower(o.email) and t.active
+                       where o.id = ph.user_id limit 1),
+    'mine', ph.user_id = auth.uid(),
     'likes', (select count(*) from public.photo_likes l where l.photo_id = ph.id),
     'liked', exists (select 1 from public.photo_likes l where l.photo_id = ph.id and l.user_id = auth.uid()),
     'commentCount', (select count(*) from public.photo_comments c where c.photo_id = ph.id),
@@ -2215,21 +2226,36 @@ begin
   return public._player_json(auth.uid());
 end $$;
 
--- Add a photo to your page (at most 12). The file is already in your own Storage folder.
+-- A post on your page: one to six photos with a text (at most 30 posts). The files are already in your own Storage
+-- folder. It shows on your page and, for the other members, on their start screen ("From the club").
+create or replace function public.post_add(p_urls text[], p_text text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  body text := btrim(coalesce(p_text, ''));
+  ok_url text := '^https://' || replace(public._config('storage_host'), '.', '\.')
+                 || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$';
+  u text;
+begin
+  if auth.uid() is null then raise exception 'Log in first.'; end if;
+  if p_urls is null or coalesce(array_length(p_urls, 1), 0) < 1 then raise exception 'Add at least one photo.'; end if;
+  if array_length(p_urls, 1) > 6 then raise exception 'A post takes up to 6 photos.'; end if;
+  foreach u in array p_urls loop
+    if u is null or u !~ ok_url then raise exception 'Invalid photo.'; end if;
+  end loop;
+  if char_length(body) > 500 then raise exception 'Keep the text under 500 characters.'; end if;
+  if (select count(*) from public.profile_photos where user_id = auth.uid()) >= 30 then
+    raise exception 'You can show 30 posts. Remove one first.';
+  end if;
+  insert into public.profile_photos (user_id, url, more_urls, caption)
+  values (auth.uid(), p_urls[1], coalesce(p_urls[2:], '{}'), body);
+  return public._player_json(auth.uid());
+end $$;
+
+-- The older call with one photo (a browser that still has the previous version of the site)
 create or replace function public.photo_add(p_url text, p_caption text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
-  if auth.uid() is null then raise exception 'Log in first.'; end if;
-  if p_url is null or p_url !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
-                                || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
-    raise exception 'Invalid photo.';
-  end if;
-  if char_length(btrim(coalesce(p_caption, ''))) > 140 then raise exception 'Keep the caption under 140 characters.'; end if;
-  if (select count(*) from public.profile_photos where user_id = auth.uid()) >= 12 then
-    raise exception 'You can show 12 photos. Remove one first.';
-  end if;
-  insert into public.profile_photos (user_id, url, caption) values (auth.uid(), p_url, btrim(coalesce(p_caption, '')));
-  return public._player_json(auth.uid());
+  return public.post_add(array[p_url], p_caption);
 end $$;
 
 -- Remove a photo: your own, or any photo as admin (not suitable). Returns its URL so the file can go too.
@@ -2240,7 +2266,7 @@ begin
   if auth.uid() is null then raise exception 'Log in first.'; end if;
   delete from public.profile_photos where id = p_id and (user_id = auth.uid() or public.is_admin()) returning * into ph;
   if not found then raise exception 'Photo not found.'; end if;
-  return jsonb_build_object('url', ph.url, 'userId', ph.user_id);
+  return jsonb_build_object('url', ph.url, 'urls', to_jsonb(array[ph.url] || ph.more_urls), 'userId', ph.user_id);
 end $$;
 
 -- A heart on a photo (tap again to take it back). No notification and no celebration: it just counts.
@@ -2274,7 +2300,7 @@ begin
   insert into public.photo_comments (photo_id, user_id, body) values (p_photo, auth.uid(), msg);
   if ph.user_id <> auth.uid() then
     select name into who from public.profiles where id = auth.uid();
-    perform public._push(ph.user_id, '💬 ' || coalesce(who, 'A member') || ' on your photo', left(msg, 140),
+    perform public._push(ph.user_id, '💬 ' || coalesce(who, 'A member') || ' on your post', left(msg, 140),
       'profile.html?u=' || ph.user_id || '#photo-' || ph.id, 'photo-' || ph.id);
   end if;
   return public._photo_json(ph);
@@ -2368,7 +2394,8 @@ end $$;
 -- What the start screen ("For you") needs on top of your own data:
 --  race: you on the high scores with the player just above and just below you; when you are hidden from the
 --        high scores or a trainer (ranked = false) the top 3 instead
---  photos: the latest photos other members and coaches put on their page (only pages that are open to members)
+--  photos: the latest posts (photos with a text, likes and comments) of members and coaches, your own too;
+--          only from pages that are open to members
 --  trainersDone: with how many different trainers you completed a session (for the "Full squad" achievement)
 create or replace function public.for_you()
 returns jsonb language plpgsql stable security definer set search_path = public as $$
@@ -2400,18 +2427,14 @@ begin
   where b.place between greatest(1, least(m.place - 1, m.total - 2)) and greatest(m.place + 1, 3);
   return jsonb_build_object(
     'race', coalesce(race, '[]'::jsonb), 'ranked', ranked,
-    'photos', coalesce((select jsonb_agg(x.j order by x.at desc) from (
-        select jsonb_build_object('id', ph.id, 'url', ph.url, 'caption', ph.caption, 'date', ph.created_at,
-                 'userId', ph.user_id, 'name', coalesce(t.name, u.name), 'trainerId', t.id,
-                 'likes', (select count(*) from public.photo_likes l where l.photo_id = ph.id),
-                 'liked', exists (select 1 from public.photo_likes l where l.photo_id = ph.id and l.user_id = me),
-                 'commentCount', (select count(*) from public.photo_comments c where c.photo_id = ph.id)) as j,
-               ph.created_at as at
-        from public.profile_photos ph
-        join public.profiles u on u.id = ph.user_id
-        left join public.trainers t on t.email is not null and lower(t.email) = lower(u.email) and t.active
-        where ph.user_id <> me and (u.profile_visible or t.id is not null)
-        order by ph.created_at desc limit 6) x), '[]'::jsonb),
+    'photos', coalesce((select jsonb_agg(public._photo_json(ph) order by ph.created_at desc)
+      from public.profile_photos ph
+      where ph.id in (
+        select q.id from public.profile_photos q
+        join public.profiles u on u.id = q.user_id
+        where q.user_id = me or u.profile_visible
+           or exists (select 1 from public.trainers t where t.email is not null and lower(t.email) = lower(u.email) and t.active)
+        order by q.created_at desc limit 8)), '[]'::jsonb),
     'trainersDone', (select count(distinct k.trainer_id) from public.bookings k where k.user_id = me and k.status = 'completed'));
 end $$;
 
@@ -5211,6 +5234,8 @@ grant execute on function public.photo_comment_like(uuid) to authenticated;
 grant execute on function public.public_profile(uuid, text) to anon, authenticated;
 grant execute on function public.set_profile(jsonb) to authenticated;
 grant execute on function public.photo_add(text, text) to authenticated;
+revoke execute on function public.post_add(text[], text) from public, anon;
+grant execute on function public.post_add(text[], text) to authenticated;
 grant execute on function public.photo_delete(uuid) to authenticated;
 grant execute on function public.give_like(uuid) to authenticated;
 grant execute on function public.player_of_month() to anon, authenticated;

@@ -1698,6 +1698,37 @@
   "+{0} XP for your drinks and bars": "+{0} XP voor je drankjes en repen",
   "Your free {0} is waiting at the desk": "Je gratis {0} ligt klaar aan de balie",
   "This is you: your clients can start a chat with you.": "Dit ben jij: je klanten kunnen een chat met jou starten.",
+  // Posts: photos with a text on your page and on the start screen (posts.js)
+  "now": "nu",
+  "Posts": "Posts",
+  "New post": "Nieuwe post",
+  "Like this post": "Geef deze post een hartje",
+  "Unlike this post": "Haal je hartje bij deze post weg",
+  "Remove this post (admin)": "Deze post verwijderen (admin)",
+  "Remove this post from your page?": "Deze post van je pagina verwijderen?",
+  "Remove this post from this member's page? They are not told.": "Deze post van de pagina van dit lid verwijderen? Het lid krijgt geen bericht.",
+  "A few photos with a text: a PR, a run, the squad after class. Your posts also show on the start screen of the other members. Only photos of yourself, or with the OK of who's in it.": "Een paar foto's met een tekst: een PR, een loop, de groep na de les. Je posts verschijnen ook op het startscherm van de andere leden. Alleen foto's van jezelf, of met het akkoord van wie erop staat.",
+  "No posts yet. Make your first one above.": "Nog geen posts. Maak hierboven je eerste.",
+  "{0} hasn't posted anything yet.": "{0} heeft nog niets gepost.",
+  "No posts yet. Be the first to show how you train.": "Nog geen posts. Toon als eerste hoe jij traint.",
+  "Comment not sent": "Reactie niet verstuurd",
+  "Your page": "Jouw pagina",
+  "What is it about?": "Waarover gaat het?",
+  "A PR, a run, the squad after class…": "Een PR, een loop, de groep na de les…",
+  "It shows on your page and, for the other members, on their start screen. Only photos of yourself, or with the OK of who's in it. LEVEL-UP can remove a post that doesn't fit.": "Hij verschijnt op je pagina en, voor de andere leden, op hun startscherm. Alleen foto's van jezelf, of met het akkoord van wie erop staat. LEVEL-UP kan een post verwijderen die niet past.",
+  "Post ▶": "Posten ▶",
+  "Uploading…": "Uploaden…",
+  "Posted": "Gepost",
+  "It's on your page now.": "Hij staat nu op je pagina.",
+  "Add photos": "Foto's toevoegen",
+  "Add more": "Nog toevoegen",
+  "Up to {0} photos in one post": "Tot {0} foto's in één post",
+  "A post takes up to {0} photos.": "Een post bevat maximaal {0} foto's.",
+  "Add at least one photo.": "Voeg minstens één foto toe.",
+  "Keep the text under 500 characters.": "Hou de tekst onder 500 tekens.",
+  "You can show 30 posts. Remove one first.": "Je kan 30 posts tonen. Verwijder er eerst één.",
+  "💬 {0} on your post": "💬 {0} bij je post",
+  "Posted a post": "Plaatste een post",
   // Weekly sessions: the same hour with the same trainer every week
   "Requests": "Aanvragen",
   "{0} first session": "{0} eerste sessie",
@@ -1889,7 +1920,7 @@
   "No session or check-in yet this week:": "Nog geen sessie of check-in deze week:",
   "Train or check in before Sunday to keep it going.": "Train of check in vóór zondag om je reeks te behouden.",
   "Start screen and weekly check-in:": "Startscherm en wekelijkse check-in:",
-  "your own start screen (\"For you\") shows your next session, your streak, your place on the high scores between the players just above and below you, and the latest photos members posted on their page. So a photo on your page can also show on the start screen of other logged-in members (not when your page is private). Of a weekly check-in we only keep the week in which you checked in.": "je eigen startscherm (\"Voor jou\") toont je volgende sessie, je reeks, je plaats in het klassement tussen de spelers net boven en net onder jou, en de nieuwste foto's die leden op hun pagina zetten. Een foto op jouw pagina kan dus ook op het startscherm van andere ingelogde leden staan (niet als je pagina privé is). Van een wekelijkse check-in bewaren we alleen de week waarin je incheckte."
+  "your own start screen (\"For you\") shows your next session, your streak, your place on the high scores between the players just above and below you, and the latest posts (photos with a text) members put on their page. So a post on your page also shows on the start screen of other logged-in members, where they can give it a heart and write a comment (not when your page is private). Of a weekly check-in we only keep the week in which you checked in.": "je eigen startscherm (\"Voor jou\") toont je volgende sessie, je reeks, je plaats in het klassement tussen de spelers net boven en net onder jou, en de nieuwste posts (foto's met een tekst) die leden op hun pagina zetten. Een post op jouw pagina staat dus ook op het startscherm van andere ingelogde leden, waar ze een hartje kunnen geven en een reactie schrijven (niet als je pagina privé is). Van een wekelijkse check-in bewaren we alleen de week waarin je incheckte."
   };
 
   // Day and month names in texts made by the server (push notifications)

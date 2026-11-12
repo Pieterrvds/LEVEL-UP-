@@ -39,7 +39,6 @@
       achievements: Object.keys(me.achievements || {}), photos: []
     };
   }
-  const openAll = new Set(); // photos whose comments are all shown
   let bioEditing = false;     // your own page: is the text about yourself open for writing?
   const BIO_MAX = 1200;
 
@@ -207,47 +206,13 @@
     if (a.kind === "achievement" && !ach) return "";
     const [icon, text] = a.kind === "class" ? ["👥", `Did <b data-no-i18n>${esc(a.text)}</b>`]
       : a.kind === "achievement" ? [ach.icon, `Unlocked <b>${esc(ach.title)}</b>`]
-      : a.kind === "photo" ? ["📸", `Posted a photo${a.text ? `: <span data-no-i18n>“${esc(a.text)}”</span>` : ""}`]
+      : a.kind === "photo" ? ["📸", `Posted a photo${a.text ? `: <span data-no-i18n>“${esc(a.text.length > 70 ? `${a.text.slice(0, 70).trim()}…` : a.text)}”</span>` : ""}`]
       : ["👑", `Player of the Month <b>${esc(a.text)}</b>`];
     return `<li><span class="mp-act-ico" aria-hidden="true">${icon}</span><span>${text}</span><small>${day(a.date)}</small></li>`;
   }
 
-  function photoCard(ph) {
-    const player = LevelUp.getPlayer();
-    const all = openAll.has(ph.id);
-    const comments = all ? ph.comments : ph.comments.slice(-3);
-    const hidden = ph.commentCount - comments.length;
-    return `
-      <article class="mp-photo" id="photo-${esc(ph.id)}" data-photo="${esc(ph.id)}">
-        <button type="button" class="mp-photo-img" data-mp-zoom aria-label="Open this photo"><img src="${esc(ph.url)}" alt="${esc(ph.caption || "")}" loading="lazy"></button>
-        <div class="mp-photo-body">
-          ${ph.caption ? `<p class="mp-caption" data-no-i18n>${esc(ph.caption)}</p>` : ""}
-          <div class="mp-photo-bar">
-            <button type="button" class="mp-heart ${ph.liked ? "liked" : ""}" data-mp-photo-like aria-pressed="${Boolean(ph.liked)}" aria-label="${ph.liked ? "Unlike this photo" : "Like this photo"}"><span aria-hidden="true">♥</span> ${ph.likes || ""}</button>
-            <span class="mp-count">💬 ${ph.commentCount}</span>
-            <small>${day(ph.date)}</small>
-            ${page.isMe ? `<button type="button" class="mp-mod" data-mp-photo-remove>Remove</button>`
-              : page.canModerate ? `<button type="button" class="mp-mod" data-mp-photo-remove title="Remove this photo (admin)">Remove</button>` : ""}
-          </div>
-          ${hidden > 0 ? `<button type="button" class="link-btn mp-more" data-mp-all>Show all ${ph.commentCount} comments</button>` : ""}
-          ${comments.length ? `<ul class="mp-comments">${comments.map((c) => `
-            <li data-comment="${esc(c.id)}">
-              <span class="mp-c-av" ${person(c)}>${LevelUp.avatarHtml({ name: c.name, avatarUrl: c.avatarUrl, trainerId: c.trainerId })}</span>
-              <div class="mp-c-main">
-                <p><b ${person(c)} data-no-i18n>${esc(c.name)}</b> <span data-no-i18n>${esc(c.body)}</span></p>
-                <p class="mp-c-meta"><small>${ago(c.date)}</small>
-                  <button type="button" class="mp-heart small ${c.liked ? "liked" : ""}" data-mp-comment-like aria-pressed="${Boolean(c.liked)}" aria-label="${c.liked ? "Unlike this comment" : "Like this comment"}"><span aria-hidden="true">♥</span> ${c.likes || ""}</button>
-                  ${c.canDelete ? `<button type="button" class="mp-mod" data-mp-comment-remove>Remove</button>` : ""}</p>
-              </div>
-            </li>`).join("")}</ul>` : ""}
-          ${player ? `<form class="mp-comment-form" data-mp-comment-form>
-            <label class="sr-only" for="c-${esc(ph.id)}">Comment</label>
-            <input id="c-${esc(ph.id)}" name="body" maxlength="300" autocomplete="off" placeholder="Write a comment…">
-            <button type="submit" class="btn btn-small btn-primary">Send</button>
-          </form>` : `<p class="muted small"><button type="button" class="link-btn" data-auth-open="login">Log in</button> to like and comment.</p>`}
-        </div>
-      </article>`;
-  }
+  // A post on this page (posts.js draws it): the owner removes their own, the admin any
+  const photoCard = (ph) => LevelUpPosts.cardHtml(ph, { anchor: true, remove: page.isMe ? "mine" : page.canModerate ? "admin" : "" });
 
   function renderBody() {
     const d = page;
@@ -327,16 +292,15 @@
         </div>
 
         <div class="mp-feed">
-          <h2 class="mp-feed-title">Photos <small class="muted">${me ? `${d.partial ? me.photos.length : photos.length}/12` : photos.length}</small></h2>
-          ${me && (d.partial ? me.photos.length : photos.length) < 12 ? `
-            <label class="photo-add mp-photo-add" title="Add a photo">
-              <span aria-hidden="true">＋</span><span>Add a photo</span>
-              <input type="file" accept="image/*" data-photo-input hidden>
-            </label>
-            <p class="muted small mp-photo-rules">Post photos you'd show at the gym: a PR, a run, the squad after class. Only photos of yourself, or with the OK of who's in it. LEVEL-UP can remove a photo that doesn't fit.</p>` : ""}
+          <h2 class="mp-feed-title">Posts <small class="muted">${me ? `${d.partial ? me.photos.length : photos.length}/30` : photos.length}</small></h2>
+          ${me && (d.partial ? me.photos.length : photos.length) < 30 ? `
+            <button type="button" class="photo-add mp-photo-add" data-post-new>
+              <span aria-hidden="true">＋</span><span>New post</span>
+            </button>
+            <p class="muted small mp-photo-rules">A few photos with a text: a PR, a run, the squad after class. Your posts also show on the start screen of the other members. Only photos of yourself, or with the OK of who's in it.</p>` : ""}
           ${d.partial ? `<p class="mp-empty">Loading…</p>`
             : photos.length ? photos.map(photoCard).join("")
-            : `<p class="mp-empty">${me ? "No photos yet. Add your first one above." : `${esc(first)} hasn't posted photos yet.`}</p>`}
+            : `<p class="mp-empty">${me ? "No posts yet. Make your first one above." : `${esc(first)} hasn't posted anything yet.`}</p>`}
         </div>
       </div>`;
     if (draft) {
@@ -351,25 +315,9 @@
     window.LevelUpSchedule?.refresh(); // fills the coach's level, sessions and open hours
   }
 
-  // Your own page: add a photo (bound on the element itself, like the profile photo)
+  // Your own page: "New post" opens the window to pick photos and write a text (posts.js)
   function bindOwnPage() {
-    const input = body.querySelector("[data-photo-input]");
-    input?.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const caption = prompt(tr("Add a short caption (optional, 140 characters):"), "");
-      if (caption === null) { input.value = ""; return; }
-      const tile = input.closest(".photo-add");
-      tile.classList.add("busy");
-      try {
-        await LevelUp.addPhoto(file, caption.slice(0, 140));
-        LevelUp.toast({ title: "Photo added", text: "It shows on your page now.", icon: "📸", tone: "green" });
-      } catch (err) {
-        tile.classList.remove("busy");
-        input.value = "";
-        LevelUp.toast({ title: "Photo not added", text: err.message, icon: "!" });
-      }
-    });
+    body.querySelector("[data-post-new]")?.addEventListener("click", () => LevelUpPosts.compose());
   }
 
   // A coach's calendar: schedule.js draws the board for this trainer and handles the booking
@@ -386,18 +334,22 @@
 
   // ---------- Actions ----------
   const setError = (text) => { const el = document.getElementById("mpError"); if (el) el.textContent = text || ""; };
-  const photoOf = (el) => page.photos.find((ph) => ph.id === el.closest("[data-photo]")?.dataset.photo);
-  function putPhoto(fresh) {
-    page.photos = page.photos.map((ph) => (ph.id === fresh.id ? fresh : ph));
-    const card = document.getElementById(`photo-${fresh.id}`);
-    if (card) card.outerHTML = photoCard(fresh);
-  }
+  // The posts on this page, for posts.js: find one, show the new version the server gave, or drop one
+  const postStore = {
+    find: (id) => (page?.photos || []).find((ph) => ph.id === id),
+    put(fresh) {
+      page.photos = page.photos.map((ph) => (ph.id === fresh.id ? fresh : ph));
+      const card = [...body.querySelectorAll("[data-post]")].find((el) => el.dataset.post === fresh.id);
+      if (card) card.outerHTML = photoCard(fresh);
+    },
+    removed(id) { page.photos = page.photos.filter((x) => x.id !== id); renderBody(); },
+    askRemove: () => (page.isMe ? "Remove this post from your page?" : "Remove this post from this member's page? They are not told.")
+  };
   const needLogin = () => { if (LevelUp.getPlayer()) return false; LevelUp.openAuth("login"); return true; };
 
   document.addEventListener("click", async (event) => {
     if (!page) return;
     const t = event.target;
-    if (t.closest(".mp-zoom")) { t.closest(".mp-zoom").remove(); return; }
     if (t.closest("[data-mp-chat]")) {
       if (needLogin()) return;
       if (page.trainerId) { LevelUp.openChatWith(page.trainerId); return; }
@@ -421,36 +373,7 @@
     }
     const cls = t.closest("[data-mp-class]");
     if (cls) { window.LevelUpSchedule?.openClass(cls.dataset.mpClass); return; }
-    const zoom = t.closest("[data-mp-zoom]");
-    if (zoom) {
-      const ph = photoOf(zoom);
-      const box = document.createElement("div");
-      box.className = "mp-zoom";
-      box.innerHTML = `<img src="${esc(ph.url)}" alt="">${ph.caption ? `<p data-no-i18n>${esc(ph.caption)}</p>` : ""}<small>tap to close</small>`;
-      document.body.appendChild(box);
-      return;
-    }
-    const ph = t.closest("[data-photo]") ? photoOf(t) : null;
-    if (!ph) return;
-    try {
-      if (t.closest("[data-mp-all]")) { openAll.add(ph.id); putPhoto(ph); return; }
-      if (t.closest("[data-mp-photo-like]")) { if (needLogin()) return; putPhoto(await LevelUp.photoLike(ph.id)); return; }
-      const comment = t.closest("[data-comment]");
-      if (t.closest("[data-mp-comment-like]")) { if (needLogin()) return; putPhoto(await LevelUp.photoCommentLike(comment.dataset.comment)); return; }
-      if (t.closest("[data-mp-comment-remove]")) {
-        if (!confirm(tr("Remove this comment?"))) return;
-        putPhoto(await LevelUp.photoCommentDelete(comment.dataset.comment));
-        return;
-      }
-      if (t.closest("[data-mp-photo-remove]")) {
-        if (!confirm(tr(page.isMe ? "Remove this photo from your page?" : "Remove this photo from this member's page? They are not told."))) return;
-        await LevelUp.deletePhoto(ph.id);
-        page.photos = page.photos.filter((x) => x.id !== ph.id);
-        renderBody();
-      }
-    } catch (err) {
-      LevelUp.toast({ title: "That didn't work", text: err.message, icon: "!" });
-    }
+    if (body.contains(t)) await LevelUpPosts.handleClick(event, postStore);
   });
 
   // Your own page: the line about yourself, and who may see your page
@@ -498,22 +421,8 @@
     box.disabled = false;
   });
 
-  document.addEventListener("submit", async (event) => {
-    const form = event.target.closest("[data-mp-comment-form]");
-    if (!form || !page) return;
-    event.preventDefault();
-    const ph = photoOf(form);
-    const text = form.elements.body.value.trim();
-    if (!ph || !text) return;
-    const btn = form.querySelector("[type=submit]");
-    btn.disabled = true;
-    try {
-      openAll.add(ph.id);
-      putPhoto(await LevelUp.photoComment(ph.id, text));
-    } catch (err) {
-      btn.disabled = false;
-      LevelUp.toast({ title: "Comment not placed", text: err.message, icon: "!" });
-    }
+  document.addEventListener("submit", (event) => {
+    if (page && body.contains(event.target)) LevelUpPosts.handleSubmit(event, postStore);
   });
 
   document.addEventListener("keydown", (event) => {

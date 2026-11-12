@@ -1709,7 +1709,9 @@ const LevelUp = (() => {
       forYou = {
         race: (d?.race || []).map((r) => ({ ...r, place: Number(r.place), xp: Number(r.xp), isMe: Boolean(r.isMe) })),
         ranked: Boolean(d?.ranked),
-        photos: (d?.photos || []).map((ph) => ({ ...ph, likes: Number(ph.likes) || 0, liked: Boolean(ph.liked), commentCount: Number(ph.commentCount) || 0 })),
+        // the latest posts of the club: { id, urls, caption, name, userId, likes, liked, comments: [...] }
+        photos: (d?.photos || []).map((ph) => ({ ...ph, urls: ph.urls || (ph.url ? [ph.url] : []), comments: ph.comments || [],
+          ownerTrainerId: ph.ownerTrainerId || ph.trainerId || null, likes: Number(ph.likes) || 0, liked: Boolean(ph.liked), commentCount: Number(ph.commentCount) || 0 })),
         trainersDone: Number(d?.trainersDone) || 0
       };
     } catch (err) {
@@ -2689,28 +2691,54 @@ const LevelUp = (() => {
     if (out.size > 950 * 1024) out = await blob(0.6); // the bucket takes files up to 1 MB
     return out;
   }
-  async function addPhoto(file, caption = "") {
+  // A post on your page: one to six photos (shrunk in the browser, stored in your own folder) with a text.
+  // progress(done, all) is called while the photos go up.
+  async function addPost(files, text = "", progress = null) {
     if (!player || !sb) throw new Error("Log in first.");
-    if (player.photos.length >= 12) throw new Error("You can show 12 photos. Remove one first.");
-    const blob = await fitPhoto(file);
-    const path = `${player.id}/p${Date.now()}.jpg`;
-    const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
-    if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
-    const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    const list = [...(files || [])];
+    if (!list.length) throw new Error("Add at least one photo.");
+    if (list.length > 6) throw new Error("A post takes up to 6 photos.");
+    const body = String(text || "").trim();
+    if (body.length > 500) throw new Error("Keep the text under 500 characters.");
+    const paths = [];
+    const cleanUp = () => { if (paths.length) sb.storage.from("avatars").remove(paths).catch(() => {}); };
+    const stamp = Date.now();
     try {
-      player = normalisePlayer(await call("photo_add", { p_url: url, p_caption: String(caption || "").trim() }));
+      for (let i = 0; i < list.length; i++) {
+        if (progress) progress(i, list.length);
+        const blob = await fitPhoto(list[i]);
+        const path = `${player.id}/p${stamp}-${i}.jpg`;
+        const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
+        if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
+        paths.push(path);
+      }
+      if (progress) progress(list.length, list.length);
+      const urls = paths.map((path) => sb.storage.from("avatars").getPublicUrl(path).data.publicUrl);
+      let data;
+      try {
+        data = await call("post_add", { p_urls: urls, p_text: body });
+      } catch (err) {
+        // a database from before posts: one photo with a short text still works
+        if (!/isn't set up yet/.test(err.message) || urls.length > 1) throw err;
+        data = await call("photo_add", { p_url: urls[0], p_caption: body.slice(0, 140) });
+      }
+      player = normalisePlayer(data);
     } catch (err) {
-      sb.storage.from("avatars").remove([path]).catch(() => {});
+      cleanUp();
       throw err;
     }
+    if (forYou) await loadForYou();
     emit();
   }
-  // Your own photo, or any photo as admin: the row and the file both go
+  const addPhoto = (file, caption = "") => addPost([file], caption);
+  // Your own post, or any post as admin: the row and its files go
   async function deletePhoto(id) {
     const r = await call("photo_delete", { p_id: id });
-    const path = avatarPath(r?.url);
-    if (path && sb) sb.storage.from("avatars").remove([path]).catch(() => {});
-    if (player && r?.userId === player.id) { await refreshPlayer(); emit(); }
+    const paths = (r?.urls || [r?.url]).map(avatarPath).filter(Boolean);
+    if (paths.length && sb) sb.storage.from("avatars").remove(paths).catch(() => {});
+    if (forYou) forYou.photos = forYou.photos.filter((ph) => ph.id !== id);
+    if (player && r?.userId === player.id) await refreshPlayer();
+    emit();
   }
   async function setProfile(p) {
     player = normalisePlayer(await call("set_profile", { p }));
@@ -3465,6 +3493,7 @@ const LevelUp = (() => {
       try {
         const tr = document.startViewTransition(apply);
         tr.ready.catch(() => {}); // skipped (e.g. the tab went to the background): the page still changed
+        tr.updateCallbackDone?.catch(() => {});
         tr.finished.then(done, done);
       } catch { apply(); done(); }
     } else {
@@ -3496,8 +3525,7 @@ const LevelUp = (() => {
     if (!event.viewTransition) return;
     let dir = null;
     try { dir = sessionStorage.getItem("levelup.slide"); } catch {}
-    event.viewTransition.ready?.catch(() => {});
-    event.viewTransition.finished?.catch(() => {});
+    ["ready", "finished", "updateCallbackDone"].forEach((k) => event.viewTransition[k]?.catch(() => {})); // an aborted slide is no error
     if (dir) docRoot.dataset.slide = dir; else event.viewTransition.skipTransition();
   });
 
@@ -3626,7 +3654,7 @@ const LevelUp = (() => {
     ready, isReady: () => isReady, serverError: () => serverError, calendarStatus: () => calendar.status,
     esc, dateKey, startOfWeek, parseDate, slotStart, formatSlot, avatarHtml, progress, levelFromXp, xpForLevel, rankFor, orderXp,
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, holdCelebrations, openProfile,
-    adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
+    adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, carbonOnly, setCarbonOnly, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
     trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
