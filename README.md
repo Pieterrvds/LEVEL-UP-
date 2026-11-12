@@ -353,7 +353,9 @@ chat page of `index.html` on a phone, see "Phones").
 - **Unread:** red badge on the Chat tab (phones) and the chat icon in the header (computer); a pop-up at the top of
   any page when a new message comes in (tap = open it). A push notification arrives on phones with notifications on.
 - **Opens at the newest message:** opening a conversation (from the list, a link or a notification) always lands
-  on the last message, also on a phone; coming back to the app shows what came in meanwhile.
+  on the last message, also on a phone; coming back to the app shows what came in meanwhile. When the list
+  changes height (a lower window, the phone keyboard) it stays at the newest message if you were there, and does
+  not move while you read back (`keepAtEnd` in `chat.js`).
 - **Live:** an open conversation checks for new messages every 3 seconds (right away when a push comes in), other
   pages every 20 seconds. Read receipts: "Seen" under your last message the other person has read.
 - **Hearts:** tap the small heart next to someone else's message (or double-tap the message) to like it, tap again
