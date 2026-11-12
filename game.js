@@ -2244,12 +2244,12 @@ const LevelUp = (() => {
   function openChatWith(trainerId) {
     const t = trainerById(trainerId);
     if (!player) { openAuth("login"); return; }
-    if (player.trainerId === trainerId) { location.href = "chat.html"; return; }
+    if (player.trainerId === trainerId) { gotoChat(); return; }
     if (t && t.linked === false) {
       toast({ title: `${t.short} isn't on the chat yet`, text: "Book a session or send a message to Pieter.", icon: "💬", tone: "green" });
       return;
     }
-    location.href = `chat.html?coach=${encodeURIComponent(trainerId)}`;
+    gotoChat({ coach: trainerId });
   }
 
   document.addEventListener("click", (event) => {
@@ -3432,8 +3432,9 @@ const LevelUp = (() => {
 
   // ---------- Phones: five pages next to each other, with a bar at the bottom ----------
   // For you · Home · Chat · Book · Scores. Tap one in the bar or swipe sideways: the page slides to its neighbour.
-  // For you, Home, Book and Scores are parts of index.html (a "view": only that part shows); Chat is chat.html.
+  // All five are parts of index.html (a "view": only that part shows); they follow your finger from one to the next.
   // The home page still holds everything, so scrolling it also passes the high scores and the schedule.
+  // The chat is chat.js in the section #chat; chat.html is the chat on a computer (a phone is sent on to #chat).
   // The menu (☰) sits at the top right, in the header. A computer has no views: there it is one long page.
   const TAB_ICONS = {
     foryou: '<path d="M12 3l2.4 5.6L20 9.3l-4.2 3.9L17 19l-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z"/>',
@@ -3445,25 +3446,134 @@ const LevelUp = (() => {
   const tabIcon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square">${TAB_ICONS[name]}</svg>`;
 
   const VIEWS = ["foryou", "home", "chat", "book", "scores"];           // left to right
-  const VIEW_HASH = { foryou: "foryou", home: "home", book: "schedule", scores: "scores" };
+  const VIEW_HASH = { foryou: "foryou", home: "home", chat: "chat", book: "schedule", scores: "scores" };
   const PHONE = window.matchMedia("(max-width: 760px)");
+  const STILL = window.matchMedia("(prefers-reduced-motion: reduce)");
   const pageName = location.pathname.split("/").pop() || "index.html";
   const onIndex = pageName === "index.html";
-  const onChatPage = pageName === "chat.html";
   const docRoot = document.documentElement;
-  let view = onChatPage ? "chat" : onIndex ? (VIEWS.includes(docRoot.dataset.view) ? docRoot.dataset.view : "home") : null;
+  let view = onIndex ? (VIEWS.includes(docRoot.dataset.view) ? docRoot.dataset.view : "home") : null;
   const viewScroll = {};  // where you were on each page
   let tabBar = null;
+  let slide = null;       // a page that is sliding in right now (see openSlide)
 
   const viewOf = (el) => el?.closest?.("[data-v]")?.dataset.v || "home";
-  const markTab = () => tabBar?.querySelectorAll("[data-tab]").forEach((el) => {
-    el.classList.toggle("active", el.dataset.tab === view);
-    if (el.dataset.tab === view) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current");
+  const markTab = (now = view) => tabBar?.querySelectorAll("[data-tab]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === now);
+    if (el.dataset.tab === now) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current");
   });
+  const hudHeight = () => document.getElementById("hud")?.offsetHeight || 0;
+  // the address follows the page (the chat keeps its own: #chat/t/<conversation>)
+  const stampView = (next, target) => {
+    const hash = target && target.id ? target.id : VIEW_HASH[next];
+    const now = location.hash.slice(1);
+    if (now === hash || (next === "chat" && now.startsWith("chat/"))) return;
+    history.replaceState(null, "", `${location.pathname}${location.search}#${hash}`);
+  };
+  // #chat/t/<conversation> (a phone) is chat.html?t=<conversation> on a computer
+  const chatQuery = () => { const m = /^#chat\/(t|coach)\/(.+)$/.exec(location.hash); return m ? `?${m[1]}=${m[2]}` : ""; };
+  const landed = (next) => document.dispatchEvent(new CustomEvent("levelup:view", { detail: next }));
+
+  // Two pages next to each other, for as long as one slides to the other: under a finger (the swipe) or by itself
+  // (a tap in the bar). Every page but the home page is one section; that one "floats" (fixed to the screen) next
+  // to the other page, which stays the real page. So a home page that slides in is already scrolled to where you
+  // were. to(p): how far, 0 = still the old page, 1 = the new one. Returns null when these two can't be put next
+  // to each other: the home page and Book or Scores share a section (they are never neighbours).
+  function openSlide(next, target = null) {
+    const main = document.querySelector("main");
+    const from = view;
+    const section = (v) => (v === "home" ? null : document.getElementById(VIEW_HASH[v]));
+    const incoming = section(next), outgoing = section(from);
+    if (!main || from === next || (!incoming && !outgoing)) return null;
+    if ([from, next].includes("home") && [from, next].some((v) => v === "book" || v === "scores")) return null;
+    const dir = VIEWS.indexOf(next) > VIEWS.indexOf(from) ? 1 : -1; // 1: the new page comes from the right
+    const width = window.innerWidth;
+    const y0 = window.scrollY;
+    const mainTop = main.getBoundingClientRect().top + y0;
+    const float = incoming || outgoing;
+    // the parts of the other page (the home page: everything but For you and the chat)
+    const other = incoming ? outgoing : null;
+    const rest = other ? [other] : [...main.children].filter((el) => el.tagName !== "DIALOG" && el.id !== "foryou" && el.id !== "chat");
+    let top;
+    const wanted = (inPage) => {
+      if (target && target.id !== VIEW_HASH[next]) return Math.max(0, inPage(target) - hudHeight() - 12);
+      return target ? 0 : viewScroll[next] || 0;
+    };
+    if (incoming) {
+      // the new page floats in, next to the page that is there
+      float.classList.add("pg-solo", "pg-float");
+      top = wanted((el) => el.getBoundingClientRect().top - float.getBoundingClientRect().top);
+      const room = mainTop + float.offsetHeight + (parseFloat(getComputedStyle(document.body).paddingBottom) || 0) - window.innerHeight;
+      top = Math.min(top, Math.max(0, room));
+      float.style.top = `${mainTop - top}px`;
+    } else {
+      // to the home page: the page that is there floats where it is, the home page comes in as the real page
+      float.style.top = `${float.getBoundingClientRect().top}px`;
+      float.classList.add("pg-solo", "pg-float");
+      docRoot.dataset.view = next;
+      top = wanted((el) => el.getBoundingClientRect().top + window.scrollY);
+      window.scrollTo({ top, behavior: "instant" });
+    }
+    const oldEls = incoming ? rest : [float];
+    const newEls = incoming ? [float] : rest;
+    const all = [float, ...rest];
+    let timer = 0, over = false;
+    const s = {
+      from, next, width, p: 0,
+      to(p) {
+        s.p = p;
+        const a = `translate3d(${-dir * p * width}px,0,0)`, b = `translate3d(${dir * (1 - p) * width}px,0,0)`;
+        oldEls.forEach((el) => { el.style.transform = a; });
+        newEls.forEach((el) => { el.style.transform = b; });
+      },
+      // let go: slide on to the new page (commit) or back to the old one, then tidy up
+      settle(commit, ms = 260) {
+        if (over) return;
+        if (commit) markTab(next);
+        all.forEach((el) => { el.style.transition = `transform ${ms}ms cubic-bezier(0.22, 0.75, 0.25, 1)`; });
+        void float.offsetWidth;
+        s.to(commit ? 1 : 0);
+        timer = setTimeout(() => s.end(commit), ms + 40);
+      },
+      end(commit = true) {
+        if (over) return;
+        over = true;
+        clearTimeout(timer);
+        all.forEach((el) => { el.style.transform = ""; el.style.transition = ""; });
+        float.style.top = "";
+        float.classList.remove("pg-solo", "pg-float");
+        slide = null;
+        if (commit) {
+          viewScroll[from] = y0;
+          view = next;
+          docRoot.dataset.view = next;
+          markTab();
+          stampView(next, target);
+          window.scrollTo({ top, behavior: "instant" });
+          landed(next);
+        } else {
+          docRoot.dataset.view = from;
+          markTab();
+          window.scrollTo({ top: y0, behavior: "instant" });
+        }
+      }
+    };
+    s.to(0);
+    slide = s;
+    return s;
+  }
 
   // Show another page of index.html. target: an element on it to scroll to (else: where you were, or the top).
   function setView(next, { target = null, animate = true } = {}) {
-    if (!onIndex || !VIEWS.includes(next) || next === "chat") return;
+    if (!onIndex || !VIEWS.includes(next)) return;
+    if (!PHONE.matches) { // a computer: one page, just go to the section (the chat is a page of its own there)
+      if (next === "chat") { location.href = "chat.html"; return; }
+      stampView(next, target);
+      view = next; docRoot.dataset.view = next;
+      (target || document.getElementById(VIEW_HASH[next]))?.scrollIntoView({ block: "start" });
+      return;
+    }
+    slide?.end(slide.p > 0.5); // one that was still under way lands first
     const from = view;
     const apply = () => {
       viewScroll[from] = window.scrollY;
@@ -3471,21 +3581,16 @@ const LevelUp = (() => {
       docRoot.dataset.view = next;
       markTab();
       let top = from === next ? window.scrollY : viewScroll[next] || 0;
-      if (target && target.id !== VIEW_HASH[next]) top = target.getBoundingClientRect().top + window.scrollY - (document.getElementById("hud")?.offsetHeight || 0) - 12;
+      if (target && target.id !== VIEW_HASH[next]) top = target.getBoundingClientRect().top + window.scrollY - hudHeight() - 12;
       else if (target) top = 0;
       window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
-      document.dispatchEvent(new CustomEvent("levelup:view", { detail: next }));
+      landed(next);
     };
-    const hash = target && target.id ? target.id : VIEW_HASH[next];
-    if (location.hash.slice(1) !== hash) history.replaceState(null, "", `${location.pathname}${location.search}#${hash}`);
-    if (!PHONE.matches) { // a computer: one page, just go to the section
-      view = next; docRoot.dataset.view = next;
-      (target || document.getElementById(VIEW_HASH[next]))?.scrollIntoView({ block: "start" });
-      return;
-    }
-    if (from === next) { apply(); return; }
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!animate || still) { apply(); return; }
+    if (from === next || !animate || STILL.matches) { stampView(next, target); apply(); return; }
+    const s = openSlide(next, target);
+    if (s) { void document.body.offsetWidth; s.settle(true, 300); return; }
+    // the home page and Book or Scores (one section of the home page): the browser slides a picture of the page
+    stampView(next, target);
     const dir = VIEWS.indexOf(next) > VIEWS.indexOf(from) ? "next" : "prev";
     if (document.startViewTransition) {
       docRoot.dataset.slide = dir; // the old page slides out, the new one in (style.css "Phones: five pages")
@@ -3505,65 +3610,69 @@ const LevelUp = (() => {
       setTimeout(() => main?.classList.remove(`view-in-${dir}`), 400);
     }
   }
-  // Go to a page by name, from index.html or chat.html (another file = a new page load, sliding where the browser can)
+  // Go to a page by name. From another file than index.html that is a page load.
   function goView(next) {
     if (next === view || !VIEWS.includes(next)) return;
-    if (next === "chat" && !player) { openAuth("login"); return; }
-    const dir = VIEWS.indexOf(next) > VIEWS.indexOf(view) ? "next" : "prev";
-    if (onIndex && next !== "chat") { setView(next); return; }
-    try { if (PHONE.matches && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) sessionStorage.setItem("levelup.slide", dir); } catch {}
-    location.href = next === "chat" ? "chat.html" : `index.html#${VIEW_HASH[next]}`;
+    if (onIndex) { setView(next); return; }
+    location.href = !PHONE.matches && next === "chat" ? "chat.html" : `index.html#${VIEW_HASH[next]}`;
   }
-  // The page next to this one (step -1 = to the left). Visitors have no chat: they skip it.
-  function stepView(step) {
-    let i = VIEWS.indexOf(view) + step;
-    if (VIEWS[i] === "chat" && !player) i += step;
-    if (i >= 0 && i < VIEWS.length) goView(VIEWS[i]);
+  // To the chat, a conversation (t) or the one with a coach: a page of index.html on a phone, chat.html on a computer
+  function gotoChat({ t = "", coach = "" } = {}) {
+    const part = t ? ["t", t] : coach ? ["coach", coach] : null;
+    if (onIndex && PHONE.matches) {
+      const hash = `#chat${part ? `/${part[0]}/${encodeURIComponent(part[1])}` : ""}`;
+      if (location.hash === hash) setView("chat"); else location.hash = hash;
+      return;
+    }
+    location.href = `chat.html${part ? `?${part[0]}=${encodeURIComponent(part[1])}` : ""}`;
   }
-  // A page load that slides in from another page: only when we asked for it (goView); other links change as always
-  window.addEventListener("pageswap", (event) => {
-    if (!event.viewTransition) return;
-    let dir = null;
-    try { dir = sessionStorage.getItem("levelup.slide"); } catch {}
-    ["ready", "finished", "updateCallbackDone"].forEach((k) => event.viewTransition[k]?.catch(() => {})); // an aborted slide is no error
-    if (dir) docRoot.dataset.slide = dir; else event.viewTransition.skipTransition();
-  });
 
   function initViews() {
-    if (onIndex) {
-      // the page the address points to: a section, or something inside one (#highScores, #team-maxim …)
-      const fromHash = () => {
-        const id = decodeURIComponent(location.hash.slice(1));
-        const el = id ? document.getElementById(id) : null;
-        return el ? { view: viewOf(el), el } : null;
-      };
-      const first = fromHash();
-      if (first) {
-        view = first.view; docRoot.dataset.view = view;
-        if (PHONE.matches && first.el.id !== VIEW_HASH[view]) requestAnimationFrame(() => setView(view, { target: first.el, animate: false }));
-      } else docRoot.dataset.view = view;
-      window.addEventListener("hashchange", () => {
-        const to = fromHash();
-        if (to && PHONE.matches && to.view !== view) setView(to.view, { target: to.el });
-      });
-      // a link to a section: on a phone that can be another page
-      document.addEventListener("click", (event) => {
-        const a = event.target.closest?.("a[href]");
-        if (!a || event.defaultPrevented || !PHONE.matches || a.target === "_blank") return;
-        const url = new URL(a.href, location.href);
-        if (url.pathname !== location.pathname || url.search !== location.search || !url.hash) return;
-        const el = document.getElementById(decodeURIComponent(url.hash.slice(1)));
-        if (!el) return;
-        const to = viewOf(el);
-        if (to === view && !(a.dataset.tab && el.id === VIEW_HASH[to])) return; // same page: the browser scrolls to it
+    if (!onIndex) return;
+    // every part of the page carries data-pg (see "Phones: five pages" in style.css)
+    document.querySelectorAll("main > :not(dialog):not([data-pg])").forEach((el) => el.setAttribute("data-pg", ""));
+    // the page the address points to: a section, something inside one (#highScores, #team-maxim …) or a conversation
+    const fromHash = () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (id.startsWith("chat/")) return { view: "chat", el: document.getElementById("chat"), deep: true };
+      const el = id ? document.getElementById(id) : null;
+      return el ? { view: viewOf(el), el } : null;
+    };
+    const first = fromHash();
+    if (first && first.view === "chat" && !PHONE.matches) { location.replace(`chat.html${chatQuery()}`); return; }
+    if (first) {
+      view = first.view; docRoot.dataset.view = view;
+      if (PHONE.matches && first.el.id !== VIEW_HASH[view]) requestAnimationFrame(() => setView(view, { target: first.el, animate: false }));
+    } else docRoot.dataset.view = view;
+    window.addEventListener("hashchange", () => {
+      const to = fromHash();
+      if (!to) return;
+      if (!PHONE.matches) { if (to.view === "chat") location.href = `chat.html${chatQuery()}`; return; }
+      if (to.view !== view) setView(to.view, { target: to.el, animate: !to.deep });
+    });
+    // a link to a section: on a phone that can be another page. A link to the chat stays in this file on a phone.
+    document.addEventListener("click", (event) => {
+      const a = event.target.closest?.("a[href]");
+      if (!a || event.defaultPrevented || !PHONE.matches || a.target === "_blank") return;
+      const url = new URL(a.href, location.href);
+      if (url.pathname.endsWith("/chat.html") && url.origin === location.origin) {
         event.preventDefault();
-        setView(to, { target: el });
-      });
-    }
-    if (!onIndex && !onChatPage) return;
-    // Swipe sideways to the page next to this one. Not on something that scrolls sideways itself (a row of cards,
-    // the days of the schedule, tabs), not in a window, a form field or an open conversation, and not from the very
-    // edge of the screen (there the phone's own back gesture lives).
+        gotoChat({ t: url.searchParams.get("t") || "", coach: url.searchParams.get("coach") || "" });
+        return;
+      }
+      if (url.pathname !== location.pathname || url.search !== location.search || !url.hash) return;
+      const el = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+      if (!el) return;
+      const to = viewOf(el);
+      if (to === view && !(a.dataset.tab && el.id === VIEW_HASH[to])) return; // same page: the browser scrolls to it
+      event.preventDefault();
+      setView(to, { target: el });
+    });
+
+    // Swipe sideways: the page follows your finger and its neighbour comes along; let go past a third of the screen
+    // (or flick) and it slides on, else it springs back. Not on something that scrolls sideways itself (a row of
+    // cards, the days of the schedule, the photos of a post), not in a window, a form field or an open conversation,
+    // and not from the very edge of the screen (there the phone's own back gesture lives).
     const sideways = (el) => {
       for (let n = el; n && n !== document.body && n.nodeType === 1; n = n.parentElement) {
         if (n.matches("input, textarea, select, [contenteditable], [data-no-swipe], iframe")) return true;
@@ -3571,41 +3680,106 @@ const LevelUp = (() => {
       }
       return false;
     };
-    let start = null;
+    let touch = null, frame = 0;
+    // while a page slides, a tap on it does nothing (the bar keeps working)
+    document.addEventListener("click", (event) => {
+      if (slide && event.target.closest?.("main")) { event.preventDefault(); event.stopPropagation(); }
+    }, true);
+    const drop = () => { // the finger is gone without a decision: back to the old page
+      if (touch?.drag) { cancelAnimationFrame(frame); touch.drag.settle(false, 180); }
+      touch = null;
+    };
     document.addEventListener("touchstart", (event) => {
-      start = null;
-      if (!PHONE.matches || event.touches.length !== 1 || docRoot.dataset.slide) return;
-      if (document.querySelector("dialog[open], .nav.open, .lu-cel, .chat-app.show-thread")) return;
+      if (touch?.drag) { drop(); return; }
+      touch = null;
+      if (!PHONE.matches || event.touches.length !== 1 || slide || docRoot.dataset.slide) return;
+      if (document.querySelector("dialog[open], .nav.open, .lu-cel") || (view === "chat" && document.querySelector(".chat-app.show-thread"))) return;
       const t = event.touches[0];
       if (t.clientX < 24 || t.clientX > window.innerWidth - 24 || sideways(event.target)) return;
-      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+      touch = { x: t.clientX, y: t.clientY, at: Date.now(), drag: null, step: 0, x0: 0, moved: 0, trail: [] };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
-      if (!start) return;
+      if (!touch) return;
+      if (event.touches.length !== 1) { drop(); return; } // a pinch
       const t = event.touches[0];
-      const dx = Math.abs(t.clientX - start.x), dy = Math.abs(t.clientY - start.y);
-      if (event.touches.length !== 1 || (dy > 24 && dy > dx)) start = null; // scrolling up or down, or a pinch
-    }, { passive: true });
+      const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+      const ax = Math.abs(dx), ay = Math.abs(dy);
+      if (!touch.drag) {
+        if (STILL.matches) { if (ay > 24 && ay > ax) touch = null; return; } // no movement wanted: decided on letting go
+        if (!event.cancelable || (ay > 10 && ay >= ax)) { touch = null; return; } // scrolling up or down
+        if (ax < 10 || ax < ay * 1.3) return; // not clear yet
+        const step = dx < 0 ? 1 : -1;         // to the left = the page on the right
+        const next = VIEWS[VIEWS.indexOf(view) + step];
+        const s = next ? openSlide(next) : null;
+        if (!s) { touch = null; return; }
+        touch.drag = s; touch.step = step; touch.x0 = t.clientX;
+      }
+      if (event.cancelable) event.preventDefault();
+      touch.moved = Math.max(0, Math.min(touch.drag.width, (touch.x0 - t.clientX) * touch.step));
+      touch.trail.push([event.timeStamp, touch.moved]);
+      if (touch.trail.length > 12) touch.trail.shift();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => touch?.drag?.to(touch.moved / touch.drag.width));
+    }, { passive: false });
     document.addEventListener("touchend", (event) => {
-      if (!start) return;
-      const t = event.changedTouches[0];
-      const dx = t.clientX - start.x, dy = t.clientY - start.y, ms = Date.now() - start.at;
-      start = null;
-      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || ms > 800) return;
-      stepView(dx < 0 ? 1 : -1); // swipe to the left = the page on the right
+      if (!touch) return;
+      const now = touch;
+      touch = null;
+      if (!now.drag) { // no movement wanted: a clear swipe changes the page at once
+        if (!STILL.matches) return;
+        const t = event.changedTouches[0];
+        const dx = t.clientX - now.x, dy = t.clientY - now.y;
+        if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - now.at > 800) return;
+        const next = VIEWS[VIEWS.indexOf(view) + (dx < 0 ? 1 : -1)];
+        if (next) setView(next);
+        return;
+      }
+      cancelAnimationFrame(frame);
+      const s = now.drag, p = now.moved / s.width;
+      s.to(p);
+      // how fast the finger went at the end (px per ms, towards the new page); a finger that stood still first: 0
+      const b = now.trail.at(-1);
+      const a = b ? now.trail.find((x) => b[0] - x[0] < 150) : null;
+      const speed = a && b[0] > a[0] && event.timeStamp - b[0] < 100 ? (b[1] - a[1]) / (b[0] - a[0]) : 0;
+      const commit = speed > 0.3 ? now.moved > 12 : speed < -0.3 ? false : p > 0.33;
+      const left = (commit ? 1 - p : p) * s.width;
+      s.settle(commit, Math.round(Math.max(140, Math.min(320, left / Math.max(Math.abs(speed), 1.1)))));
     }, { passive: true });
-    document.addEventListener("touchcancel", () => { start = null; }, { passive: true });
+    document.addEventListener("touchcancel", drop, { passive: true });
+
+    // The pages that wait off screen are measured for the first time while nothing else is going on, one part at a
+    // time: then the first swipe to one doesn't have to wait for that either.
+    let warmed = false;
+    const warm = () => {
+      if (warmed || !PHONE.matches || !window.CSS?.supports?.("content-visibility", "hidden")) return;
+      warmed = true;
+      const waiting = (el) => getComputedStyle(el).contentVisibility === "hidden";
+      const parts = [...document.querySelectorAll("main > [data-pg]")].filter(waiting);
+      const idle = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 1500 }) : (fn) => setTimeout(fn, 150);
+      const next = () => {
+        const el = parts.shift();
+        if (!el) return;
+        if (!slide && !touch && waiting(el)) {
+          el.style.contentVisibility = "visible";
+          void el.offsetHeight;
+          el.style.contentVisibility = "";
+        }
+        idle(next);
+      };
+      idle(next);
+    };
+    document.addEventListener("levelup:change", () => { if (isReady) setTimeout(warm, 1200); });
   }
 
   function initTabBar() {
-    const link = (v) => (onIndex ? `#${VIEW_HASH[v]}` : `index.html#${VIEW_HASH[v]}`);
+    const link = (v) => (onIndex ? `#${VIEW_HASH[v]}` : `index.html#${VIEW_HASH[v]}`); // a computer has no bar
     const bar = document.createElement("nav");
     bar.className = "tabbar";
     bar.setAttribute("aria-label", "Quick menu");
     bar.innerHTML = `
       <a href="${link("foryou")}" data-tab="foryou">${tabIcon("foryou")}<span>For you</span></a>
       <a href="${link("home")}" data-tab="home">${tabIcon("home")}<span>Home</span></a>
-      <a href="chat.html" data-tab="chat">${CHAT_ICON}<span>Chat</span><i class="chat-badge" data-chat-badge hidden></i></a>
+      <a href="${link("chat")}" data-tab="chat">${CHAT_ICON}<span>Chat</span><i class="chat-badge" data-chat-badge hidden></i></a>
       <a href="${link("book")}" data-tab="book" class="tab-book">${tabIcon("book")}<span>Book</span></a>
       <a href="${link("scores")}" data-tab="scores">${tabIcon("scores")}<span>Scores</span></a>`;
     document.body.appendChild(bar);
@@ -3629,15 +3803,12 @@ const LevelUp = (() => {
     bar.addEventListener("click", (event) => {
       const tab = event.target.closest("[data-tab]");
       if (!tab) return;
-      // from index.html or the chat: the page slides in the right direction; the other pages just open it
-      if ((onIndex || onChatPage) && PHONE.matches) {
-        event.preventDefault();
-        if (tab.dataset.tab === view) { if (onIndex) setView(view, { target: document.getElementById(VIEW_HASH[view]) }); return; }
-        goView(tab.dataset.tab);
-      } else if (tab.dataset.tab === "chat" && !player) {
-        event.preventDefault();
-        openAuth("login");
-      }
+      // on index.html the page slides there; the other pages just open it
+      if (!onIndex || !PHONE.matches) return;
+      event.preventDefault();
+      if (tab.dataset.tab !== view) { goView(tab.dataset.tab); return; }
+      // the page you are on: back to its top (the chat: back to the list of conversations)
+      if (view === "chat") window.LevelUpChat?.home(); else setView(view, { target: document.getElementById(VIEW_HASH[view]) });
     });
     document.addEventListener("levelup:change", () => {
       menuProfile.querySelector("[data-menu-profile]").textContent = player ? "My profile" : "Log in";
@@ -3671,7 +3842,7 @@ const LevelUp = (() => {
     applyAsTrainer, reviewApplication, loadTrainerList,
     chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
-    openAuth, toast, setView, goView, getView: () => view,
+    openAuth, toast, setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,

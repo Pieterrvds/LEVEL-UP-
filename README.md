@@ -7,7 +7,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
 - `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs: My page (what others see), Overview (sessions, group classes, likes), Coach (trainers only), Rewards, Packs & shop, Body stats, Settings; `profile.html#rewards` (or any section id such as `#packs`) opens that tab. Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
-- `chat.html`: private chat between a player and a coach (see "Chat")
+- `chat.html`: private chat between a player and a coach (see "Chat"); a phone has it as a page of `index.html`
 - `member.html`: only sends old links on to `profile.html` (the member pages used to live here)
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
 - `archive/webshop-v1/`: the old webshop, kept for reference
@@ -15,17 +15,32 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 
 ## Phones
 - **Five pages next to each other**, with a bar at the bottom: **For you · Home · Chat · Book · Scores**. Tap one, or
-  swipe sideways: the page slides to its neighbour (swipe to the left = the page on the right). For you, Home, Book and
-  Scores are parts of `index.html` (only that part shows, `html[data-view]`); Chat is `chat.html`. The home page still
-  holds everything, so scrolling it also passes the high scores and the schedule; Book and Scores are the same sections
-  on their own. Each page remembers where you were. `game.js` "Phones: five pages", `style.css` same title.
-  - A logged-in member **starts on For you**; a visitor on Home (For you then tells what an account gives). Links keep
-    working: `index.html#schedule` opens Book, `#scores` / `#highScores` Scores, anything else its place on Home.
-  - A swipe does nothing on a row that scrolls sideways itself (trainings, coaches, the cards on For you, price cards),
-    in a window, a form field or an open conversation, with the menu open, or from the very edge of the screen (the
-    phone's own back gesture). Visitors skip Chat when swiping (it needs an account).
-  - The slide uses the browser's view transitions (also from and to the chat); older browsers slide the new page in,
-    and "reduce motion" changes the page at once.
+  swipe sideways: **the page follows your finger** and its neighbour comes along; let go past a third of the screen (or
+  flick) and it slides on, else it springs back. All five are parts of `index.html` (only that part shows,
+  `html[data-view]`). The home page still holds everything, so scrolling it also passes the high scores and the
+  schedule; Book and Scores are the same sections on their own. Each page remembers where you were. `game.js`
+  "Phones: five pages" (`openSlide`, `setView`), `style.css` same title.
+  - A logged-in member **starts on For you**; a visitor on Home (For you then tells what an account gives, the chat
+    page asks to log in). Links keep working: `index.html#schedule` opens Book, `#scores` / `#highScores` Scores,
+    `#chat` the chat, anything else its place on Home.
+  - **The chat is a page of the home page** on a phone: `chat.js` runs in the section `#chat`, and only works (checks
+    for messages, has a conversation open) while that page is on screen. A conversation has the address
+    `#chat/t/<conversation>` (the back button of the phone returns to the list), `#chat/coach/<trainer>` opens the one
+    with a coach. `chat.html` stays the chat on a computer; on a phone it sends you on to `index.html#chat…`, so
+    notifications and old links keep working. `LevelUp.gotoChat({ t, coach })` picks the right one.
+  - How the slide works: every page but the home page is one section. While two pages are next to each other, that
+    one section "floats" (`.pg-float`, fixed to the screen) beside the other page, which stays the real, scrolled page;
+    `transform` moves both. Home to Book or Scores (sections of the home page itself, never neighbours) can't float:
+    there the browser slides a picture of the page (view transitions).
+  - Speed: the pages that are not on screen stay built but undrawn (`content-visibility: hidden`, parked above the
+    page; older browsers: `display: none`) and are measured once in an idle moment, so a page can come along the moment
+    a finger asks. The rules name the parts of `<main>` with `[data-pg]` on purpose: with `main > *` the browser would
+    work out the looks of the whole page again at every page change. Keep `data-pg` on every direct child of `<main>`
+    in `index.html` (`game.js` marks a forgotten one).
+  - A swipe does nothing on a row that scrolls sideways itself (trainings, coaches, the cards on For you, price cards,
+    the photos of a post), in a window, a form field or an open conversation, with the menu open, or from the very
+    edge of the screen (the phone's own back gesture).
+  - "Reduce motion": nothing follows the finger; a clear swipe or a tap changes the page at once.
 - The menu (☰) sits at the **top right** in the header, with **My profile** at the top (and Contact).
 - Section descriptions (and the price cards in Level 5 · Schedule) sit behind a "Read more" button; elements marked
   `data-more` in `index.html` are hidden on phones until it's tapped.
@@ -302,7 +317,8 @@ There is one room (12 m × 12 m), and the app now knows it. Rules, all checked o
   and its CSV, "Download rentals (CSV)", unpaid rental in "To collect" and planned rental in "Booked ahead".
 
 ## Chat
-Players chat privately with a coach, like a messaging app (`chat.html`, `chat.js`, `chat.css`).
+Players chat privately with a coach, like a messaging app (`chat.js`, `chat.css`; `chat.html` on a computer, the
+chat page of `index.html` on a phone, see "Phones").
 - **Start:** the **Chat** button on a coach card (it replaced the Instagram button) or "Start a chat" on the chat page.
   A coach can only chat once their card is linked to an account (trainer application approved with "link to an
   existing card", or `trainers.email` set); until then the button says they aren't on the chat yet.

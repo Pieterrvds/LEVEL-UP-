@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LEVEL-UP | Personal Training & Group Workouts</title>
-  <script src="i18n-nl.js?v=202611171000"></script>
-  <script src="i18n.js?v=202611171000"></script>
+  <script src="i18n-nl.js?v=202611181000"></script>
+  <script src="i18n.js?v=202611181000"></script>
   <meta name="description" content="Book your personal trainer in Aalst: 1:1, duo and group training. Earn XP every session, climb the ranks and level up.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -19,8 +19,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#070707">
   <!-- Before anything shows: the rank colour, and on a phone which of the pages opens (game.js "Phones: five pages") -->
-  <script>try{var d=document.documentElement,r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")d.dataset.rank=r;var h=location.hash.slice(1);d.dataset.view=/^(schedule|book)$/.test(h)?"book":/^(scores|highScores)$/.test(h)?"scores":h==="foryou"||(!h&&localStorage.getItem("levelup.fy"))?"foryou":"home"}catch(e){}</script>
-  <script>addEventListener("pagereveal",function(e){try{var s=sessionStorage.getItem("levelup.slide");sessionStorage.removeItem("levelup.slide");if(!e.viewTransition)return;if(!s){var q=function(){};e.viewTransition.ready.catch(q);e.viewTransition.finished.catch(q);if(e.viewTransition.updateCallbackDone)e.viewTransition.updateCallbackDone.catch(q);e.viewTransition.skipTransition();return}var d=document.documentElement,f=function(){delete d.dataset.slide};d.dataset.slide=s;e.viewTransition.ready.catch(f);if(e.viewTransition.updateCallbackDone)e.viewTransition.updateCallbackDone.catch(f);e.viewTransition.finished.then(f,f)}catch(_){}})</script>
+  <script>try{var d=document.documentElement,r=localStorage.getItem("levelup.rank");if(r&&localStorage.getItem("levelup.carbon")!=="1")d.dataset.rank=r;var h=location.hash.slice(1);d.dataset.view=/^chat(\/|$)/.test(h)?"chat":/^(schedule|book)$/.test(h)?"book":/^(scores|highScores)$/.test(h)?"scores":h==="foryou"||(!h&&localStorage.getItem("levelup.fy"))?"foryou":"home"}catch(e){}</script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/app/favicon-64.png" type="image/png">
   <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
@@ -31,7 +30,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611171000">
+  <link rel="stylesheet" href="style.css?v=202611181000">
+  <link rel="stylesheet" href="chat.css?v=202611181000">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"SportsActivityLocation","name":"LEVEL-UP Personal Training",
    "url":"https://pieterrvds.github.io/LEVEL-UP-/","telephone":"+32471955489","email":"PieterV-D-S@hotmail.com",
@@ -84,13 +84,16 @@
   <main>
     <!-- FOR YOU: a phone only. Your own start screen, a page of its own to the left of the home page (foryou.js).
          On a computer it is the first tab of your account. -->
-    <section id="foryou" class="fy-page" data-v="foryou">
+    <section data-pg id="foryou" class="fy-page" data-v="foryou">
       <div class="fy" id="fyHome"><p class="fy-wait">Loading…</p></div>
     </section>
 
+    <!-- The photo that hangs still behind the whole home page (a layer of its own, so the page can slide away
+         from it on a phone) -->
+    <div data-pg class="hero-bg home-photo" aria-hidden="true"></div>
+
     <!-- HERO / TITLE SCREEN -->
-    <section id="home" class="hero">
-      <div class="hero-bg" aria-hidden="true"></div>
+    <section data-pg id="home" class="hero">
       <div class="container hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">▸ Personal training · Aalst</p>
@@ -132,10 +135,10 @@
       <a href="#about" class="press-start" aria-label="Scroll down">Kick off ▼</a>
     </section>
 
-    <div class="vine-divider" aria-hidden="true"></div>
+    <div data-pg class="vine-divider" aria-hidden="true"></div>
 
     <!-- ABOUT + LEVEL SYSTEM -->
-    <section id="about" class="section">
+    <section data-pg id="about" class="section">
       <div class="container">
         <div class="about-grid">
           <div class="about-copy">
@@ -257,7 +260,7 @@
     </section>
 
     <!-- CLASSES -->
-    <section id="programs" class="section section-alt">
+    <section data-pg id="programs" class="section section-alt">
       <div class="container">
         <p class="section-kicker">Level 2 · Training</p>
         <h2 class="section-title">Choose your training</h2>
@@ -276,7 +279,7 @@
     </section>
 
     <!-- TEAM -->
-    <section id="team" class="section">
+    <section data-pg id="team" class="section">
       <div class="container">
         <div class="row-head">
           <div>
@@ -345,7 +348,7 @@
     </section>
 
     <!-- HIGH SCORES -->
-    <section id="scores" class="section section-alt" data-v="scores">
+    <section data-pg id="scores" class="section section-alt" data-v="scores">
       <div class="container">
         <p class="section-kicker">Level 4 · High scores</p>
         <div class="high-scores" id="highScores" aria-labelledby="highScoresTitle">
@@ -369,7 +372,7 @@
     </section>
 
     <!-- REVIEWS: real clients, approved in admin (hidden until there is one) -->
-    <section id="reviews" class="section reviews" hidden>
+    <section data-pg id="reviews" class="section reviews" hidden>
       <div class="container">
         <p class="section-kicker">Reviews</p>
         <h2 class="section-title">What players say</h2>
@@ -379,7 +382,13 @@
     </section>
 
     <!-- SCHEDULE / BOOKING -->
-    <section id="schedule" class="section section-alt" data-v="book">
+    <!-- CHAT: a phone only. A page of its own between Home and Book (chat.js); a computer has chat.html. -->
+    <section data-pg id="chat" class="chat-page chat-view" data-v="chat">
+      <div class="hero-bg page-photo" aria-hidden="true"></div>
+      <div class="container" id="chatRoot"></div>
+    </section>
+
+    <section data-pg id="schedule" class="section section-alt" data-v="book">
       <div class="container">
         <p class="section-kicker">Level 5 · Schedule</p>
         <h2 class="section-title">Book your trainer</h2>
@@ -419,7 +428,7 @@
     </dialog>
 
     <!-- CONTACT -->
-    <section id="contact" class="section contact">
+    <section data-pg id="contact" class="section contact">
       <div class="container contact-grid">
         <div class="contact-info">
           <p class="section-kicker">Level 6 · Contact</p>
@@ -494,7 +503,7 @@
     </section>
 
     <!-- Q&A -->
-    <section id="faq" class="section section-alt faq">
+    <section data-pg id="faq" class="section section-alt faq">
       <div class="container faq-wrap">
         <div>
           <p class="section-kicker">Level 7 · Questions</p>
@@ -542,10 +551,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <script src="game.js?v=202611171000"></script>
-  <script src="script.js?v=202611171000"></script>
-  <script src="schedule.js?v=202611171000"></script>
-  <script src="posts.js?v=202611171000"></script>
-  <script src="foryou.js?v=202611171000"></script>
+  <script src="game.js?v=202611181000"></script>
+  <script src="script.js?v=202611181000"></script>
+  <script src="schedule.js?v=202611181000"></script>
+  <script src="posts.js?v=202611181000"></script>
+  <script src="foryou.js?v=202611181000"></script>
+  <script src="chat.js?v=202611181000"></script>
 </body>
 </html>

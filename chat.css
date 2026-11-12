@@ -141,6 +141,9 @@
 /* ---------- Phones: one screen at a time, like a messaging app ---------- */
 @media (max-width: 760px) {
   .chat-page { padding: var(--hud-h) 0 0; }
+  /* in the home page (a phone) the chat is one screen high and slides sideways: its photo goes along with it */
+  .chat-view .page-photo { position: absolute; inset: 0; height: auto; transform: none; }
+  .chat-locked { margin: 20px 14px 0; }
   .chat-page .container { width: 100%; }
   .chat-app {
     grid-template-columns: 1fr; border: 0; border-radius: 0; box-shadow: none; min-height: 0;

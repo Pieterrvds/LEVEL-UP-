@@ -408,7 +408,7 @@
     lastHtml[name] = html;
     parts[name].innerHTML = html;
   };
-  const shown = () => host && !host.hidden && (!home || (PHONE.matches && LevelUp.getView() === "foryou"));
+  const shown = () => host && !host.hidden && (!home || PHONE.matches); // a phone: also while another page is on screen (it slides in under a finger)
 
   // A visitor on the phone page: what an account gives, and the way in
   function guestHtml() {

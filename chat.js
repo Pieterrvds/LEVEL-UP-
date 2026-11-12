@@ -1,8 +1,13 @@
 // LEVEL-UP chat: private conversations between a player and a coach.
 // The list of conversations on the left (phones: first screen), the open conversation on the right.
 // New messages: checked every 3 s while a conversation is open (and right away when a push comes in).
+// A computer has it on chat.html. A phone has it as a page of the home page (index.html, the section #chat, next
+// to Home and Book): there it only works while that page is on screen, and the address is #chat/t/<conversation>.
 
+(() => {
 const root = document.getElementById("chatRoot");
+if (!root) return;
+const EMBED = Boolean(root.closest("[data-v]")); // inside the home page
 const { esc } = LevelUp;
 
 const SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M3 11.5 21 4l-6.5 17-3-7.5z"/><path d="m11.5 13.5 4-4"/></svg>';
@@ -23,10 +28,19 @@ const state = {
 };
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
 
-const params = new URLSearchParams(location.search);
+// What the address asks for: a conversation (t) or the one with a coach
+const route = () => {
+  if (!EMBED) { const q = new URLSearchParams(location.search); return { t: q.get("t") || "", coach: q.get("coach") || "" }; }
+  const m = /^#chat\/(t|coach)\/(.+)$/.exec(location.hash);
+  let id = "";
+  try { id = m ? decodeURIComponent(m[2]) : ""; } catch { id = ""; }
+  return { t: m?.[1] === "t" ? id : "", coach: m?.[1] === "coach" ? id : "" };
+};
+const address = (id) => (EMBED ? `#chat${id ? `/t/${encodeURIComponent(id)}` : ""}` : `chat.html${id ? `?t=${encodeURIComponent(id)}` : ""}`);
 // The messages box is skipped by the translator (people's own words), so its few labels go through t()
 const LevelUp_t = (s) => (window.t ? window.t(s) : s);
 const isPhone = () => window.matchMedia("(max-width: 760px)").matches;
+const onScreen = () => !EMBED || (isPhone() && LevelUp.getView() === "chat");
 const sameDay = (a, b) => a.toDateString() === b.toDateString();
 
 function timeLabel(at) {
@@ -353,7 +367,7 @@ async function openThread(id, { push = true } = {}) {
     state.pending = [];
     state.lastId = state.messages.at(-1)?.id || 0;
     LevelUp.setChatActive(id);
-    if (push && params.get("t") !== id) history.pushState({ t: id }, "", `chat.html?t=${encodeURIComponent(id)}`);
+    if (push && route().t !== id) history.pushState({ t: id }, "", address(id));
     const row = state.threads?.find((t) => t.id === id);
     if (row) row.unread = 0;
     render();
@@ -373,7 +387,7 @@ function closeThread({ push = true } = {}) {
   state.pending = [];
   LevelUp.setChatActive(null);
   clearInterval(state.threadTimer);
-  if (push && location.search) history.pushState({}, "", "chat.html");
+  if (push && (route().t || route().coach)) history.pushState({}, "", address(""));
   render();
   loadList();
 }
@@ -519,57 +533,98 @@ root.addEventListener("keydown", (event) => {
   if (event.target.id === "chatSearch" && event.key === "Escape") clearSearch();
 });
 
-window.addEventListener("popstate", () => {
-  const id = new URLSearchParams(location.search).get("t");
-  if (id) openThread(id, { push: false });
-  else closeThread({ push: false });
-});
+// Open what the address asks for (a notification, the Chat button of a coach, the back button of the phone)
+async function follow() {
+  const r = route();
+  if (r.coach) {
+    try {
+      const id = await LevelUp.chatOpen(r.coach);
+      history.replaceState({ t: id }, "", address(id));
+      await loadList();
+      openThread(id, { push: false });
+    } catch (err) {
+      alert(err.message);
+      history.replaceState({}, "", address(""));
+    }
+  } else if (r.t) {
+    if (state.active?.id !== r.t) openThread(r.t, { push: false });
+  } else if (state.active) closeThread({ push: false });
+}
+window.addEventListener("popstate", () => { if (onScreen() && started) follow(); });
+if (EMBED) window.addEventListener("hashchange", () => { if (onScreen() && started) follow(); });
 
 // Back in the app: fetch what came in meanwhile and show the newest message
 document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState !== "visible") return;
+  if (document.visibilityState !== "visible" || (EMBED && !awake)) return;
   const before = state.lastId;
   loadList();
   await poll();
   if (state.lastId !== before) scrollToEnd();
 });
 // A new message anywhere (the unread check in game.js): refresh the list, and the open conversation
-document.addEventListener("levelup:chat", (event) => { if (event.detail?.unread) { loadList(); poll(); } });
+document.addEventListener("levelup:chat", (event) => { if (event.detail?.unread && (!EMBED || started)) { loadList(); poll(); } });
 
 let started = false;
-async function start() {
-  render();
-  if (!LevelUp.isReady() || !LevelUp.getPlayer() || started) return;
-  started = true;
-  await loadList();
-  // chat.html?coach=pieter (the Chat button on a coach card) or ?t=<conversation> (a notification)
-  const coach = params.get("coach");
-  if (coach) {
-    try {
-      const id = await LevelUp.chatOpen(coach);
-      history.replaceState({ t: id }, "", `chat.html?t=${encodeURIComponent(id)}`);
-      await loadList();
-      openThread(id, { push: false });
-    } catch (err) {
-      alert(err.message);
-      history.replaceState({}, "", "chat.html");
-    }
-  } else if (params.get("t")) {
-    openThread(params.get("t"), { push: false });
-  } else if (!isPhone() && state.threads?.length) {
-    openThread(state.threads[0].id, { push: false });
-  }
+let awake = false; // in the home page: the chat page is the one on screen
+const listTimer = () => {
+  clearInterval(state.listTimer);
   state.listTimer = setInterval(() => { if (document.visibilityState === "visible" && !state.active) loadList(); }, 15000);
+};
+async function start() {
+  if (EMBED && !isPhone()) return; // a computer has the chat on chat.html
+  render();
+  if (!LevelUp.isReady() || !LevelUp.getPlayer()) return;
+  if (!started) {
+    started = true;
+    await loadList(); // in the home page too: the list is there when you swipe to it
+    if (!EMBED) {
+      // chat.html?coach=pieter (the Chat button on a coach card) or ?t=<conversation> (a notification)
+      const r = route();
+      if (r.coach || r.t) await follow();
+      else if (!isPhone() && state.threads?.length) openThread(state.threads[0].id, { push: false });
+      listTimer();
+      return;
+    }
+  }
+  if (EMBED) watch(true);
 }
+// In the home page: awake while the chat page is on screen, asleep (no conversation open, no checking) when not
+function watch(fresh = false) {
+  if (!EMBED || !started) return;
+  if (onScreen() && !awake) {
+    awake = true;
+    if (!fresh) loadList();
+    listTimer();
+    follow();
+  } else if (!onScreen() && awake) {
+    awake = false;
+    stopTimers();
+    if (state.active) {
+      state.active = null; state.messages = []; state.pending = [];
+      LevelUp.setChatActive(null);
+      render();
+    }
+  }
+}
+document.addEventListener("levelup:view", () => watch());
 
 document.addEventListener("levelup:change", () => {
-  if (!LevelUp.getPlayer()) { started = false; state.threads = null; state.active = null; }
+  if (!LevelUp.getPlayer()) { started = false; awake = false; state.threads = null; state.active = null; }
   start();
 });
 start();
+
+// The Chat button of the bar, tapped while the chat is open: back to the list, at its top
+window.LevelUpChat = {
+  home() {
+    if (state.active) closeThread();
+    else document.getElementById("chatThreads")?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+};
 
 // Double tap (or double click) on someone's message gives it a heart
 root.addEventListener("dblclick", (event) => {
   const heart = event.target.closest(".chat-msg.theirs")?.querySelector("[data-chat-like]:not(.on)");
   if (heart) likeMessage(heart.dataset.chatLike);
 });
+})();
