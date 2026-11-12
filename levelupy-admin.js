@@ -38,6 +38,68 @@
     paint();
   }
 
+  // ---------- His own account: the mascot as a member who posts once a month ----------
+  let mascot = null, mascotError = "", mascotBusy = false;
+  async function loadMascot() {
+    try { mascot = await LevelUp.adminMascot(); mascotError = ""; }
+    catch (err) { mascot = null; mascotError = /could not find the function|schema cache/i.test(err.message) ? "Run supabase/schema.sql in the SQL Editor first." : err.message; }
+    const old = box?.querySelector("#lvAccount");
+    if (old) old.outerHTML = accountHtml();
+  }
+  function accountHtml() {
+    const day = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const a = mascot?.account;
+    return `<section class="panel admin-panel" id="lvAccount">
+      <div class="panel-head"><h2>His own account</h2>${a ? `<span class="status-chip confirmed">Posting every month</span>` : `<span class="status-chip pending">No account yet</span>`}</div>
+      <p class="muted small">Levelupy as a member of the club: his face as the profile photo, a picture of him at work in the gym hall, and once a month a post with a
+        quote and a thank-you to players and coaches. Members see his posts on their start screen ("From the club"). It needs an account of its own:
+        make one with a spare e-mail address (log in once with it), then fill in that address here.</p>
+      ${mascotError ? `<p class="form-error">${esc(mascotError)}</p>` : ""}
+      ${a ? `
+        <ul class="lv-account">
+          <li><span>Account</span><b>${esc(a.name)}</b> <small>${esc(a.email)}</small></li>
+          <li><span>Posts</span><b>${num(mascot.posts)}</b> <small>${mascot.last ? `last one on ${day(mascot.last)}` : "none yet"}</small></li>
+          <li><span>Next post</span><b>${day(mascot.next)}</b> <small>the first time someone opens the app that day</small></li>
+        </ul>
+        <div class="btn-row">
+          <a class="btn btn-small btn-primary" href="profile.html?u=${encodeURIComponent(a.id)}">Open his page</a>
+          <button type="button" class="btn btn-small btn-ghost" data-lv-mascot="post" ${mascotBusy ? "disabled" : ""}>Post now</button>
+          <button type="button" class="btn btn-small btn-ghost" data-lv-mascot="clear" ${mascotBusy ? "disabled" : ""}>Stop posting</button>
+        </div>` : `
+        <form class="lv-account-form" id="lvMascotForm">
+          <label>E-mail address of his account<input type="email" name="email" required autocomplete="off" placeholder="name@example.com"></label>
+          <button type="submit" class="btn btn-primary btn-small" ${mascotBusy ? "disabled" : ""}>Make this Levelupy's account</button>
+        </form>
+        <p class="muted small">That account is renamed "Levelupy", gets his face as its photo, leaves the high scores and posts its first picture at once.</p>`}
+    </section>`;
+  }
+  document.addEventListener("submit", async (event) => {
+    if (event.target.id !== "lvMascotForm" || !box?.contains(event.target)) return;
+    event.preventDefault();
+    if (mascotBusy) return;
+    mascotBusy = true;
+    try { mascot = await LevelUp.adminMascotSet(new FormData(event.target).get("email")); mascotError = ""; LevelUp.toast({ title: "Levelupy has his own account", text: "His first post is up", icon: "🎉", tone: "green" }); }
+    catch (err) { mascotError = err.message; }
+    mascotBusy = false;
+    const old = box?.querySelector("#lvAccount");
+    if (old) old.outerHTML = accountHtml();
+  });
+  document.addEventListener("click", async (event) => {
+    const btn = event.target.closest("[data-lv-mascot]");
+    if (!btn || !box?.contains(btn) || mascotBusy) return;
+    const what = btn.dataset.lvMascot;
+    if (what === "clear" && !confirm("Stop his monthly posts? The account and what he posted stay.")) return;
+    mascotBusy = true; btn.disabled = true;
+    try {
+      mascot = what === "post" ? await LevelUp.adminMascotPost() : await LevelUp.adminMascotClear();
+      mascotError = "";
+      LevelUp.toast(what === "post" ? { title: "Posted", text: "It's on the start screen of the members", icon: "📸", tone: "green" } : { title: "Stopped", text: "He no longer posts", icon: "✓" });
+    } catch (err) { mascotError = err.message; }
+    mascotBusy = false;
+    const old = box?.querySelector("#lvAccount");
+    if (old) old.outerHTML = accountHtml();
+  });
+
   // ---------- His wardrobe: every look with the days he wears it (mascot-looks.js) ----------
   const DAY_MONTH = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   function when(look) {
@@ -84,7 +146,7 @@
 
   function paint() {
     if (!box) return;
-    if (error) { box.innerHTML = `<section class="panel admin-panel"><div class="panel-head"><h2>Levelupy</h2></div><p class="form-error">${esc(error)}</p></section>${wardrobeHtml()}`; drawWardrobe(); return; }
+    if (error) { box.innerHTML = `<section class="panel admin-panel"><div class="panel-head"><h2>Levelupy</h2></div><p class="form-error">${esc(error)}</p></section>${accountHtml()}${wardrobeHtml()}`; drawWardrobe(); return; }
     if (!data) { box.innerHTML = `<section class="panel admin-panel"><p class="muted">Loading…</p></section>`; return; }
     const month = new Date().toISOString().slice(0, 7);
     const thisMonth = data.spend.filter((s) => String(s.month).slice(0, 7) === month);
@@ -152,6 +214,7 @@
           <li>Keep "Trial: you and the coaches" on, open the chat and ask Levelupy a few things. Happy? Choose "On for all members".</li>
         </ol>
       </section>
+      ${accountHtml()}
       ${wardrobeHtml()}`;
     drawWardrobe();
   }
@@ -184,6 +247,7 @@
       box = el;
       paint();
       load();
+      loadMascot();
     }
   };
 })();

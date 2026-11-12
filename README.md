@@ -6,7 +6,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
 - `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
-- `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs: My page (what others see), Overview (sessions, group classes, likes), Coach (trainers only), Rewards, Packs & shop, Body stats, Settings; `profile.html#rewards` (or any section id such as `#packs`) opens that tab. Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
+- `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs, four of them: My page (what others see), My sessions (sessions, group classes, packs), Progress (rewards, achievements, ranks, body stats, likes, inventory) and Settings (notifications first, then account, health check); trainers also get Coach. `profile.html#rewards` (or any section id such as `#packs`) opens that tab, and the links of the earlier tabs (`#shop`, `#body`, `#settings`) still land right (`TAB_ALIAS` in `profile.js`). Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
 - `chat.html`: private chat between a player and a coach (see "Chat"); a phone has it as a page of `index.html`
 - `member.html`: only sends old links on to `profile.html` (the member pages used to live here)
 - `admin.html`: admin dashboard (admins only): key numbers, charts for sessions per week and per trainer, member growth and ranks, trainer occupancy, all bookings (with cancel) and all members with their details. Split into tabs: Overview, Bookings, Finances, Team, Members, with counters for things waiting (e.g. `admin.html#finances`).
@@ -205,6 +205,18 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
 - **Online payment for classes** needs the updated `payments` Edge Function (it accepts `type: "class"`): redeploy
   `supabase/functions/payments/index.ts` when you switch online payments on.
 
+## A first booking, step by step
+A visitor taps an hour and sees one window that carries them through: **1 Account → 2 Health check → 3 Request**
+(the row of steps at the top, `stepsHtml` in `schedule.js`; members who booked before don't get the steps).
+- The price a newcomer pays comes first ("€30 · your first session … · after that €60").
+- "Create account" opens the account window: first name, e-mail, password. The choice "player or trainer" only shows
+  after the small link "Are you a personal trainer? Apply as a coach".
+- **The chosen hour is kept** on the device (`localStorage` `levelup.slot`, three days). After the confirmation e-mail
+  the link opens the site again; as soon as that visitor is logged in, the booking window opens on the same hour
+  (`resumeSlot`). Closed by hand or booked: forgotten. Taken by someone else meanwhile: a message, and the schedule.
+- On a phone the hours come before the prices; "Prices ▾" at the top jumps to them.
+- A coach's level is the level of their own account (`trainer_stats`, also for visitors).
+
 ## Booking flow (anti-cheat)
 1. A player sends a booking request: status **pending**, the hour is reserved, no XP yet.
 2. The trainer gets a pop-up when logged in (and an email copy when their account is linked) and
@@ -390,7 +402,7 @@ On iPhone, notifications only work in the home-screen app (iOS 16.4 or newer).
    `push`, replace the example code with everything in `supabase/functions/push/index.ts`, deploy.
 2. **Turn off JWT verification** (Edge Functions → push → *Details* → "Enforce JWT verification" off → Save).
    The function only ever sends what the database queued, so anyone may ask it to send.
-3. **Turn it on yourself:** My page → Settings → *Turn on notifications*. The first time, the function makes its own
+3. **Turn it on yourself:** the switch "On this phone" (menu → Notifications on a phone, or Settings → App & notifications). The first time, the function makes its own
    key pair (`push_keys`, readable only by the server): there is no key to copy or keep secret. You get a test message.
 4. **Reminders and expired requests** (recommended): these happen without anyone clicking, so let Supabase call the
    function every 10 minutes. SQL Editor:
@@ -407,6 +419,17 @@ On iPhone, notifications only work in the home-screen app (iOS 16.4 or newer).
 
 The admin dashboard shows a "To do: push notifications" card until step 3 is done.
 
+## Notifications: where a member switches them
+Three switches, the same in two places (`notifyHtml` in `game.js`): on a phone **menu → Notifications** (a small window,
+with "On"/"Off" behind the menu entry), and **Settings → App & notifications**. On a computer a gear next to the avatar
+opens Settings; on a phone "Settings" is in the menu.
+- **On this phone**: the subscription of this device (sessions, reminders, XP, rewards). When it can't be switched
+  the reason is written under it: blocked in the browser, iPhone that needs the app on the home screen first, or a
+  browser without notifications.
+- **Chat messages**: `profiles.push_chat` (`set_push_chat`); off = `_push` drops everything tagged `chat-…` for that
+  member. The red number in the app stays.
+- **News**: `profiles.push_news` (see below).
+
 ## News and notifications for everyone
 The 🔔 in the header (also for visitors) lists the latest news: new group classes, new products, discounts and
 messages from the admin. The same items go out as a notification to everyone with notifications on.
@@ -414,8 +437,8 @@ So it never feels like spam:
 - at most **2 news notifications per person per 24 hours** (more news still shows behind the bell);
 - **nothing at night**: news and reminders queued between 22:00 and 8:00 go out at 8:00 (`push_outbox.send_after`);
 - a weekly class series is one message; a product is "new" once and gets at most one discount message every 3 days;
-- players switch news off under My page → Settings → **News notifications** (their own sessions, chat and XP always
-  come through); the person who made the news gets a copy too, so they see what their members see;
+- players switch news off with the **News** switch (menu → Notifications on a phone, or Settings; their own sessions
+  always come through); the person who made the news gets a copy too, so they see what their members see;
 - news about a class that started, a cancelled class or a discount that ended disappears by itself.
 
 **Admin → Overview → Message to everyone** sends your own message (title, optional text, where it opens), at most 3
@@ -602,7 +625,7 @@ chat (the header, or a name in a group chat), in the likes on your own profile, 
 card ("Meet the team": the photo or name, and the small coach faces on the training cards).
 `profile.html?u=<user id>` is a member, `profile.html?trainer=<trainer id>` a coach, without either your own page.
 - **One page, also for yourself:** your own page is the same page others see, plus tabs only you see (For you on a
-  computer, Overview, Coach, Rewards, Packs & shop, Body stats, Settings). On a computer your page opens on **For you**
+  computer, My sessions, Coach for trainers, Progress, Settings). On a computer your page opens on **For you**
   (the start screen); on a phone on **My page**. The tab **My page** is exactly what others see, with your
   own buttons in it: 📷 on your photo, the text about yourself, "Add a photo" and Remove under your photos. `member.js` draws the top block and the My page tab, `profile.js` the
   other tabs; on someone else's page `profile.js` draws nothing.
@@ -710,6 +733,19 @@ end of `style.css`).
   the number of trainers you trained with; everything else comes from `my_data` (`checkin: { done, weeks, xp }`).
 - **A database without this yet** (schema not run): the screen still shows, without the check-in button, the race and
   the posts.
+
+## Levelupy's own account: he posts once a month
+The mascot as a member of the club. **Admin → Levelupy → "His own account"**: fill in the e-mail address of a spare
+account (make it first and log in once). That account is renamed "Levelupy", gets his face as its photo
+(`img/mascot/avatar.png`), leaves the high scores, and posts at once: a picture of him on the rings in a gym hall
+(`img/mascot/hello.jpg`). From then on he posts once a month, the first time anyone opens the app that month
+(`_mascot_post_due`, called by `my_data` and by the push function): the picture of that month
+(`img/mascot/month-01.jpg` … `month-12.jpg`, each with the hat of the season) with a quote and a thank-you to players
+and coaches for last month, with the number of sessions when there were at least five (`_mascot_text`). Members see it
+on their start screen ("From the club") and on his page; they cannot start a chat with him and he is not in the chat
+search. "Post now" makes an extra post, "Stop posting" ends it (the account and his posts stay). His page keeps his
+24 newest posts. The pictures are drawn, not photographed: the gym hall and the mascot come from the same engine as
+the celebrations.
 
 ## The mascot's wardrobe
 Levelupy wears something on his head every day of the year, by itself: 29 looks in `mascot-looks.js`.

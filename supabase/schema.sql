@@ -238,6 +238,8 @@ alter table public.photo_comments enable row level security;
 alter table public.photo_comment_likes enable row level security;
 -- Players can switch off news notifications (their own bookings, chat and XP always come through)
 alter table public.profiles add column if not exists push_news boolean not null default true;
+-- Chat messages as a notification (off: the chat still shows its red number in the app)
+alter table public.profiles add column if not exists push_chat boolean not null default true;
 
 create table if not exists public.xp_log (
   id bigint generated always as identity primary key,
@@ -1015,6 +1017,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'lastLogin', p.last_login,
     'showOnLeaderboard', p.show_on_leaderboard,
     'pushNews', p.push_news,
+    'pushChat', p.push_chat,
     'bio', p.bio,
     'profileVisible', p.profile_visible,
     'birthday', p.birthday,
@@ -1134,6 +1137,7 @@ begin
   perform public._expire_requests();
   perform public._series_extend();
   perform public._settle_player_of_month();
+  perform public._mascot_post_due(); -- Levelupy's post of the month, the first time anyone opens the app that month
   -- profile can be missing if the account was made before this schema existed
   insert into public.profiles (id, email, name)
   select u.id, lower(u.email), left(coalesce(nullif(trim(u.raw_user_meta_data ->> 'name'), ''), split_part(u.email, '@', 1)), 24)
@@ -2180,6 +2184,7 @@ begin
     'liked', exists (select 1 from public.player_likes l where l.from_id = me and l.to_id = p.id
                      and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date),
     'canLike', me is not null and p.id <> me and p.show_on_leaderboard,
+    'mascot', p.id = public._mascot_user(),  -- Levelupy's own account: he posts, he does not chat
     'streak', coalesce((public._streak(p.id) ->> 'weeks')::int, 0),
     'potmWins', (select count(*) from public.monthly_awards a where a.user_id = p.id),
     'place', case when t.id is null and p.show_on_leaderboard then
@@ -2797,6 +2802,11 @@ end $$;
 create or replace function public.set_push_news(p_on boolean)
 returns void language sql security definer set search_path = public as $$
   update public.profiles set push_news = coalesce(p_on, true) where id = auth.uid();
+$$;
+-- ... and chat messages as a notification
+create or replace function public.set_push_chat(p_on boolean)
+returns void language sql security definer set search_path = public as $$
+  update public.profiles set push_chat = coalesce(p_on, true) where id = auth.uid();
 $$;
 
 -- Admin: a pack size comes with a gift from the shop (or none)
@@ -3552,6 +3562,8 @@ create or replace function public._push(p_user uuid, p_title text, p_body text, 
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if p_user is null or not exists (select 1 from public.push_subscriptions where user_id = p_user) then return; end if;
+  -- chat messages only for who wants them as a notification (Notifications → Chat messages)
+  if coalesce(p_tag, '') like 'chat-%' and exists (select 1 from public.profiles where id = p_user and not push_chat) then return; end if;
   insert into public.push_outbox (user_id, title, body, url, tag) values (p_user, p_title, coalesce(p_body, ''), p_url, coalesce(p_tag, ''));
 end $$;
 
@@ -3996,6 +4008,7 @@ declare
   n integer := 0;
   today date := (now() at time zone 'Europe/Brussels')::date;
 begin
+  perform public._mascot_post_due();
   for b in
     select k.*, split_part(t.name, ' ', 1) as trainer
     from public.bookings k join public.trainers t on t.id = k.trainer_id
@@ -4396,7 +4409,7 @@ begin
   from (
     select p.id, p.name, (public._trainer_of(p.id) is not null) as is_trainer, (p.name ilike q || '%') as starts
     from public.profiles p
-    where p.id <> auth.uid() and p.name ilike '%' || q || '%'
+    where p.id <> auth.uid() and p.name ilike '%' || q || '%' and p.id is distinct from public._mascot_user()
     order by (public._trainer_of(p.id) is not null) desc, (p.name ilike q || '%') desc, lower(p.name)
     limit 12
   ) x;
@@ -4417,6 +4430,7 @@ begin
   if me is null then raise exception 'Log in first.'; end if;
   if p_user is null or p_user = me then raise exception 'Pick someone else to chat with.'; end if;
   if not exists (select 1 from public.profiles where id = p_user) then raise exception 'Member not found.'; end if;
+  if p_user = public._mascot_user() then raise exception 'Levelupy only posts. Ask your coach in the chat.'; end if;
   their_card := public._trainer_of(p_user);
   if their_card is not null and their_card is distinct from me_trainer
      and exists (select 1 from public.trainers where id = their_card and active) then
@@ -5476,6 +5490,8 @@ revoke execute on function public.admin_shop_sale(text, integer, timestamptz, bo
 revoke execute on function public.admin_announce(text, text, text) from public, anon;
 revoke execute on function public.admin_delete_news(bigint) from public, anon;
 revoke execute on function public.set_push_news(boolean) from public, anon;
+revoke execute on function public.set_push_chat(boolean) from public, anon;
+grant execute on function public.set_push_chat(boolean) to authenticated;
 grant execute on function public.admin_shop_sale(text, integer, timestamptz, boolean) to authenticated;
 grant execute on function public.admin_announce(text, text, text) to authenticated;
 grant execute on function public.admin_delete_news(bigint) to authenticated;
@@ -6212,3 +6228,161 @@ grant execute on function public.assistant_clear() to authenticated;
 grant execute on function public.admin_assistant() to authenticated;
 grant execute on function public.admin_assistant_save(jsonb) to authenticated;
 grant execute on function public.admin_assistant_gap_done(bigint) to authenticated;
+
+-- =========================================================
+-- Levelupy's own account: the mascot as a member who posts
+-- =========================================================
+-- The admin points at one account (Admin → Levelupy → "His own account"). That account gets the mascot's name and
+-- face, a first post at once, and from then on one post a month: a quote and a thank-you to players and coaches.
+-- His pictures are files of the site (img/mascot/…), so their address is a path of the site, not a Storage address.
+insert into public.app_config (key, value) values ('mascot_user', '') on conflict (key) do nothing;
+create table if not exists public.mascot_posts (
+  month date primary key,            -- the first day of the month he posted for
+  photo_id uuid,
+  created_at timestamptz not null default now()
+);
+alter table public.mascot_posts enable row level security;  -- only through the functions below
+
+create or replace function public._mascot_user()
+returns uuid language plpgsql stable security definer set search_path = public as $$
+declare v text := nullif(public._config('mascot_user'), ''); uid uuid;
+begin
+  if v is null then return null; end if;
+  begin uid := v::uuid; exception when others then return null; end;
+  return (select p.id from public.profiles p where p.id = uid);
+end $$;
+
+-- What he writes for a month: a quote, thanks for last month (with the number of sessions when it is worth telling)
+create or replace function public._mascot_text(p_month date)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare
+  months text[] := array['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  quotes text[] := array[
+    'Je hoeft niet de beste te zijn, alleen beter dan vorige week.',
+    'Motivatie brengt je naar de zaal. Gewoonte brengt je verder.',
+    'Kleine stappen, grote levels.',
+    'Sterk word je niet in één dag, wel dag na dag.',
+    'Wie komt opdagen, wint al.',
+    'Zweet nu, straal later.',
+    'Rust hoort bij trainen. Geniet ervan en kom sterker terug.',
+    'Elke rep telt, ook die ene die je bijna oversloeg.',
+    'Een nieuw seizoen is een nieuwe kans om te beginnen.',
+    'Discipline is kiezen wat je het liefst wil boven wat je nu wil.',
+    'Sterker dan gisteren, dat is genoeg.',
+    'Kijk eens hoe ver je dit jaar gekomen bent.'];
+  m int := extract(month from p_month)::int;
+  prev date := (p_month - interval '1 month')::date;
+  n int;
+begin
+  select count(*) into n from public.bookings b where b.status = 'completed' and b.day >= prev and b.day < p_month;
+  return '“' || quotes[m] || '”' || E'\n\n'
+    || 'Bedankt aan alle spelers en coaches voor jullie inzet in ' || months[extract(month from prev)::int] || '.'
+    || case when n >= 5 then ' Samen goed voor ' || n || ' sessies!' else '' end
+    || ' Op naar een sterke ' || months[m] || '. 💪';
+end $$;
+
+-- One post of his: 'hello' (the first one) or the post of a month
+create or replace function public._mascot_post(p_kind text, p_month date)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare m uuid := public._mascot_user(); pid uuid; txt text; file text;
+begin
+  if m is null then return null; end if;
+  if p_kind = 'hello' then
+    file := 'img/mascot/hello.jpg';
+    txt := 'Hallo, ik ben Levelupy! 👋 De mascotte van LEVEL-UP heeft nu zijn eigen pagina. Elke maand kom ik hier langs met een woordje.'
+      || E'\n\n' || 'Vandaag alvast: bedankt aan alle spelers en coaches die hier elke week komen trainen. Jullie zijn de reden dat ik aan deze ringen hang. 💪';
+  else
+    file := 'img/mascot/month-' || to_char(p_month, 'MM') || '.jpg';
+    txt := public._mascot_text(p_month);
+  end if;
+  insert into public.profile_photos (user_id, url, caption) values (m, file, txt) returning id into pid;
+  insert into public.mascot_posts (month, photo_id) values (p_month, pid)
+  on conflict (month) do update set photo_id = excluded.photo_id, created_at = now();
+  -- his page stays light: the 24 newest posts
+  delete from public.profile_photos where user_id = m
+    and id not in (select q.id from public.profile_photos q where q.user_id = m order by q.created_at desc limit 24);
+  return pid;
+end $$;
+
+-- Once a month, the first time the app is opened (my_data) or the notifications run (push_due_reminders)
+create or replace function public._mascot_post_due()
+returns void language plpgsql security definer set search_path = public as $$
+declare mon date := date_trunc('month', now() at time zone 'Europe/Brussels')::date;
+begin
+  if public._mascot_user() is null then return; end if;
+  if exists (select 1 from public.mascot_posts where month = mon) then return; end if;
+  if not pg_try_advisory_xact_lock(hashtext('levelup-mascot-post')) then return; end if; -- two at the same second: one posts
+  if exists (select 1 from public.mascot_posts where month = mon) then return; end if;
+  perform public._mascot_post('month', mon);
+end $$;
+
+-- Admin: which account is his, and how it is doing
+create or replace function public.admin_mascot()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare m uuid; mon date := date_trunc('month', now() at time zone 'Europe/Brussels')::date;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  m := public._mascot_user();
+  return jsonb_build_object(
+    'account', (select jsonb_build_object('id', p.id, 'name', p.name, 'email', p.email) from public.profiles p where p.id = m),
+    'posts', (select count(*) from public.profile_photos where user_id = m),
+    'last', (select max(created_at) from public.profile_photos where user_id = m),
+    'postedThisMonth', exists (select 1 from public.mascot_posts where month = mon),
+    'next', (mon + interval '1 month')::date);
+end $$;
+
+-- Admin: this account becomes Levelupy's (by its e-mail address). It gets his name and face and posts at once.
+create or replace function public.admin_mascot_set(p_email text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  mon date := date_trunc('month', now() at time zone 'Europe/Brussels')::date;
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  select * into p from public.profiles where lower(email) = lower(btrim(coalesce(p_email, '')));
+  if not found then raise exception 'No account with that e-mail address. Make the account first (log in once with it).'; end if;
+  if p.id = auth.uid() or public._trainer_of(p.id) is not null
+     or lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) then
+    raise exception 'Pick an account of its own: not yours, not a trainer''s.';
+  end if;
+  insert into public.app_config (key, value) values ('mascot_user', p.id::text)
+  on conflict (key) do update set value = excluded.value;
+  update public.profiles set name = 'Levelupy', avatar_url = 'img/mascot/avatar.png',
+    bio = 'De mascotte van LEVEL-UP. Hangt het liefst aan de ringen en komt elke maand even langs met een woordje.',
+    profile_visible = true, show_on_leaderboard = false
+  where id = p.id;
+  if not exists (select 1 from public.mascot_posts where month = mon) then
+    perform public._mascot_post(case when exists (select 1 from public.profile_photos where user_id = p.id) then 'month' else 'hello' end, mon);
+  end if;
+  return public.admin_mascot();
+end $$;
+
+-- Admin: an extra post now (this month's picture and words), or stop: the account stays, he no longer posts
+create or replace function public.admin_mascot_post()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  if public._mascot_user() is null then raise exception 'Choose his account first.'; end if;
+  perform public._mascot_post('month', date_trunc('month', now() at time zone 'Europe/Brussels')::date);
+  return public.admin_mascot();
+end $$;
+create or replace function public.admin_mascot_clear()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  update public.app_config set value = '' where key = 'mascot_user';
+  return public.admin_mascot();
+end $$;
+
+revoke execute on function public._mascot_user() from public, anon, authenticated;
+revoke execute on function public._mascot_text(date) from public, anon, authenticated;
+revoke execute on function public._mascot_post(text, date) from public, anon, authenticated;
+revoke execute on function public._mascot_post_due() from public, anon, authenticated;
+revoke execute on function public.admin_mascot() from public, anon;
+revoke execute on function public.admin_mascot_set(text) from public, anon;
+revoke execute on function public.admin_mascot_post() from public, anon;
+revoke execute on function public.admin_mascot_clear() from public, anon;
+grant execute on function public.admin_mascot() to authenticated;
+grant execute on function public.admin_mascot_set(text) to authenticated;
+grant execute on function public.admin_mascot_post() to authenticated;
+grant execute on function public.admin_mascot_clear() to authenticated;

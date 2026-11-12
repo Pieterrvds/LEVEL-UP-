@@ -3471,3 +3471,57 @@ body.fy-open .lvy-fab { display: none; }
 @media print { .lvy-fab { display: none; } }
 /* the mascot on the start screen says he can be tapped for a chat */
 .fy-mascot.can-chat::after { content: "💬"; position: absolute; right: 6px; bottom: 8px; display: grid; place-items: center; width: 26px; height: 26px; font-size: 0.8rem; background: var(--inset); border: 1px solid var(--level); border-radius: 50%; }
+
+/* ---------- A first booking: the three steps at the top of the window ----------
+   The step you are on is written out; the others are a number (or a tick when done). */
+.book-steps { display: flex; align-items: center; gap: 6px; margin: 0 48px 16px 0; padding: 0; list-style: none; font-family: var(--sans); font-size: 0.8rem; font-weight: 700; font-size-adjust: none; color: var(--muted); }
+.book-steps li { flex: none; display: flex; align-items: center; gap: 7px; padding: 5px; background: var(--inset); border: 1px solid var(--line); border-radius: 99px; }
+.book-steps b { flex: none; display: grid; place-items: center; width: 22px; height: 22px; font-size: 0.74rem; color: var(--text); background: var(--accent-deep); border-radius: 50%; }
+.book-steps span { display: none; white-space: nowrap; }
+.book-steps li.now { padding-right: 12px; color: var(--text); border-color: var(--accent); }
+.book-steps li.now span { display: inline; }
+.book-steps li.now b { color: var(--bg); background: var(--accent); }
+.book-steps li.done b { color: var(--bg); background: var(--ok); }
+.booking-login p span { color: var(--muted); }
+.auth-coach { justify-self: center; margin-top: 2px; font-size: 0.85rem; }
+.price-jump { display: none; white-space: nowrap; }
+/* Phones: the hours come first, the prices follow under the schedule (a link at the top jumps to them) */
+@media (max-width: 760px) {
+  #schedule > .container { display: flex; flex-direction: column; }
+  #schedule > .container > * { order: 1; }
+  #schedule > .container > .section-kicker, #schedule > .container > .section-title, #schedule > .container > .section-intro { order: 0; }
+  #schedule > .container > .price-list { order: 2; margin-top: 22px; scroll-margin-top: calc(var(--hud-h) + 16px); }
+  .price-jump { display: inline; }
+}
+
+/* ---------- Notifications: three switches (menu on phones, Settings) ---------- */
+.notify { display: grid; gap: 8px; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0; padding: 12px 14px; font-family: var(--sans); font-size: 0.95rem; font-size-adjust: none; font-style: normal; font-weight: 400; letter-spacing: 0; text-transform: none; line-height: 1.4; color: var(--text); background: var(--inset); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.switch-row > span { display: grid; gap: 2px; min-width: 0; }
+.switch-row b { font-weight: 700; }
+.switch-row small { color: var(--muted); font-size: 0.82rem; }
+.switch-row.is-off { cursor: default; }
+.switch-row.is-off > span { opacity: 0.55; }
+input.switch { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 50px; height: 30px; min-height: 0; margin: 0; padding: 0; background: var(--accent-deep); border: 1px solid var(--btn2-line); border-radius: 99px; box-shadow: none; cursor: pointer; transition: background 0.18s, border-color 0.18s; }
+input.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: var(--text); border-radius: 50%; transition: transform 0.18s; }
+input.switch:checked { background: var(--ok); border-color: var(--ok); }
+input.switch:checked::after { transform: translateX(20px); background: var(--bg); }
+input.switch:disabled { opacity: 0.45; cursor: default; }
+input.switch:focus { box-shadow: none; border-color: var(--btn2-line); }
+input.switch:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.notify-why { margin: 0; padding: 0 4px; font-size: 0.85rem; color: var(--muted); }
+.notify-dialog .notify { margin-bottom: 8px; }
+@media (prefers-reduced-motion: reduce) { input.switch, input.switch::after { transition: none; } }
+/* the gear next to the avatar: the door to Settings */
+.hud-gear { display: grid; place-items: center; flex: none; width: 46px; height: 46px; margin-left: 6px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; transition: color 0.2s, border-color 0.2s; }
+.hud-gear:hover { color: var(--text); border-color: var(--accent); }
+/* the menu on phones: notifications under the profile, with their state */
+.nav .nav-notify { display: none; }
+@media (max-width: 1140px) {
+  .nav .nav-notify { display: flex; }
+  .nav .nav-notify[hidden] { display: none; }
+  .nav .nav-notify svg { flex: none; width: 22px; height: 22px; }
+  .nav .nav-notify i { margin-left: auto; font-family: var(--sans); font-size: 0.78rem; font-size-adjust: none; font-style: normal; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .nav .nav-notify i.on { color: var(--ok); }
+}
+@media (max-width: 760px) { .hud-gear { display: none; } } /* phones: Settings is in the menu, the header stays roomy */

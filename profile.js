@@ -15,7 +15,7 @@ const { esc, ITEMS, ACHIEVEMENTS, RANKS } = LevelUp;
 const state = { hoursOpen: false, achOpen: false, healthEdit: false, historyOpen: false, classHistoryOpen: false, statsEdit: null, statsLogOpen: false, tab: PHONE.matches ? "page" : "foryou", tabFromLink: false }; // open/closed blocks stay that way between renders
 // back from a payment (profile.html?payment=pack:… or booking:…): open where the result shows
 const paidFor = new URLSearchParams(location.search).get("payment");
-if (paidFor) state.tab = paidFor.startsWith("pack") ? "shop" : "overview";
+if (paidFor) state.tab = "overview"; // sessions and packs are on the same tab
 
 const formatDate = (value) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const euro = (n) => `€${Number(n).toFixed(2)}`;
@@ -839,17 +839,6 @@ function renderHealth(player) {
 // Install LEVEL-UP as an app (or confirm it already is), and push notifications
 function renderAppPanel() {
   const app = LevelUp.appInstallState();
-  const push = LevelUp.getPushStatus();
-  const pushText = {
-    on: `<p><strong>Notifications are on ✓</strong> You hear about confirmed sessions, reminders, XP and rewards${LevelUp.isTrainer() ? ", and new requests from your clients" : ""}.</p>
-      <button type="button" class="btn btn-small btn-ghost" data-push-off>Turn off</button>`,
-    off: `<p>Get a message when your trainer confirms, the day before your session, and when you earn XP or a free session${LevelUp.isTrainer() ? ". Trainers also hear about new requests right away" : ""}.</p>
-      <button type="button" class="btn btn-small btn-primary" data-push-on>🔔 Turn on notifications</button>`,
-    "ios-install": `<p>On iPhone, notifications work in the LEVEL-UP app: add it to your home screen first, then turn them on here in the app.</p>`,
-    denied: `<p>Notifications are blocked for LEVEL-UP. Allow them in your phone or browser settings (site settings → Notifications), then come back here.</p>`,
-    unsupported: `<p>This browser can't show notifications. Try Chrome, Edge, Firefox or Safari on your phone.</p>`,
-    unknown: `<p class="muted">Checking…</p>`
-  }[push];
   return `
     <section class="panel panel-wide app-panel" id="app">
       <div class="panel-head">
@@ -863,12 +852,8 @@ function renderAppPanel() {
           : `<p>Put LEVEL-UP on your home screen: it opens full screen like an app, so booking your trainer is one tap away. Free, no app store needed.</p>
              <button type="button" class="btn btn-primary" data-install-app>📲 ${app.canPrompt ? "Install the app" : "How to install"}</button>`}
       </div>
-      <h3 class="panel-sub">Notifications</h3>
-      <div class="push-setting push-${push}">${pushText}</div>
-      <label class="news-setting">
-        <input type="checkbox" data-push-news ${LevelUp.getPlayer().pushNews === false ? "" : "checked"}>
-        <span><b>News notifications</b> <small class="muted">New group classes, new products and sales: at most 2 a day and never at night. Your own sessions, chat and XP always come through.</small></span>
-      </label>
+      <h3 class="panel-sub" id="notifications">Notifications</h3>
+      ${LevelUp.notifyHtml()}
     </section>`;
 }
 
@@ -946,32 +931,35 @@ function render() {
   }
   root.hidden = tabBar.hidden = false;
   root.innerHTML = `
-    ${inTab("overview", renderSummary(player))}
+    ${inTab("rewards", renderSummary(player))}
     <div class="panel-grid">
+      ${/* My sessions: what is planned, and what you pay with */""}
       ${inTab("overview", renderSessions())}
       ${inTab("overview", renderMyClasses(player))}
-      ${inTab("overview", renderLikes(player))}
+      ${inTab("overview", renderPacks(player))}
       ${inTab("overview", renderReviewPanel(player))}
       ${inTab("coach", renderCoachPanel())}
+      ${/* Progress: what you earned and how you are doing */""}
       ${inTab("rewards", renderRewards(player))}
       ${inTab("rewards", renderAchievements(player))}
       ${inTab("rewards", renderRanks(player, p))}
-      ${inTab("shop", renderPacks(player))}
-      ${inTab("shop", renderInventory(player))}
-      ${inTab("body", renderBodyStats(player))}
-      ${inTab("me", renderHealth(player))}
-      ${inTab("me", renderApplication(player))}
+      ${inTab("rewards", renderBodyStats(player))}
+      ${inTab("rewards", renderLikes(player))}
+      ${inTab("rewards", renderInventory(player))}
+      ${/* Settings: notifications first, they are what people look for */""}
       ${inTab("me", renderAppPanel())}
       ${inTab("me", renderSettings())}
+      ${inTab("me", renderHealth(player))}
+      ${inTab("me", renderApplication(player))}
     </div>`;
   // first render: open the tab the link points to (profile.html#packs, #rewards, #photo-… on your own page)
   if (!state.tabFromLink) {
     state.tabFromLink = true;
     const hash = decodeURIComponent(location.hash.slice(1));
-    const fromLink = /^(mypage|page|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, tabs.map((t) => t.id));
+    const fromLink = /^(mypage|page|book|photo-.*)$/.test(hash) ? "page" : TAB_ALIAS[hash] || LevelUp.tabFromHash(root, tabs.map((t) => t.id));
     if (fromLink) {
       state.tab = fromLink;
-      const target = fromLink === "page" ? null : document.getElementById(hash);
+      const target = fromLink === "page" ? null : document.getElementById(TAB_BLOCK[hash] || hash);
       showTab(state.tab);
       if (target && !target.matches("[data-pane]")) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
     }
@@ -996,15 +984,23 @@ function showTab(id) {
 }
 // A link on the start screen to another tab of your account
 window.LevelUpProfile = {
-  openTab(id) {
-    if (!profileTabs(LevelUp.getPlayer()).some((t) => t.id === id)) return;
-    showTab(id);
+  openTab(id) { // a tab, a tab of before, or a block on a tab
+    const ids = profileTabs(LevelUp.getPlayer()).map((t) => t.id);
+    const block = document.getElementById(TAB_BLOCK[id] || id);
+    const tab = ids.includes(id) ? id : TAB_ALIAS[id] || block?.closest("[data-pane]")?.dataset.pane;
+    if (!ids.includes(tab)) return;
+    showTab(tab);
     history.replaceState(null, "", `${location.pathname}${location.search}#${id}`);
-    window.scrollTo({ top: 0 });
+    if (block && tab !== id) requestAnimationFrame(() => block.scrollIntoView({ block: "start" }));
+    else window.scrollTo({ top: 0 });
   }
 };
 
 // Page tabs; the counters show what needs attention
+// Four tabs (plus "For you" on a computer and "Coach" for trainers). Links to the tabs of before still land right.
+const TAB_ALIAS = { sessions: "overview", shop: "overview", progress: "rewards", body: "rewards", settings: "me" };
+// ... and the block such a link means, to scroll to
+const TAB_BLOCK = { shop: "packs", body: "stats" };
 function profileTabs(player) {
   const now = new Date();
   const coach = LevelUp.isTrainer() ? LevelUp.getCoachBookings() : [];
@@ -1014,11 +1010,9 @@ function profileTabs(player) {
   return [
     fyPane && !PHONE.matches && { id: "foryou", label: "For you" },
     { id: "page", label: "My page" },
-    { id: "overview", label: "Overview" },
+    { id: "overview", label: "My sessions" },
     LevelUp.isTrainer() && { id: "coach", label: "Coach", badge: requests + toSettle },
-    { id: "rewards", label: "Rewards", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
-    { id: "shop", label: "Packs & shop" },
-    { id: "body", label: "Body stats", badge: player.bodyStats.length ? 0 : "!" },
+    { id: "rewards", label: "Progress", badge: LevelUp.availableVouchers(player).length ? `🎁 ${LevelUp.availableVouchers(player).length}` : 0 },
     { id: "me", label: "Settings", badge: needsSetup ? "!" : 0 }
   ].filter(Boolean);
 }
@@ -1187,19 +1181,6 @@ function bindEvents(player) {
   });
 
 
-  // News notifications on / off (new classes, shop news)
-  root.querySelector("[data-push-news]")?.addEventListener("change", async (event) => {
-    const box = event.target;
-    box.disabled = true;
-    try {
-      await LevelUp.setPushNews(box.checked);
-      LevelUp.toast({ title: box.checked ? "News notifications on" : "News notifications off", text: box.checked ? "You hear about new classes and deals." : "You only get messages about your own sessions.", icon: box.checked ? "🔔" : "🔕", tone: "green" });
-    } catch (err) {
-      box.checked = !box.checked;
-      box.disabled = false;
-      alert(err.message);
-    }
-  });
 
   // Undo a drink or bar put on the tab by mistake (within 15 minutes)
   root.querySelectorAll("[data-tab-cancel]").forEach((button) => {
@@ -1337,10 +1318,10 @@ function bindEvents(player) {
 window.addEventListener("hashchange", () => {
   if (root.hidden && tabBar.hidden) return;
   const hash = decodeURIComponent(location.hash.slice(1));
-  const tab = /^(mypage|book|photo-.*)$/.test(hash) ? "page" : LevelUp.tabFromHash(root, [...tabBar.querySelectorAll("[data-page-tab]")].map((b) => b.dataset.pageTab));
+  const tab = /^(mypage|book|photo-.*)$/.test(hash) ? "page" : TAB_ALIAS[hash] || LevelUp.tabFromHash(root, [...tabBar.querySelectorAll("[data-page-tab]")].map((b) => b.dataset.pageTab));
   if (!tab) return;
   showTab(tab);
-  if (tab !== "page" && tab !== hash) document.getElementById(hash)?.scrollIntoView({ block: "start" });
+  if (tab !== "page" && tab !== hash) document.getElementById(TAB_BLOCK[hash] || hash)?.scrollIntoView({ block: "start" });
 });
 document.addEventListener("levelup:change", render);
 render();

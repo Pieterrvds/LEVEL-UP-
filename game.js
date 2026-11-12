@@ -508,6 +508,11 @@ const LevelUp = (() => {
     await refreshPlayer();
     emit();
   }
+  async function setPushChat(on) {
+    await call("set_push_chat", { p_on: Boolean(on) });
+    await refreshPlayer();
+    emit();
+  }
   const tabPaid = (id) => call("shop_tab_paid", { p_id: id });
   const packGift = (size, gift) => call("admin_pack_gift", { p_size: size, p_gift: gift || "" });
   const markPackGiftGiven = (id) => call("mark_pack_gift_given", { p_id: id });
@@ -1324,6 +1329,86 @@ const LevelUp = (() => {
       fetch(`${PUSH_URL}/flush`, { method: "POST", headers: { apikey: SUPABASE_KEY }, keepalive: true }).catch(() => {});
     }, Math.max(300, lastFlush + 5000 - Date.now()));
   }
+
+  // ---------- Notifications: three switches, the same in the menu (phones) and under Settings ----------
+  // "On this phone" is the subscription of this device; chat and news are choices of the account.
+  function notifyHtml() {
+    if (!player) return "";
+    const on = pushStatus === "on";
+    const why = {
+      "ios-install": "On iPhone, notifications work in the LEVEL-UP app: add it to your home screen first, then turn them on here in the app.",
+      denied: "Notifications are blocked for LEVEL-UP. Allow them in your phone or browser settings (site settings → Notifications), then come back here.",
+      unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari on your phone.",
+      unknown: "Checking…"
+    }[pushStatus];
+    const row = (attr, checked, title, text, disabled) => `
+      <label class="switch-row${disabled ? " is-off" : ""}">
+        <span><b>${title}</b><small>${text}</small></span>
+        <input type="checkbox" class="switch" role="switch" ${attr} ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
+      </label>`;
+    return `<div class="notify push-${pushStatus}">
+      ${row("data-push-device", on, "On this phone", `Your sessions: confirmed, the reminder the day before, XP and rewards${isTrainer() ? ", and new requests from your clients" : ""}.`, Boolean(why))}
+      ${why ? `<p class="notify-why">${why}${pushStatus === "ios-install" ? ` <button type="button" class="link-btn" data-install-app>How to install</button>` : ""}</p>` : ""}
+      ${row("data-push-chat", player.pushChat !== false, "Chat messages", "A message from your coach, a member or a group.", !on)}
+      ${row("data-push-news", player.pushNews !== false, "News", "New group classes, products and sales: at most 2 a day and never at night.", !on)}
+      ${on ? "" : why ? "" : `<p class="notify-why">Turn on "On this phone" first: the other two follow it.</p>`}
+    </div>`;
+  }
+  let notifyDialog = null;
+  function openNotify() {
+    if (!player) { openAuth("login"); return; }
+    if (!notifyDialog) {
+      notifyDialog = document.createElement("dialog");
+      notifyDialog.className = "auth-dialog notify-dialog";
+      notifyDialog.setAttribute("aria-labelledby", "notifyTitle");
+      document.body.appendChild(notifyDialog);
+      notifyDialog.addEventListener("click", (event) => { if (event.target === notifyDialog || event.target.closest("[data-close]")) notifyDialog.close(); });
+      document.addEventListener("levelup:change", () => { if (notifyDialog.open && !notifyDialog.querySelector(".switch:focus")) paintNotify(); });
+    }
+    paintNotify();
+    if (!notifyDialog.open) notifyDialog.showModal();
+    refreshPushStatus().then(() => { if (notifyDialog.open) paintNotify(); }).catch(() => {});
+  }
+  function paintNotify() {
+    notifyDialog.innerHTML = `
+      <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+      <p class="section-kicker">Your phone</p>
+      <h2 class="auth-title" id="notifyTitle">Notifications</h2>
+      ${notifyHtml()}
+      <p class="auth-note"><a href="profile.html#settings" class="text-link">All settings</a></p>`;
+  }
+  // the switches work wherever they are drawn
+  document.addEventListener("change", async (event) => {
+    const box = event.target.closest?.("[data-push-device], [data-push-chat], [data-push-news]");
+    if (!box) return;
+    const on = box.checked;
+    box.disabled = true;
+    try {
+      if (box.hasAttribute("data-push-device")) {
+        if (on) { await enablePush(); toast({ title: "Notifications on", text: "A test message is on its way", icon: "🔔", tone: "green" }); }
+        else { await disablePush(); toast({ title: "Notifications off", text: "This phone won't get LEVEL-UP messages anymore", icon: "🔕" }); }
+      } else if (box.hasAttribute("data-push-chat")) {
+        await setPushChat(on);
+        toast({ title: on ? "Chat notifications on" : "Chat notifications off", text: on ? "You hear it when a message comes in." : "New messages still show in the chat.", icon: on ? "💬" : "🔕", tone: "green" });
+      } else {
+        await setPushNews(on);
+        toast({ title: on ? "News notifications on" : "News notifications off", text: on ? "You hear about new classes and deals." : "You only get messages about your own sessions.", icon: on ? "🔔" : "🔕", tone: "green" });
+      }
+    } catch (err) {
+      box.checked = !on;
+      toast({ title: "That didn't work", text: err.message, icon: "!" });
+    } finally {
+      box.disabled = false;
+      emit();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-notify-open]")) return;
+    event.preventDefault();
+    document.getElementById("nav")?.classList.remove("open");
+    document.getElementById("menuToggle")?.setAttribute("aria-expanded", "false");
+    openNotify();
+  });
 
   // A small "turn on notifications" prompt, only when it can work and isn't on yet
   function pushCalloutHtml(text) {
@@ -2266,6 +2351,11 @@ const LevelUp = (() => {
   const adminAssistant = () => call("admin_assistant");
   const adminAssistantSave = async (p) => { await call("admin_assistant_save", { p }); assistantFor = null; };
   const adminAssistantGapDone = (id) => call("admin_assistant_gap_done", { p_id: id });
+  // Levelupy's own account: the mascot as a member who posts once a month
+  const adminMascot = () => call("admin_mascot");
+  const adminMascotSet = (email) => call("admin_mascot_set", { p_email: email });
+  const adminMascotPost = () => call("admin_mascot_post");
+  const adminMascotClear = () => call("admin_mascot_clear");
   async function clearAssistant() {
     await call("assistant_clear");
     assistant.messages = [];
@@ -2951,13 +3041,15 @@ const LevelUp = (() => {
         </span>
         <span class="sr-only">Open your profile, level ${p.level}</span>
       </a>
-      ${isAdmin() ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">⚙<span class="hud-admin-label"> Admin</span></a>` : ""}`;
+      <a href="profile.html#settings" class="hud-gear" title="Settings" aria-label="Settings">${GEAR_ICON}</a>
+      ${isAdmin() ? `<a href="admin.html" class="hud-admin" title="Admin dashboard">🛠<span class="hud-admin-label"> Admin</span></a>` : ""}`;
   }
 
   // ---------- Celebrations: a full-screen moment for a purchase, a higher place on the high scores or a like ----------
   // The animation is levelup-celebrate.js (loaded here, once, the first time one is due). The server keeps the queue
   // (table "celebrations"); each one is claimed just before it plays, so it shows exactly once, on any device.
   // They play one after another, and never on top of a form, a dialog or a payment: then they wait.
+  const GEAR_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.6-1.5L14 2.6h-4l-.5 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.3-1-2 3.4 2 1.5a7.7 7.7 0 0 0 0 3l-2 1.5 2 3.4 2.3-1a7.6 7.6 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.6 7.6 0 0 0 2.6-1.5l2.3 1 2-3.4z"/></svg>`;
   const CELEBRATE_FILE = "levelup-celebrate.js?v=1";
   const LOOKS_FILE = "mascot-looks.js?v=1";
   // ---------- What the mascot wears today (mascot-looks.js) ----------
@@ -3190,7 +3282,7 @@ const LevelUp = (() => {
   let dialog;
   const MODES = {
     login: { title: "Welcome back", submit: "Log in ▶" },
-    signup: { title: "Create your profile", submit: "Start at LVL 1 ▶" },
+    signup: { title: "Create your account", submit: "Create account ▶" },
     reset: { title: "Reset your password", submit: "Send reset link ▶" },
     "new-password": { title: "Choose a new password", submit: "Save password ▶" }
   };
@@ -3205,17 +3297,17 @@ const LevelUp = (() => {
       <h2 class="auth-title" id="authTitle">Welcome back</h2>
       <div class="auth-tabs" role="tablist">
         <button type="button" role="tab" data-mode="login">Log in</button>
-        <button type="button" role="tab" data-mode="signup">New player</button>
+        <button type="button" role="tab" data-mode="signup">Create account</button>
       </div>
       <form class="auth-form" novalidate>
-        <fieldset class="signup-only role-picker">
+        <fieldset class="signup-only role-picker" hidden>
           <legend>I am a…</legend>
           <label><input type="radio" name="kind" value="player" checked><span><b>Player</b><small>I want to train and level up</small></span></label>
           <label><input type="radio" name="kind" value="trainer"><span><b>Personal trainer</b><small>I want to coach players</small></span></label>
         </fieldset>
-        <label class="signup-only">Name<input name="name" autocomplete="nickname" maxlength="24"></label>
+        <label class="signup-only">First name<input name="name" autocomplete="given-name" maxlength="24" placeholder="How your trainer calls you"></label>
         <label class="email-field">Email<input name="email" type="email" autocomplete="email" required></label>
-        <label class="password-field">Password<input name="password" type="password" minlength="6" required></label>
+        <label class="password-field">Password<input name="password" type="password" minlength="6" required placeholder="At least 6 characters"></label>
         <div class="signup-trainer">
           <p class="stats-intro">Step 2 of 2 · <strong>Trainer application.</strong> Pieter reviews it and unlocks your trainer account. Meanwhile you can use LEVEL-UP as a player.</p>
           <label>Coaching title<input name="role" maxlength="60" placeholder="e.g. Cycling coach"></label>
@@ -3228,6 +3320,7 @@ const LevelUp = (() => {
         <button type="submit" class="btn btn-primary btn-block auth-submit">Log in ▶</button>
         <button type="button" class="link-btn auth-forgot" data-mode="reset">Forgot your password?</button>
         <button type="button" class="link-btn auth-back">◀ Back to step 1</button>
+        <button type="button" class="link-btn auth-coach signup-only">Are you a personal trainer? Apply as a coach</button>
       </form>
       <p class="auth-note">Your account is stored securely on the LEVEL-UP server. <a href="privacy.html" class="text-link">Privacy policy</a></p>`;
     document.body.appendChild(dialog);
@@ -3244,6 +3337,13 @@ const LevelUp = (() => {
       tab.addEventListener("click", () => setMode(tab.dataset.mode));
     });
     dialog.querySelector(".auth-back").addEventListener("click", () => setStep(1));
+    // most people come to train: the choice "player or trainer" only shows for who asks for it
+    dialog.querySelector(".auth-coach").addEventListener("click", () => {
+      dialog.querySelector('[name="kind"][value="trainer"]').checked = true;
+      dialog.querySelector(".role-picker").hidden = false;
+      dialog.querySelector(".auth-coach").hidden = true;
+      setStep(1);
+    });
     dialog.querySelectorAll('[name="kind"]').forEach((r) => r.addEventListener("change", () => setStep(1)));
 
     form.addEventListener("submit", async (event) => {
@@ -3276,7 +3376,8 @@ const LevelUp = (() => {
             setMode("login");
             form.elements.email.value = data.email;
             dialog.querySelector(".form-success").textContent =
-              `Almost there! We sent a confirmation link to ${data.email}. Click it, then log in here. No email? Check your spam folder.`;
+              `Almost there! We sent a confirmation link to ${data.email}. Click it, then log in here. No email? Check your spam folder.`
+              + (localStorage.getItem("levelup.slot") ? " Your chosen hour stays ready." : "");
             offerResend(data.email);
             return;
           }
@@ -3355,6 +3456,8 @@ const LevelUp = (() => {
     const asTrainer = mode === "signup-trainer";
     if (asTrainer) mode = "signup";
     dialog.querySelector(`[name="kind"][value="${asTrainer ? "trainer" : "player"}"]`).checked = true;
+    dialog.querySelector(".role-picker").hidden = !asTrainer;
+    dialog.querySelector(".auth-coach").hidden = asTrainer;
     setMode(mode);
     dialog.returnValue = "";
     if (!dialog.open) dialog.showModal();
@@ -3980,6 +4083,26 @@ const LevelUp = (() => {
       event.preventDefault();
       openAuth("login");
     });
+    const menuNotify = document.createElement("a");
+    menuNotify.href = "profile.html#settings"; // the same switches are there too
+    menuNotify.className = "nav-profile nav-notify";
+    menuNotify.dataset.notifyOpen = "";
+    menuNotify.innerHTML = `${BELL_ICON}<span>Notifications</span><i data-notify-state></i>`;
+    menuProfile.after(menuNotify);
+    const menuSettings = document.createElement("a");
+    menuSettings.href = "profile.html#settings";
+    menuSettings.className = "nav-profile nav-notify nav-settings";
+    menuSettings.innerHTML = `${GEAR_ICON}<span>Settings</span>`;
+    menuNotify.after(menuSettings);
+    const paintMenuNotify = () => {
+      menuNotify.hidden = !player;
+      menuSettings.hidden = !player;
+      const state = menuNotify.querySelector("[data-notify-state]");
+      state.textContent = pushStatus === "on" ? "On" : pushStatus === "unknown" ? "" : "Off";
+      state.className = pushStatus === "on" ? "on" : "";
+    };
+    paintMenuNotify();
+    document.addEventListener("levelup:change", paintMenuNotify);
 
     markTab();
     bar.addEventListener("click", (event) => {
@@ -4044,7 +4167,7 @@ const LevelUp = (() => {
     requestPack, cancelPackRequest, markPackPaid, setTrainerPricing,
     pageTabsHtml, showPageTab, tabFromHash, scrollToTabs, inTab, appInstallState, installApp,
     uploadAvatar, removeAvatar, adminClearAvatar,
-    getPushStatus: () => pushStatus, refreshPushStatus, enablePush, disablePush, pushCalloutHtml,
+    getPushStatus: () => pushStatus, refreshPushStatus, enablePush, disablePush, pushCalloutHtml, notifyHtml, openNotify, setPushChat,
     pushServerReady: () => call("push_public_key").then(Boolean, () => false),
     LOYALTY_SESSIONS, REWARD_SOURCES, availableVouchers, voucherOpen, shortDate, markHoodieGiven,
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
@@ -4052,7 +4175,7 @@ const LevelUp = (() => {
     applyAsTrainer, reviewApplication, loadTrainerList,
     chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
-    openAuth, toast, loadAssistant, hasAssistant, askAssistant, clearAssistant, assistantGo, mascotFace, adminAssistant, adminAssistantSave, adminAssistantGapDone, ASSISTANT_ID, getAssistant: () => assistant,
+    openAuth, toast, loadAssistant, hasAssistant, askAssistant, clearAssistant, assistantGo, mascotFace, adminAssistant, adminAssistantSave, adminAssistantGapDone, adminMascot, adminMascotSet, adminMascotPost, adminMascotClear, ASSISTANT_ID, getAssistant: () => assistant,
     setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,

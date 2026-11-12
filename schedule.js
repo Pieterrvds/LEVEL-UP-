@@ -391,11 +391,52 @@ questList?.addEventListener("click", (event) => {
 });
 
 // ---------- Booking dialog ----------
+// A visitor's chosen hour is remembered on this device: after making an account (and clicking the link in the
+// confirmation email, which opens the site again) the booking window comes back with that hour.
+const SLOT_KEY = "levelup.slot";
+const rememberSlot = (slot) => { try { localStorage.setItem(SLOT_KEY, JSON.stringify({ ...slot, at: Date.now() })); } catch {} };
+const forgetSlot = () => { try { localStorage.removeItem(SLOT_KEY); } catch {} };
+function rememberedSlot() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SLOT_KEY) || "null");
+    if (!s || Date.now() - s.at > 3 * 864e5 || !LevelUp.trainerById(s.trainerId)) return null; // three days is long enough
+    return { trainerId: s.trainerId, date: s.date, hour: Number(s.hour) };
+  } catch { return null; }
+}
+let firstFlow = false; // a first booking: account, health check, request (the window shows the three steps)
+function stepsHtml(now) {
+  if (!firstFlow) return "";
+  return `<ol class="book-steps" aria-label="Steps">${["Account", "Health check", "Request"].map((label, i) =>
+    `<li class="${i + 1 < now ? "done" : i + 1 === now ? "now" : ""}"${i + 1 === now ? ' aria-current="step"' : ""}><b>${i + 1 < now ? "✓" : i + 1}</b><span>${label}</span></li>`).join("")}</ol>`;
+}
 function openSlot(slot) {
   pendingSlot = slot;
   pendingClass = null;
+  firstFlow = !LevelUp.getPlayer();
+  if (!LevelUp.getPlayer()) rememberSlot(slot);
   renderBookingDialog();
   if (!bookingDialog.open) bookingDialog.showModal();
+}
+// Back on the site with an account and a remembered hour: open it again (when it is still free)
+let resumed = false;
+function resumeSlot() {
+  if (resumed || !LevelUp.getPlayer() || !LevelUp.isReady()) return; // trainers and hours have to be in first
+  const slot = rememberedSlot();
+  if (!slot) { forgetSlot(); return; }
+  if (bookingDialog.open || document.querySelector("dialog[open]")) return; // wait until nothing else is open
+  resumed = true;
+  forgetSlot();
+  const start = LevelUp.slotStart ? LevelUp.slotStart(slot.date, slot.hour) : null;
+  const taken = LevelUp.findBooking(slot.trainerId, slot.date, slot.hour);
+  if ((start && start < new Date()) || (taken && !taken.mine)) {
+    LevelUp.toast({ title: "That hour is gone", text: "Pick another hour in the schedule.", icon: "🕒" });
+    LevelUp.goView?.("book");
+    return;
+  }
+  LevelUp.goView?.("book");
+  pendingSlot = slot; pendingClass = null; firstFlow = true;
+  renderBookingDialog();
+  bookingDialog.showModal();
 }
 
 weekBoard.addEventListener("click", (event) => {
@@ -426,7 +467,7 @@ function renderBookingDialog(message = "") {
     <p class="booking-when">${when}</p>
     ${booking?.mine ? "" : player
       ? `<p class="booking-price">1 hour with ${esc(trainer.short)}</p>`
-      : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong> · 1 hour, 1:1 with ${esc(trainer.short)} · your first session only <strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong></p>`}`;
+      : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong> · your first session: 1 hour, 1:1 with ${esc(trainer.short)} · after that <strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong></p>`}`;
 
   // Your own booking: offer to cancel
   if (booking?.mine) {
@@ -472,7 +513,9 @@ function renderBookingDialog(message = "") {
   // First booking (or the questionnaire is older than a year): health questions first
   if (player && !LevelUp.healthValid()) {
     const renewing = Boolean(player.healthForm);
+    if (!renewing) firstFlow = true;
     bookingContent.innerHTML = `
+      ${stepsHtml(2)}
       <p class="section-kicker">Before your ${renewing ? "next" : "first"} session</p>
       <h2 class="auth-title" id="bookingTitle">Health check</h2>
       <p class="booking-when">${when} · ${esc(trainer.short)}</p>
@@ -495,6 +538,7 @@ function renderBookingDialog(message = "") {
   }
 
   bookingContent.innerHTML = `
+    ${stepsHtml(player ? 3 : 1)}
     <p class="section-kicker">New booking</p>
     <h2 class="auth-title" id="bookingTitle">Book this session</h2>
     ${trainerCard}
@@ -524,10 +568,10 @@ function renderBookingDialog(message = "") {
       </form>
       <p class="auth-note">Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>` : `
       <div class="booking-login">
-        <p>Log in or create your profile to book this session and earn <strong>+${LevelUp.SESSION_XP} XP</strong>.</p>
+        <p>Make a free account to book this session. <span>It takes a minute, and we keep this hour ready for you.</span></p>
         <div class="btn-row">
-          <button type="button" class="btn btn-primary btn-small" data-auth-open="signup">New player</button>
-          <button type="button" class="btn btn-ghost btn-small" data-auth-open="login">Log in</button>
+          <button type="button" class="btn btn-primary btn-small" data-auth-open="signup">Create account</button>
+          <button type="button" class="btn btn-ghost btn-small" data-auth-open="login">I have an account</button>
         </div>
       </div>`}`;
 
@@ -677,6 +721,7 @@ function showPaymentFailed(booked, message) {
 function showBooked(booked) {
   const trainer = LevelUp.trainerById(pendingSlot.trainerId);
   bookingContent.innerHTML = `
+    ${stepsHtml(4)}
     <p class="section-kicker">Booking sent</p>
     <h2 class="auth-title" id="bookingTitle">Request sent!</h2>
     <p class="booking-when">${LevelUp.formatSlot(pendingSlot.date, pendingSlot.hour)}</p>
@@ -685,7 +730,7 @@ function showBooked(booked) {
       ? "Paid with <strong>1 pack credit</strong>. A declined request gives it back."
       : booked?.priceType === "reward"
       ? "This is your <strong>free session</strong> 🎁. A declined request gives it back."
-      : `Price: <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. Pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)})${LevelUp.getPricing().onlinePayments ? " or online from your profile" : ""}.`} Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</p>
+      : `<span>Price:</span> <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. <span>${LevelUp.getPricing().onlinePayments ? `You pay on the spot (${esc(LevelUp.HQ_ADDRESS)}) or online from your profile.` : `You pay on the spot: ${esc(LevelUp.HQ_ADDRESS)}.`}</span>`} <span>Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</span></p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     ${LevelUp.pushCalloutHtml(`Get a notification as soon as ${trainer.short} confirms.`)}
     <div class="btn-row">
@@ -694,6 +739,8 @@ function showBooked(booked) {
       <button type="button" class="btn btn-ghost btn-small" data-close-dialog>Back to schedule</button>
     </div>`;
   pendingSlot = null;
+  firstFlow = false;
+  forgetSlot();
 }
 
 // A weekly request is out: which weeks are planned now, and which could not be
@@ -938,6 +985,7 @@ document.addEventListener("close", (event) => {
 bookingDialog.addEventListener("click", (event) => {
   if (event.target === bookingDialog || event.target.closest("[data-close], [data-close-dialog]")) {
     reopenAfterLogin = false;
+    forgetSlot(); // closed by hand: the hour is no longer kept
     bookingDialog.close();
   } else if (event.target.closest("[data-auth-open]")) {
     reopenAfterLogin = true;
@@ -1166,8 +1214,11 @@ document.addEventListener("levelup:change", () => {
   renderAll();
   if (reopenAfterLogin && LevelUp.getPlayer() && (pendingSlot || pendingClass)) {
     reopenAfterLogin = false;
+    resumed = true; forgetSlot();
     if (pendingClass) renderClassDialog(); else renderBookingDialog();
     bookingDialog.showModal();
+  } else if (LevelUp.getPlayer() && !resumed) {
+    resumeSlot();
   } else if (bookingDialog.open && pendingClass && !bookingDialog.querySelector("form :focus")) {
     renderClassDialog(); // live counts while the dialog is open
   }

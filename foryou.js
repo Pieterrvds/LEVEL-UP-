@@ -479,7 +479,7 @@
     const own = (...ids) => ids.filter((id) => inv[id] > 0).length;
     const done = LevelUp.playerBookings().filter((b) => b.status === "completed").length;
     const progress = {
-      stats_saved: [player.bodyStats.length ? 1 : 0, 1, tabLink("body")],
+      stats_saved: [player.bodyStats.length ? 1 : 0, 1, tabLink("stats")],
       checkins_4: [player.checkin ? player.checkin.weeks : new Set(player.bodyStats.map((b) => LevelUp.dateKey(LevelUp.startOfWeek(0, LevelUp.parseDate(b.date))))).size, 4, ""],
       first_session: [Math.max(done, player.sessionsBooked), 1, `href="${link("schedule")}"`],
       sessions_5: [Math.max(done, player.sessionsBooked), 5, `href="${link("schedule")}"`],

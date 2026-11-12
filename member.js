@@ -159,7 +159,7 @@
           <div class="mp-actions">
             ${me ? `<button type="button" class="btn btn-ghost" data-share-card>Share my card</button>` : `
               ${d.trainerId ? `<a class="btn btn-primary" href="#book">Book ${esc(first)} ▸</a>` : ""}
-              ${d.linked === false ? "" : `<button type="button" class="btn ${d.trainerId ? "btn-ghost" : "btn-primary"}" data-mp-chat>💬 Chat</button>`}
+              ${d.linked === false || d.mascot ? "" : `<button type="button" class="btn ${d.trainerId ? "btn-ghost" : "btn-primary"}" data-mp-chat>💬 Chat</button>`}
               ${d.canLike || (!LevelUp.getPlayer() && d.trainerId) ? `<button type="button" class="btn btn-ghost mp-like ${d.liked ? "liked" : ""}" data-mp-like aria-pressed="${Boolean(d.liked)}"><span aria-hidden="true">♥</span> ${d.liked ? "Liked" : "Like"}${likes ? ` · ${likes}` : ""}</button>` : ""}`}
           </div>
         </div>
