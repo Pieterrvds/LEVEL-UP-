@@ -3051,7 +3051,7 @@ const LevelUp = (() => {
   // They play one after another, and never on top of a form, a dialog or a payment: then they wait.
   const GEAR_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.6-1.5L14 2.6h-4l-.5 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.3-1-2 3.4 2 1.5a7.7 7.7 0 0 0 0 3l-2 1.5 2 3.4 2.3-1a7.6 7.6 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.6 7.6 0 0 0 2.6-1.5l2.3 1 2-3.4z"/></svg>`;
   const CELEBRATE_FILE = "levelup-celebrate.js?v=1";
-  const LOOKS_FILE = "mascot-looks.js?v=1";
+  const LOOKS_FILE = "mascot-looks.js?v=2";
   // ---------- What the mascot wears today (mascot-looks.js) ----------
   // A hat, glasses or a moustache by season and feast day; a cake on the member's birthday and a laurel wreath on
   // the day they joined. "?look=santa" (or "none") in the address shows one look, to try them out.
@@ -3063,7 +3063,7 @@ const LevelUp = (() => {
     if (now - lookNow.at < 60000 && lookNow.key === key) return lookNow.look;
     let force = "";
     try { force = new URLSearchParams(location.search).get("look") || ""; } catch {}
-    const look = force === "none" ? null : L.LOOKS[force] || L.pick(new Date(), { birthday: player?.birthday, joined: player?.createdAt });
+    const look = force === "none" ? null : L.LOOKS[force] ? { ...L.LOOKS[force], why: "try" } : L.pick(new Date(), { birthday: player?.birthday, joined: player?.createdAt });
     lookNow = { at: now, key, look };
     return look;
   }

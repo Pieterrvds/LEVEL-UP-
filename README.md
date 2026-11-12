@@ -700,15 +700,26 @@ end of `style.css`).
   create one or log in.
 - **What is on it, top to bottom:**
   1. *Hello:* your first name, level, XP bar and the mascot on his rings, **Levelupy** (the gymnast of
-     `levelup-celebrate.js`, used as it is). He hangs, breathes and blinks, and every 15 to 40 seconds he trains: a
-     pull-up or a few, a muscle-up, an L-sit, a straddle or an iron cross, with sweat flying off him while he works.
-     A speech bubble pops up now and then (about every 40 to 80 seconds): an offer to help for who has the assistant,
-     else a few words of motivation. Tap him: the conversation with Levelupy opens (see "Levelupy"); without the
-     assistant he does a move. He does a muscle-up when you check in; with "reduce motion" he hangs still. He only
-     moves while his page is on screen. How: the engine has one timeline (hang, pulled up, support, cross);
-     `sim.step(0)` gives the pose for a moment on it, and `startMascot` in `foryou.js` puts the legs, the breathing,
-     the blinking and the sweat on top. `LevelUpForYou.move("lsit")` shows one move (pullup, pullups, muscleup,
-     lsit, straddle, cross).
+     `levelup-celebrate.js`, used as it is). He hangs, breathes and blinks, and every 13 to 32 seconds he does
+     something: a pull-up or a few, a muscle-up, an L-sit, a straddle or an iron cross, with sweat flying off him.
+     About a third of the time he is **clumsy**: a hand slips off and he dangles from one ring, flailing, until he
+     gets back (`slip`); a rep that will not go (`fail`); or he swings like a child (`swing`). He yelps and saves
+     face afterwards ("That was on purpose. Really.").
+     **He talks to you** (a speech bubble every 24 to 46 seconds, never the same line twice in a row): first hello
+     by your first name with a wave, then what matters most today, then one of his thoughts, the important ones
+     more often (`thoughts` in `foryou.js`). He knows your planning (a session or class today or tomorrow, by its
+     coach and name, the sleeps until the next one, a request that waits, nothing planned), your score (XP to the
+     next level, close to a new rank, who you can pass on the high scores, your streak, the check-in), the day of
+     the week, and what he wears (three lines per outfit in `mascot-looks.js`, such as "HO HO HO!"; on a special day
+     that is the first thing he says). A bubble with ▸ takes you somewhere when you tap it (the schedule, the high
+     scores); the offer to help opens the conversation with Levelupy. Tap him: that conversation opens too (see
+     "Levelupy"); without the assistant he does a move. He does a muscle-up when you check in; with "reduce motion"
+     he hangs still. He only moves while his page is on screen. How: the engine has one timeline (hang, pulled up,
+     support, cross); `sim.step(0)` gives the pose for a moment on it, and `startMascot` in `foryou.js` puts the
+     legs, the breathing, the blinking and the sweat on top; for the one-hand moves it moves his body under the
+     hand that holds on and works out both arms again. `LevelUpForYou.move("slip")` shows one move (pullup,
+     pullups, muscleup, lsit, straddle, cross, slip, fail, swing, wave), `LevelUpForYou.think()` lists what is on
+     his mind. All his lines are in Dutch in `i18n-nl.js`.
   2. *Your next step:* your first session or group class that is coming (with "View" and the chat), or a push to book
      one (mentions a free session that is waiting, or the first-session price). A coach first sees requests that wait.
   3. *Your streak:* the weeks in a row and the **Check in** button.

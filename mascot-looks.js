@@ -61,7 +61,7 @@
   // draw(c, env): c is in head coordinates; env.accent is the colour of the player's level
   // up, down, side: how far the look reaches from the middle of the head (0 = no further than his own head)
   const LOOKS = {
-    santa: { up: 40, down: 0, side: 31, name: "Santa hat", say: ["Ho ho ho! Time for a Christmas workout.", "Santa lifts too. Where do you think the sack comes from?"], draw(c) {
+    santa: { up: 40, down: 0, side: 31, name: "Santa hat", say: ["Ho ho ho! Time for a Christmas workout.", "Santa lifts too. Where do you think the sack comes from?", "HO HO HO!"], draw(c) {
       const red = "#d5202c", dark = "#8c101c";
       const cone = P("M -16.6 -9 C -15.6 -24, -6 -37.5, 7.5 -37.6 C 16.6 -37.6, 23.4 -31.5, 25.2 -21.4 C 21.8 -26.2, 18.2 -28.2, 14.6 -27 C 16.4 -21, 16.9 -15, 16.6 -9 Z");
       paint(c, cone, red, dark, 1.3);
@@ -73,7 +73,7 @@
       paint(c, pom, "#fbfaf5", "#bdbbb2", 1.2); glow(c, oval(26.6, -17, 3, 2.6), "#c9c7bd", 0.5); glow(c, oval(23.9, -20.2, 1.7, 1.3), "#ffffff", 0.95);
     } },
 
-    party: { up: 52, down: 0, side: 0, name: "Party hat", say: ["Happy New Year! First rep of the year?", "New year, new level."], draw(c) {
+    party: { up: 52, down: 0, side: 0, name: "Party hat", say: ["Happy New Year! First rep of the year?", "New year, new level.", "3… 2… 1… Happy New Year!"], draw(c) {
       const cone = P("M -10.2 -15.6 Q 0 -12.2 10.2 -15.6 L 2.2 -45.4 Z");
       stroke(c, "M -9.6 -15.2 C -13.6 -6, -14.6 6, -9.4 15.6", "#e8e8e8", 0.6, 0.75); stroke(c, "M 9.6 -15.2 C 13.6 -6, 14.6 6, 9.4 15.6", "#e8e8e8", 0.6, 0.75);
       paint(c, cone, "#ffcf5a", null);
@@ -86,7 +86,7 @@
       paint(c, oval(2.2, -45.6, 1.7, 1.7), "#ff6b8b", "#b23a55", 0.8);
     } },
 
-    cake: { up: 42, down: 0, side: 0, name: "Birthday cake", say: ["Happy birthday, {0}! 🎂", "It's your day, {0}. One rep for every year?"], draw(c) {
+    cake: { up: 42, down: 0, side: 0, name: "Birthday cake", say: ["Happy birthday, {0}! 🎂", "It's your day, {0}. One rep for every year?", "Hip hip hooray for {0}!"], draw(c) {
       paint(c, oval(0, -15.9, 14.6, 2.5), "#fbfaf6", "#b9b2a8", 1); // the plate
       const sponge = box(-11.6, -25.4, 23.2, 9.6, 2.6);
       paint(c, sponge, "#f3cf96", "#a8763a", 1.2);
@@ -100,7 +100,7 @@
       });
     } },
 
-    shades: { name: "Sunglasses", say: ["A bit burnt. Worth it.", "Sun's out, guns out.", "Don't forget to drink water today."], draw(c) {
+    shades: { name: "Sunglasses", say: ["A bit burnt. Worth it.", "Sun's out, guns out.", "Don't forget to drink water today.", "Do I have a tan line yet?"], draw(c) {
       sunburn(c, 1);
       paint(c, box(-2.5, 6.3, 5.6, 2.5, 1.25), "#fbfbf6", "#d9d5cc", 0.5); // sun cream on his nose
       const frame = "#0c0d10";
@@ -115,7 +115,7 @@
       stroke(c, "M -1.8 -1.2 Q 0 -2.4 1.8 -1.2", frame, 1.6);
     } },
 
-    pumpkin: { up: 34, down: 25, side: 28, name: "Pumpkin head", say: ["Boo! Did I scare you into a workout?", "Trick or treat? Treat: one more rep."], draw(c) {
+    pumpkin: { up: 34, down: 25, side: 28, name: "Pumpkin head", say: ["Boo! Did I scare you into a workout?", "Trick or treat? Treat: one more rep.", "BOO!"], draw(c) {
       const o = "#f0861a", dk = "#a34c0a";
       stroke(c, "M 0.5 -24.5 C 0 -29, 2.6 -31.4, 6.4 -32.2", "#4c6b21", 4.2); stroke(c, "M 0.5 -24.5 C 0 -29, 2.6 -31.4, 6.4 -32.2", "#7fa536", 2.2);
       const body = oval(0, -0.8, 27, 23.8);
@@ -131,7 +131,7 @@
       paint(c, face, g, "#6e2f05", 1.1);
     } },
 
-    witch: { up: 47, down: 0, side: 27, name: "Witch hat", say: ["Something wicked this way trains.", "My broom is in the gym bag."], draw(c) {
+    witch: { up: 47, down: 0, side: 27, name: "Witch hat", say: ["Something wicked this way trains.", "My broom is in the gym bag.", "Hocus pocus, stronger focus!"], draw(c) {
       const fill = "#2c2244", dk = "#120d1f";
       const cone = P("M -12.4 -12.6 C -9.4 -24, -3.4 -35, 3.6 -40.6 C 7.6 -43.6, 12.6 -45.2, 15.4 -43 C 12.6 -42.4, 10.6 -40.2, 10.2 -36.6 C 9.6 -28, 11.2 -19.6, 12.6 -12.6 Z");
       paint(c, cone, fill, dk, 1.3);
@@ -143,7 +143,7 @@
       paint(c, box(-3.2, -18.6, 6.4, 5, 1), "#ffcf5a", "#a67512", 1); paint(c, box(-1.5, -17.1, 3, 2, 0.4), "#ff9a4d", "#a67512", 0.6);
     } },
 
-    crown: { up: 38, down: 0, side: 0, name: "King's crown", say: ["Three Kings today. I brought dumbbells.", "Heavy is the head that wears the crown. Good for the neck."], draw(c) {
+    crown: { up: 38, down: 0, side: 0, name: "King's crown", say: ["Three Kings today. I brought dumbbells.", "Heavy is the head that wears the crown. Good for the neck.", "Bow for the king of the rings!"], draw(c) {
       const gold = "#f6c544", dk = "#9c6b0e";
       const crown = P("M -13.4 -17.4 L -15.4 -32.6 L -8.6 -25.4 L -4.4 -35 L 0 -26.4 L 4.4 -35 L 8.6 -25.4 L 15.4 -32.6 L 13.4 -17.4 Q 0 -14.4 -13.4 -17.4 Z");
       paint(c, crown, gold, dk, 1.3);
@@ -155,7 +155,7 @@
       glow(c, oval(-0.6, -18.6, 0.7, 0.5), "#ffffff", 0.85);
     } },
 
-    bobble: { up: 39, down: 0, side: 0, name: "Bobble hat", say: ["Cold outside, warm in here.", "Winter is for building. Let's go."], draw(c, env) {
+    bobble: { up: 39, down: 0, side: 0, name: "Bobble hat", say: ["Cold outside, warm in here.", "Winter is for building. Let's go.", "Brrr."], draw(c, env) {
       const a = env.accent, dk = shade(a, -0.5);
       const dome = P("M -17.2 -9 C -17.6 -22, -10.4 -29.6, 0 -29.6 C 10.4 -29.6, 17.6 -22, 17.2 -9 Z");
       paint(c, dome, a, dk, 1.3);
@@ -170,7 +170,7 @@
       for (let i = 0; i < 7; i++) { const t = i * TAU / 7; stroke(c, `M ${Math.cos(t) * 1.4} ${-32.6 + Math.sin(t) * 1.4} L ${Math.cos(t) * 4} ${-32.6 + Math.sin(t) * 3.8}`, "#c5cad3", 0.7); }
     } },
 
-    earmuffs: { up: 29, down: 36, side: 27, name: "Earmuffs", say: ["My ears are warm. Now the rest.", "Too cold to stand still. Move!"], draw(c, env) {
+    earmuffs: { up: 29, down: 36, side: 27, name: "Earmuffs", say: ["My ears are warm. Now the rest.", "Too cold to stand still. Move!", "What? I can't hear you!"], draw(c, env) {
       stroke(c, "M -16.6 -1.6 C -17.4 -17, -9.4 -26.6, 0 -26.6 C 9.4 -26.6, 17.4 -17, 16.6 -1.6", "#15171c", 3.4); stroke(c, "M -16.6 -1.6 C -17.4 -17, -9.4 -26.6, 0 -26.6 C 9.4 -26.6, 17.4 -17, 16.6 -1.6", "#3a3f49", 1.6);
       [-1, 1].forEach((s) => {
         const muff = new Path2D();
@@ -186,7 +186,7 @@
       paint(c, tail, "#e0304a", "#7d1226", 1.1); stroke(c, "M 6 25.8 L 11.4 24.4", "#f4f5f7", 1.3); stroke(c, "M 7.4 32 L 7.7 34 M 9.6 31.4 L 10 33.4 M 11.6 30.8 L 12 32.8", "#7d1226", 0.8);
     } },
 
-    hearts: { name: "Heart glasses", say: ["I love leg day. There, I said it.", "Roses are red, muscles are sore."], draw(c) {
+    hearts: { name: "Heart glasses", say: ["I love leg day. There, I said it.", "Roses are red, muscles are sore.", "Be my gym buddy?"], draw(c) {
       glow(c, oval(-9.6, 8.6, 3.4, 2), "#ff6f61", 0.4); glow(c, oval(9.6, 8.6, 3.4, 2), "#ff6f61", 0.4);
       temples(c, 1.4, "#b3193d");
       [-1, 1].forEach((s) => {
@@ -198,7 +198,7 @@
       stroke(c, "M -1.9 1.2 Q 0 0 1.9 1.2", "#b3193d", 1.5);
     } },
 
-    jester: { up: 49, down: 0, side: 33, name: "Jester hat", say: ["Carnival in Aalst! Train first, party after.", "Confetti counts as cardio, right?"], draw(c) {
+    jester: { up: 49, down: 0, side: 33, name: "Jester hat", say: ["Carnival in Aalst! Train first, party after.", "Confetti counts as cardio, right?", "Long live carnival!"], draw(c) {
       const red = "#e02d2d", yel = "#ffcf3a", rdk = "#8c1414", ydk = "#a67512";
       const left = P("M -16.8 -9.6 C -17.4 -17, -14.6 -22.4, -19.4 -24.6 C -25.4 -27.2, -30 -22, -29.4 -15.6 C -25.6 -19.6, -22 -18.4, -20.6 -14.4 C -19.8 -12, -18.6 -10.4, -16.8 -9.6 Z");
       const right = P("M 16.8 -9.6 C 17.4 -17, 14.6 -22.4, 19.4 -24.6 C 25.4 -27.2, 30 -22, 29.4 -15.6 C 25.6 -19.6, 22 -18.4, 20.6 -14.4 C 19.8 -12, 18.6 -10.4, 16.8 -9.6 Z");
@@ -212,7 +212,7 @@
       [[-29.6, -13.6], [0, -45.6], [29.6, -13.6]].forEach(([x, y]) => { paint(c, oval(x, y, 2.5, 2.5), "#ffd96b", ydk, 0.9); stroke(c, `M ${x - 1.4} ${y + 0.9} L ${x + 1.4} ${y + 0.9}`, ydk, 0.7); glow(c, oval(x - 0.8, y - 0.9, 0.7, 0.6), "#ffffff", 0.9); });
     } },
 
-    clover: { up: 37, down: 0, side: 23, name: "Leprechaun hat", say: ["Top of the morning! Luck is for people who train.", "Found gold: your next PR."], draw(c) {
+    clover: { up: 37, down: 0, side: 23, name: "Leprechaun hat", say: ["Top of the morning! Luck is for people who train.", "Found gold: your next PR.", "Lucky you: I'm here."], draw(c) {
       const g = "#22a152", dk = "#0d5a2a";
       const crown = P("M -11.4 -13.4 C -11 -21, -11.8 -27.6, -13.2 -33.4 Q 0 -36.8 13.2 -33.4 C 11.8 -27.6, 11 -21, 11.4 -13.4 Z");
       const brim = oval(0, -12.2, 21.4, 4.3);
@@ -227,7 +227,7 @@
       [0, 2.094, -2.094].forEach((r) => { c.save(); c.translate(6.6, -26.4); c.rotate(r); paint(c, heart(0, -1.9, 1.75), "#7be3a0", dk, 0.6); c.restore(); });
     } },
 
-    rain: { up: 33, down: 0, side: 30, name: "Rain hat", say: ["Rain is just free cooling.", "Bad weather, good excuse to train inside."], draw(c) {
+    rain: { up: 33, down: 0, side: 30, name: "Rain hat", say: ["Rain is just free cooling.", "Bad weather, good excuse to train inside.", "Drip, drop, don't stop."], draw(c) {
       const y = "#ffd21f", dk = "#a87f00";
       const brim = P("M -24.6 -8.4 C -22 -13.6, -12 -15.4, 0 -15.4 C 12 -15.4, 22 -13.6, 24.6 -8.4 C 16 -5.4, -16 -5.4, -24.6 -8.4 Z");
       const dome = P("M -15.6 -12.4 C -15.6 -23.4, -8.4 -28.6, 0 -28.6 C 8.4 -28.6, 15.6 -23.4, 15.6 -12.4 Q 0 -9.4 -15.6 -12.4 Z");
@@ -237,14 +237,14 @@
       [[-23.6, -25, 1.9], [21.6, -30.6, 1.6], [27.4, -17.4, 1.7], [-28, -12.6, 1.4]].forEach(([x, yy, s]) => { paint(c, drop(x, yy, s), "#7fd0ff", "#2f8cc9", 0.7); glow(c, oval(x - s * 0.3, yy + s * 0.2, s * 0.28, s * 0.4), "#ffffff", 0.8); });
     } },
 
-    flowers: { up: 22, down: 0, side: 0, name: "Flower crown", say: ["Spring! Everything grows. You too.", "Fresh air, fresh legs."], draw(c) {
+    flowers: { up: 22, down: 0, side: 0, name: "Flower crown", say: ["Spring! Everything grows. You too.", "Fresh air, fresh legs.", "Achoo! Sorry, pollen."], draw(c) {
       stroke(c, "M -16.4 -8.4 Q 0 -19 16.4 -8.4", "#3f8a3a", 2);
       [[-12.4, -12.4, 2.4], [-5.2, -15.6, 2.9], [3.4, -15.9, 0.3], [10.6, -13.4, 0.9], [-9, -10.6, -2.7], [7, -11.4, -0.5]].forEach(([x, y, r]) => leaf(c, x, y, 5.2, r, "#55b04c"));
       flower(c, -14.6, -9.6, 4, "#ff9fc0", "#ffcf5a"); flower(c, -7.6, -13.9, 4.5, "#fbfbf6", "#ffb02e"); flower(c, 0.2, -15.6, 4.9, "#b18cff", "#ffe9a8");
       flower(c, 8, -13.9, 4.5, "#fbfbf6", "#ffb02e"); flower(c, 14.8, -9.6, 4, "#ff9fc0", "#ffcf5a");
     } },
 
-    groucho: { name: "Funny glasses", say: ["April Fools! Today every rep counts double. (No.)", "Nobody recognises me like this."], draw(c) {
+    groucho: { name: "Funny glasses", say: ["April Fools! Today every rep counts double. (No.)", "Nobody recognises me like this.", "It's really me. I swear."], draw(c) {
       const k = "#15171c";
       temples(c, 1.2, k);
       const nose = P("M -2.6 2.6 C -5.6 7.4, -5.9 12.6, -1.6 13.4 Q 0 14 1.6 13.4 C 5.9 12.6, 5.6 7.4, 2.6 2.6 Z");
@@ -260,7 +260,7 @@
       stroke(c, "M -1.7 1.4 Q 0 0.2 1.7 1.4", k, 1.7);
     } },
 
-    bunny: { up: 49, down: 0, side: 24, name: "Bunny ears", say: ["Happy Easter! I hid eggs between the weights.", "Hop to it: squat jumps."], draw(c) {
+    bunny: { up: 49, down: 0, side: 24, name: "Bunny ears", say: ["Happy Easter! I hid eggs between the weights.", "Hop to it: squat jumps.", "Hop hop hop!"], draw(c) {
       const w = "#fbfaf6", ol = "#b9b2a8", pink = "#ffb3c7";
       const earL = P("M -11.4 -20.6 C -16.4 -30, -15.4 -42.6, -9.6 -47.6 C -4.6 -43, -3.4 -31, -5.2 -21.4 Z");
       const earR = P("M 5.2 -21.4 C 3.6 -30, 5.6 -39.4, 11.4 -43.6 C 15.6 -44.4, 20.6 -40.6, 22.6 -36 C 18.6 -36.6, 15.4 -34.4, 13.6 -30.6 C 12.4 -27.4, 12 -24, 11.4 -20.6 Z");
@@ -271,7 +271,7 @@
       paint(c, band, w, ol, 1.1);
     } },
 
-    cycling: { up: 29, down: 0, side: 0, name: "Cycling cap", say: ["Tour of Flanders! Cobbles make you strong.", "Legs like Flandriens. That's the plan."], draw(c) {
+    cycling: { up: 29, down: 0, side: 0, name: "Cycling cap", say: ["Tour of Flanders! Cobbles make you strong.", "Legs like Flandriens. That's the plan.", "Allez allez allez!"], draw(c) {
       const w = "#f7f6f1", ol = "#9a968c";
       const dome = P("M -16.8 -8.6 C -17.2 -21, -10.2 -27.6, 0 -27.6 C 10.2 -27.6, 17.2 -21, 16.8 -8.6 Q 0 -5.6 -16.8 -8.6 Z");
       paint(c, dome, w, ol, 1.3);
@@ -287,7 +287,7 @@
       paint(c, peak, null, ol, 1.2);
     } },
 
-    hardhat: { up: 32, down: 0, side: 22, name: "Hard hat", say: ["Labour Day: today we build muscle.", "Work in progress. That's all of us."], draw(c) {
+    hardhat: { up: 32, down: 0, side: 22, name: "Hard hat", say: ["Labour Day: today we build muscle.", "Work in progress. That's all of us.", "Safety first. Then squats."], draw(c) {
       const y = "#ffc21a", dk = "#a56f00";
       const shell = P("M -16.8 -10 C -17 -22.6, -9.8 -29.2, 0 -29.2 C 9.8 -29.2, 17 -22.6, 16.8 -10 Z");
       paint(c, shell, y, dk, 1.3);
@@ -298,7 +298,7 @@
       paint(c, rim, y, dk, 1.3); glow(c, box(-18, -8.6, 36, 1.4, 0.7), dk, 0.4); glow(c, box(-17, -12, 20, 1, 0.5), "#ffffff", 0.5);
     } },
 
-    cap: { up: 30, down: 0, side: 0, name: "Cap", say: ["Cap on, phone away, let's train.", "Sunny outside? Take the workout to the park."], draw(c, env) {
+    cap: { up: 30, down: 0, side: 0, name: "Cap", say: ["Cap on, phone away, let's train.", "Sunny outside? Take the workout to the park.", "Cap on backwards: +10 strength."], draw(c, env) {
       const a = env.accent, dk = shade(a, -0.5), peakC = shade(a, -0.62);
       const dome = P("M -16.8 -9.4 C -17.2 -21.6, -10 -28, 0 -28 C 10 -28, 17.2 -21.6, 16.8 -9.4 Q 0 -6.6 -16.8 -9.4 Z");
       paint(c, dome, a, dk, 1.3);
@@ -311,7 +311,7 @@
       paint(c, peak, peakC, shade(a, -0.78), 1.3); glow(c, P("M -15 -8.4 Q 0 -5.6 15 -8.4 Q 0 -4.2 -15 -8.4 Z"), "#ffffff", 0.16);
     } },
 
-    flemish: { up: 32, down: 0, side: 24, name: "Flemish bucket hat", say: ["11 July: feast day of Flanders. Roar like a lion.", "A Flemish lion skips no leg day."], draw(c) {
+    flemish: { up: 32, down: 0, side: 24, name: "Flemish bucket hat", say: ["11 July: feast day of Flanders. Roar like a lion.", "A Flemish lion skips no leg day.", "ROAR!"], draw(c) {
       const y = "#ffd21f", dk = "#a87f00", k = "#15171c";
       [-1, 1].forEach((s) => { const cheek = P(`M ${s * 6.4} 5.6 L ${s * 12.4} 5 L ${s * 12} 9.8 L ${s * 6.8} 10.2 Z`); paint(c, cheek, y, null); inside(c, cheek, () => { glow(c, box(s > 0 ? 8.4 : -10.4, 4, 2, 8, 0), k, 1); }); paint(c, cheek, null, k, 0.5); });
       const brim = P("M -23 -6.6 C -21.4 -12.6, -17.6 -14.6, -14.6 -15 L 14.6 -15 C 17.6 -14.6, 21.4 -12.6, 23 -6.6 Q 0 -2.6 -23 -6.6 Z");
@@ -325,7 +325,7 @@
       paint(c, oval(0, -22.6, 2.3, 1.9), k, null); [[-2.7, -25.2], [-0.9, -26.4], [0.9, -26.4], [2.7, -25.2]].forEach(([x, yy]) => paint(c, oval(x, yy, 0.85, 1.05), k, null));
     } },
 
-    belgium: { up: 40, down: 0, side: 22, name: "Belgian top hat", say: ["21 July: happy national day!", "Fries after training. It's tradition today."], draw(c) {
+    belgium: { up: 40, down: 0, side: 22, name: "Belgian top hat", say: ["21 July: happy national day!", "Fries after training. It's tradition today.", "Come on, Belgium!"], draw(c) {
       const k = "#15171c", y = "#ffd21f", r = "#e02d2d";
       [-1, 1].forEach((s) => { const x0 = s > 0 ? 6.6 : -12.6; [k, y, r].forEach((col, i) => glow(c, box(x0 + i * 2, 5.4, 2, 4.4, 0), col, 1)); paint(c, box(x0, 5.4, 6, 4.4, 0.6), null, "#000000", 0.5); });
       const brim = oval(0, -12.4, 20.6, 4.1);
@@ -337,7 +337,7 @@
       paint(c, oval(0, -35.8, 12.8, 2.4), "#2a2d34", "#000000", 1);
     } },
 
-    straw: { up: 28, down: 0, side: 29, name: "Straw hat", say: ["Holiday mode. Still training though.", "Shade for my head, sun for my legs."], draw(c) {
+    straw: { up: 28, down: 0, side: 29, name: "Straw hat", say: ["Holiday mode. Still training though.", "Shade for my head, sun for my legs.", "Is it holiday yet?"], draw(c) {
       sunburn(c, 0.7);
       const s = "#eccb74", dk = "#a67b22";
       const brim = oval(0, -10.4, 28, 6.2);
@@ -350,7 +350,7 @@
       paint(c, band, "#e0304a", "#7d1226", 1);
     } },
 
-    gradcap: { up: 31, down: 0, side: 26, name: "Graduation cap", say: ["Back to school. Lesson one: squat depth.", "Class is in session. Subject: getting strong."], draw(c) {
+    gradcap: { up: 31, down: 0, side: 26, name: "Graduation cap", say: ["Back to school. Lesson one: squat depth.", "Class is in session. Subject: getting strong.", "Any questions, class?"], draw(c) {
       const n = "#1d2333", dk = "#0a0d16";
       const skull = P("M -13.6 -11 C -13.8 -17, -9 -20.4, 0 -20.4 C 9 -20.4, 13.8 -17, 13.6 -11 Q 0 -8 -13.6 -11 Z");
       paint(c, skull, n, dk, 1.2);
@@ -362,7 +362,7 @@
       for (let i = 0; i < 4; i++) stroke(c, `M ${18.5 + i * 0.75} -8.2 L ${18.1 + i * 0.95} -3.4`, "#ffcf5a", 0.7);
     } },
 
-    headphones: { up: 40, down: 0, side: 33, name: "Headphones", say: ["Playlist on. World off.", "This song is good for one more set."], draw(c, env) {
+    headphones: { up: 40, down: 0, side: 33, name: "Headphones", say: ["Playlist on. World off.", "This song is good for one more set.", "♪ Eye of the tiger ♪"], draw(c, env) {
       const k = "#1b1e24", a = env.accent;
       stroke(c, "M -17 -1 C -18 -17.6, -9.6 -27.4, 0 -27.4 C 9.6 -27.4, 18 -17.6, 17 -1", "#0c0d10", 4.4); stroke(c, "M -17 -1 C -18 -17.6, -9.6 -27.4, 0 -27.4 C 9.6 -27.4, 18 -17.6, 17 -1", "#3a3f49", 2.2);
       stroke(c, "M -8.4 -24.6 C -3.6 -27.2, 3.6 -27.2, 8.4 -24.6", "#6b7280", 2.6);
@@ -373,7 +373,7 @@
       [[25.6, -20.6, 1], [30.4, -31, 0.82]].forEach(([x, y, s]) => { paint(c, oval(x, y, 1.9 * s, 1.5 * s, -0.4), a, shade(a, -0.5), 0.6); stroke(c, `M ${x + 1.6 * s} ${y - 0.4 * s} L ${x + 1.6 * s} ${y - 7 * s} Q ${x + 4.6 * s} ${y - 6.6 * s} ${x + 4.4 * s} ${y - 3.6 * s}`, a, 1 * s); });
     } },
 
-    tirol: { up: 45, down: 0, side: 25, name: "Alpine hat", say: ["O'zapft is! But first: leg day.", "Pretzels are carbs. Carbs are fuel."], draw(c) {
+    tirol: { up: 45, down: 0, side: 25, name: "Alpine hat", say: ["O'zapft is! But first: leg day.", "Pretzels are carbs. Carbs are fuel.", "Prost! With water."], draw(c) {
       const g = "#3a7a45", dk = "#17401f";
       const feather = P("M 11.4 -19.6 C 12.6 -30, 17.6 -39.6, 23.6 -43.6 C 24.6 -35.6, 21.6 -26, 14.4 -18.4 Z");
       paint(c, feather, "#fbfaf6", "#b9b2a8", 0.9); stroke(c, "M 12.6 -19.4 C 15 -28, 19 -36, 23 -42.6", "#b9b2a8", 0.6); glow(c, P("M 19.6 -38 C 22 -40.6, 23.2 -42.4, 23.6 -43.6 C 24.2 -39, 23.4 -34.6, 21.6 -30.6 Z"), "#e0304a", 0.9);
@@ -387,14 +387,14 @@
       inside(c, band, () => { for (let x = -14; x < 15; x += 3.2) glow(c, P(`M ${x} -18 L ${x + 1.6} -18 L ${x + 3.2} -9 L ${x + 1.6} -9 Z`), "#e0304a", 1); });
     } },
 
-    tache: { name: "Movember moustache", say: ["Movember! The moustache does half the lifting.", "Grow a mo, train like a pro."], draw(c) {
+    tache: { name: "Movember moustache", say: ["Movember! The moustache does half the lifting.", "Grow a mo, train like a pro.", "Does this moustache make me look stronger?"], draw(c) {
       const k = "#2a1a12";
       const m = P("M 0 11 C -2.4 9.4, -6.6 9.6, -9.4 11.6 C -11.6 13.2, -13.6 12.6, -14.9 9.6 C -16.6 13.4, -15 17.2, -11 16.8 C -6.6 16.4, -3 15.4, 0 13.4 C 3 15.4, 6.6 16.4, 11 16.8 C 15 17.2, 16.6 13.4, 14.9 9.6 C 13.6 12.6, 11.6 13.2, 9.4 11.6 C 6.6 9.6, 2.4 9.4, 0 11 Z");
       paint(c, m, k, "#120a06", 1);
       stroke(c, "M -8.6 12.6 C -6 11.4, -3.4 11.4, -1.2 12.4 M 8.6 12.6 C 6 11.4, 3.4 11.4, 1.2 12.4", "#5a3b28", 0.7); stroke(c, "M -12.6 14.4 C -10.4 15, -8 14.6, -6 13.8 M 12.6 14.4 C 10.4 15, 8 14.6, 6 13.8", "#5a3b28", 0.6);
     } },
 
-    mitre: { up: 49, down: 37, side: 0, name: "Bishop's mitre", say: ["The good man is in town. Were you good? Did you train?", "Speculaas is fuel. One piece."], draw(c) {
+    mitre: { up: 49, down: 37, side: 0, name: "Bishop's mitre", say: ["The good man is in town. Were you good? Did you train?", "Speculaas is fuel. One piece.", "Who trained well this year?"], draw(c) {
       const red = "#c41f2b", dk = "#7a0f18", gold = "#f6c544", gdk = "#9c6b0e", w = "#fbfaf6", wol = "#b9b2a8";
       const beard = P("M -14 7.6 C -15.6 16, -12 27, -5.6 32.4 C -3.4 34.4, -1.6 33, 0 35 C 1.6 33, 3.4 34.4, 5.6 32.4 C 12 27, 15.6 16, 14 7.6 C 11.6 11.6, 8.6 13.4, 5.6 13.6 C 3.6 16.6, -3.6 16.6, -5.6 13.6 C -8.6 13.4, -11.6 11.6, -14 7.6 Z");
       paint(c, beard, w, wol, 1.2);
@@ -410,7 +410,7 @@
       paint(c, P("M -1.5 -34.6 L 1.5 -34.6 L 1.5 -29.4 L 5.6 -29.4 L 5.6 -26.4 L 1.5 -26.4 L 1.5 -17.6 L -1.5 -17.6 L -1.5 -26.4 L -5.6 -26.4 L -5.6 -29.4 L -1.5 -29.4 Z"), gold, gdk, 0.9);
     } },
 
-    antlers: { up: 48, down: 0, side: 23, name: "Reindeer antlers", say: ["Rudolph called. He wants his nose back.", "Between Christmas and New Year: we train anyway."], draw(c) {
+    antlers: { up: 48, down: 0, side: 23, name: "Reindeer antlers", say: ["Rudolph called. He wants his nose back.", "Between Christmas and New Year: we train anyway.", "Rudolph the red-nosed gymnast…"], draw(c) {
       const b = "#96632f", dk = "#4f3114";
       [-1, 1].forEach((s) => {
         const d = `M ${s * 6.6} -21.6 C ${s * 7.6} -28, ${s * 10.6} -34, ${s * 15.6} -39.6 M ${s * 9.4} -29.6 C ${s * 5.6} -31.6, ${s * 4} -34.6, ${s * 3.6} -38 M ${s * 12.6} -35.6 C ${s * 16.6} -34.4, ${s * 19.6} -35, ${s * 22} -37.6 M ${s * 13.6} -37.4 C ${s * 12.4} -41, ${s * 12.6} -44, ${s * 14} -46.6`;
@@ -422,7 +422,7 @@
       paint(c, oval(0.2, 7.6, 3.9, 3.7), "#e8202c", "#8c101c", 1); glow(c, oval(-1.1, 6.2, 1.3, 1), "#ffffff", 0.85);
     } },
 
-    laurel: { up: 28, down: 0, side: 0, name: "Laurel wreath", say: ["{0} years with LEVEL-UP today. Respect! 🏆", "Another year stronger. Thanks for training with us."], draw(c) {
+    laurel: { up: 28, down: 0, side: 0, name: "Laurel wreath", say: ["{0} years with LEVEL-UP today. Respect! 🏆", "Another year stronger. Thanks for training with us.", "Champion of showing up!"], draw(c) {
       const gold = "#f1c34a";
       [-1, 1].forEach((s) => {
         stroke(c, `M ${s * 15.4} 0.6 C ${s * 19.6} -9, ${s * 16.6} -20.6, ${s * 5.6} -25.6`, "#9c6b0e", 1.1);

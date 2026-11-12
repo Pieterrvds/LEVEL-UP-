@@ -100,7 +100,10 @@
       sim.gripped = true; sim.burst = true; // his pose only: no chalk, no confetti, no rays
       let ctx = null, w = 0, h = 0, raf = 0, last = 0, base = 1;
       const HANG = 0.7, UP = 1.35, TOP = 2.12, HELD = 3.45, CROSS = 4.25;
-      const me = { t: 0.02, l: 0, s: 0, sweat: 0 };        // the timeline, L-sit and straddle (0 to 1), how hard he works
+      // the timeline, L-sit and straddle (0 to 1), how hard he works; and the clumsy side of him: one hand that lets
+      // go (slip) or waves, a swing like a child on a swing, the trembling of a rep that will not go (all 0 to 1)
+      const me = { t: 0.02, l: 0, s: 0, sweat: 0, slip: 0, wave: 0, swing: 0, shake: 0, side: 1 };
+      const BLEND = ["l", "s", "slip", "wave", "swing", "shake"];
       let plan = [];                                          // the steps of the move he is doing
       let blinkAt = performance.now() + 2500, nextMove = 0, nextSay = 0, saidHelp = false;
       const drops = [];
@@ -143,6 +146,43 @@
           if (now > blinkAt) { R.blink = 1; if (now > blinkAt + 130) blinkAt = now + 2200 + Math.random() * 3800; }
         }
         if (me.l > 0.5 || me.s > 0.5) R.moving = true;      // the face of someone who is working
+        if (me.shake > 0.01) { R.rigY += 1.3 * me.shake * Math.sin(sec * 47); R.moving = true; R.happy = false; }
+        if (me.slip > 0.01 || me.wave > 0.01 || me.swing > 0.01) {
+          // The engine hangs him from two rings; here his body is moved and the hands are worked out again.
+          // hw = a hand on its ring (in the picture), hl = the same hand seen from his chest.
+          const SHOULDER = 30, ARM = 79;
+          const free = me.side, grip = 1 - free, sF = free ? 1 : -1, sG = -sF, loose = Math.max(me.slip, me.wave);
+          const G = R.hw[grip], was = { x: R.hl[free].x, y: R.hl[free].y };
+          const sway = me.swing * Math.sin(sec * 2.7);
+          // one hand: his body hangs under the hand that holds on, tilted, and it swings while he panics
+          const roll = (R.roll || 0) - sG * (0.2 * me.slip + 0.07 * me.wave) + 0.09 * me.slip * Math.sin(sec * 5.6) + 0.06 * sway;
+          const cr = Math.cos(roll), sr = Math.sin(roll);
+          const under = G.x - sG * SHOULDER * cr; // his holding shoulder right under that hand
+          const cx = R.cx + (under - R.cx) * (0.78 * me.slip + 0.2 * me.wave) + 6 * me.slip * Math.sin(sec * 2.9) + 12 * sway;
+          let sy = R.sy;
+          if (loose > 0.01) { // the arm that holds stays an arm long
+            const len = Math.min(ARM, Math.hypot(G.x - (R.cx + sG * SHOULDER), G.y - R.sy)), dx = G.x - (cx + sG * SHOULDER * cr);
+            sy = G.y + Math.sqrt(Math.max(0, len * len - dx * dx)) - sG * SHOULDER * sr;
+          }
+          R.cx = cx; R.sy = sy; R.roll = roll;
+          const seen = (H) => { const dx = H.x - cx, dy = H.y - sy; return { x: dx * cr + dy * sr, y: -dx * sr + dy * cr }; };
+          R.hl[grip] = seen(G);
+          if (loose > 0.01) {
+            // the free hand: flailing next to him (slip) or up beside his head, waving (wave)
+            const flail = { x: sF * (47 + 11 * Math.sin(sec * 12.6)), y: -6 + 27 * Math.sin(sec * 10.1 + 1) };
+            const hello = { x: sF * (45 + 8 * Math.sin(sec * 9.4)), y: -50 + 5 * Math.cos(sec * 9.4) };
+            const to = me.slip >= me.wave ? flail : hello, k = ease(Math.min(1, loose));
+            R.hl[free] = { x: was.x + (to.x - was.x) * k, y: was.y + (to.y - was.y) * k };
+            R.hw[free].x += sF * 8 * loose * Math.sin(sec * 4.3); // the ring he let go of swings by itself
+          } else R.hl[free] = seen(R.hw[free]);
+          R.legs.forEach((leg, i) => {
+            const kick = 0.3 * me.slip * Math.sin(sec * 9.2 + i * 2.6) + 0.2 * me.swing * Math.sin(sec * 2.7 - 0.7);
+            leg.phi += kick; leg.psi += kick * 1.25 + 0.12 * me.slip * Math.sin(sec * 7.1 + i);
+          });
+          R.hem = Math.sin((R.legs[0].phi + R.legs[1].phi) / 2) * 34;
+          if (me.slip > 0.35) { R.happy = false; R.moving = true; R.headTilt += sF * 0.13 * me.slip; }
+          else if (me.wave > 0.35 || me.swing > 0.35) { R.happy = true; R.moving = false; }
+        }
         sim.draw(ctx);
         // sweat: drops from his temples
         const s = sim.s, hx = sim.ox + R.cx * s, hy = sim.top + (R.rigY + R.sy - 35.5 + R.headDy) * s;
@@ -174,14 +214,29 @@
         lsit: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.5 }, 500, 0.3), step({ l: 1 }, 520, 0.8), step({}, 1900, 1), step({ l: 0 }, 480, 0.5), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
         straddle: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.5 }, 500, 0.3), step({ s: 1 }, 600, 0.8), step({}, 1700, 1), step({ s: 0 }, 520, 0.5), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
         cross: () => [step({ t: TOP }, 1150, 0.6), step({ run: 0.6 }, 600, 0.3), step({ t: HELD, jump: true }, 0), step({ t: CROSS }, 900, 0.9), step({ run: 1.7 }, 1700, 1), step({ t: HELD }, 950, 0.9), step({ t: 2.5, jump: true }, 0), step({ t: HANG }, 1000, 0.2)],
-        drop: () => [step({ t: HANG }, 650, 0)]
+        drop: () => [step({ t: HANG }, 650, 0)],
+        // the clumsy ones: a hand slips off, a rep that will not go, swinging like a child, a wave to you
+        slip: () => { me.side = Math.random() < 0.5 ? 0 : 1; return [step({ slip: 1 }, 230, 1), step({}, 2100, 1), step({ slip: 0 }, 640, 0.6), step({}, 380, 0.3)]; },
+        fail: () => [step({ t: 1.03 }, 560, 0.8), step({ shake: 1 }, 180, 1), step({}, 950, 1), step({ shake: 0, t: HANG }, 300, 0.5), step({}, 300, 0.3)],
+        swing: () => [step({ swing: 1 }, 800, 0), step({}, 3400, 0.15), step({ swing: 0 }, 950, 0)],
+        wave: () => { me.side = 1; return [step({ wave: 1 }, 430, 0), step({}, 1600, 0), step({ wave: 0 }, 430, 0)]; }
       };
-      const pickMove = () => { const r = Math.random(); return r < 0.34 ? "pullup" : r < 0.5 ? "pullups" : r < 0.7 ? "muscleup" : r < 0.82 ? "lsit" : r < 0.93 ? "straddle" : "cross"; };
+      // what he says with a clumsy move: at once, and when he is back where he was
+      const OOPS = { slip: [["Whoa!", "Oops!", "Aaah!"], ["Nobody saw that, right?", "That was on purpose. Really.", "One hand is enough. Almost.", "Chalk. I need more chalk."]],
+        fail: [null, ["That one doesn't count.", "Heavy day. It happens to the best."]], swing: [["Wheee!"], ["This counts as cardio."]] };
+      const pickMove = () => {
+        const r = Math.random();
+        return r < 0.22 ? "pullup" : r < 0.32 ? "pullups" : r < 0.46 ? "muscleup" : r < 0.56 ? "lsit" : r < 0.64 ? "straddle" : r < 0.7 ? "cross"
+          : r < 0.83 ? "slip" : r < 0.91 ? "fail" : "swing";
+      };
       let cur = null; // the step under way: { from, to, ms, at }
       function begin(name, then) {
         if (!fit()) return;
         if (STILL.matches) { me.t = HANG; me.l = 0; me.s = 0; paint(performance.now()); return; }
         plan = MOVES[name]();
+        const oops = OOPS[name];
+        if (oops?.[0]) say(oops[0], 120, { ms: 1700 });
+        if (oops?.[1] && !then) then = () => say(oops[1], 250);
         if (then) plan.push({ then });
         cur = null;
         box.dataset.move = name;
@@ -206,14 +261,18 @@
           const u = cur.ms ? Math.min(1, (now - cur.at) / cur.ms) : 1, e = ease(u);
           if (cur.to.run !== undefined) me.t = cur.from.t + cur.to.run * u; // the timeline runs on (the rings settle, the cross trembles)
           else if (cur.to.t !== undefined) me.t = cur.from.t + (cur.to.t - cur.from.t) * (cur.from.t < HANG ? u : e);
-          if (cur.to.l !== undefined) me.l = cur.from.l + (cur.to.l - cur.from.l) * e;
-          if (cur.to.s !== undefined) me.s = cur.from.s + (cur.to.s - cur.from.s) * e;
+          BLEND.forEach((key) => { if (cur.to[key] !== undefined) me[key] = cur.from[key] + (cur.to[key] - cur.from[key]) * e; });
           me.sweat = cur.sweat;
           if (u >= 1) cur = null;
         }
         if (!cur && !plan.length) {
           me.sweat = Math.max(0, me.sweat - dt * 1.5);
-          if (box.dataset.move) { delete box.dataset.move; nextMove = now + 16000 + Math.random() * 26000; if (Math.random() < 0.4 && (saidLook || !LevelUp.mascotLook()?.say)) say(PUFFS, 400); } // first his line about what he wears
+          if (box.dataset.move) {
+            const was = box.dataset.move;
+            delete box.dataset.move;
+            nextMove = now + 13000 + Math.random() * 19000;
+            if (!OOPS[was] && was !== "hello" && was !== "wave" && Math.random() < 0.35 && greeted) say(PUFFS, 400); // a word after the work
+          }
           if (now > nextMove && nextMove) begin(pickMove());
           if (now > nextSay && nextSay) speak();
         }
@@ -225,37 +284,108 @@
       const loop = () => { if (!raf && !STILL.matches && on()) raf = requestAnimationFrame(frame); };
 
       // ---- the speech bubble ----
+      // say(lines, delay, { help, args, go, ms }): one of the lines, after a delay. go: where a tap on the bubble leads.
       let hideSay = 0;
-      function say(lines, delay = 0, help = false, arg = "") {
+      const said = []; // the last lines, so he does not repeat himself
+      function say(lines, delay = 0, o = {}) {
         if (!bubble) return;
+        if (typeof o !== "object") o = { help: Boolean(o) };
+        const fresh = lines.filter((l) => !said.includes(l));
+        const line = (fresh.length ? fresh : lines)[Math.floor(Math.random() * (fresh.length || lines.length))];
+        said.push(line); if (said.length > 8) said.shift();
         clearTimeout(hideSay);
         hideSay = setTimeout(() => {
-          bubble.textContent = T(lines[Math.floor(Math.random() * lines.length)], arg);
-          bubble.dataset.help = help ? "1" : "";
+          bubble.textContent = T(line, ...(o.args || [])) + (o.go ? " ▸" : "");
+          bubble.dataset.help = o.help ? "1" : "";
+          bubble.dataset.go = o.go || "";
           bubble.hidden = false;
           requestAnimationFrame(() => bubble.classList.add("in"));
-          hideSay = setTimeout(() => { bubble.classList.remove("in"); hideSay = setTimeout(() => { bubble.hidden = true; }, 260); }, 5200);
+          hideSay = setTimeout(() => { bubble.classList.remove("in"); hideSay = setTimeout(() => { bubble.hidden = true; }, 260); }, o.ms || 5600);
         }, delay);
-        nextSay = performance.now() + 38000 + Math.random() * 42000;
+        nextSay = performance.now() + 24000 + Math.random() * 22000;
       }
-      // now and then: an offer to help (for who has Levelupy), else a few words of motivation
-      // what he wears today comes with a line: first thing he says, and now and then after that
-      let saidLook = false;
-      function lookLine() {
+      // What is on his mind: he knows your name, your XP, your planning, your streak, the high scores, the day and
+      // what he wears. Each thought: [weight, lines, options]. The heavier, the sooner he says it.
+      const DAYS = { 1: ["Monday. New week, new chances."], 3: ["Halfway through the week. You've got this."], 5: ["Friday! One more workout before the weekend?"],
+        6: ["Saturday! The best day for a long session."], 0: ["Sunday is rest day. For you, not for me."] };
+      function thoughts() {
+        const player = LevelUp.getPlayer();
+        if (!player) return [];
+        const out = [], now = new Date(), name = String(player.name || "").trim().split(/\s+/)[0] || "";
+        const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const daysTo = (d) => Math.round((day0(d) - day0(now)) / 864e5);
+        const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        const coach = (id) => LevelUp.trainerById(id)?.short || "";
+        // ---- your planning ----
+        const sessions = LevelUp.playerBookings().filter((b) => ["pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > now)
+          .map((b) => ({ at: LevelUp.slotStart(b.date, b.hour), who: coach(b.trainerId), pending: b.status === "pending" }));
+        const classes = (player.classes || []).filter((c) => c.status === "scheduled" && c.start > now && c.mine?.status === "booked")
+          .map((c) => ({ at: c.start, who: coach(c.trainerId), title: c.title }));
+        const next = [...sessions, ...classes].sort((a, b) => a.at - b.at)[0];
+        if (next) {
+          const d = daysTo(next.at);
+          if (next.pending) out.push([4, ["{0} hasn't confirmed yet. I'm keeping an eye on it."], { args: [next.who] }]);
+          else if (d === 0) out.push([9, next.title ? ["Today: {0} at {1}. See you there!"] : ["Today's the day: {0} with {1}. I'm warming up for you!"], { args: next.title ? [next.title, hhmm(next.at)] : [hhmm(next.at), next.who] }]);
+          else if (d === 1) out.push([9, next.title ? ["Yes, tomorrow it's time again: {0} with {1}. I'm looking forward to it!"] : ["Yes, tomorrow it's time again: training with {0}. I'm looking forward to it!"], { args: next.title ? [next.title, next.who] : [next.who] }]);
+          else if (d <= 6) out.push([5, next.title ? ["{0} more sleeps until {1}."] : ["{0} more sleeps until your session with {1}."], { args: [d, next.title || next.who] }]);
+        } else if (!LevelUp.isTrainer()) {
+          if (LevelUp.availableVouchers(player).length) out.push([7, ["You have a free session waiting. Don't let it get cold!"], { go: "schedule" }]);
+          out.push([5, ["Nothing planned yet, {0}. Shall we pick an hour?", "The rings are free. Your coach too. Just saying."], { args: [name], go: "schedule" }]);
+        }
+        const done = LevelUp.playerBookings().filter((b) => b.status === "completed").map((b) => LevelUp.slotStart(b.date, b.hour)).sort((a, b) => b - a)[0];
+        if (done && daysTo(done) === -1) out.push([6, ["Good session yesterday, {0}! Sore? That's growth."], { args: [name] }]);
+        if (done && daysTo(done) < -21 && !next) out.push([6, ["Long time no see, {0}! The rings missed you."], { args: [name], go: "schedule" }]);
+        // ---- your score ----
+        const p = LevelUp.progress(player.xp || 0), sessionXp = LevelUp.SESSION_XP || 75;
+        if (p.toNext <= sessionXp) out.push([6, ["One more session and you're LVL {0}, {1}!"], { args: [p.level + 1, name] }]);
+        else out.push([4, ["Hey {0}, {1} XP to go until LVL {2}. Nice work!"], { args: [name, num(p.toNext), p.level + 1] }]);
+        if (p.nextRank) { const gap = 50 * p.nextRank.level * (p.nextRank.level - 1) - player.xp; /* the XP that level starts at */ if (gap > 0 && gap <= 300) out.push([5, ["Only {0} XP and you're a {1}. I can almost see the badge."], { args: [num(gap), p.nextRank.title] }]); }
+        if (p.level >= 3) out.push([1, ["LVL {0} already! I remember when you were LVL 1."], { args: [p.level] }]);
+        const rows = LevelUp.getForYou()?.board?.all?.rows || [], i = rows.findIndex((r) => r.isMe);
+        if (i >= 0) {
+          const mine = rows[i], above = rows[i - 1], below = rows[i + 1];
+          if (mine.place === 1) out.push([3, ["Number 1 in the high scores, {0}! Don't look back."], { args: [name], go: "scores" }]);
+          else if (above && above.xp > mine.xp) out.push([4, ["{0} XP and you pass {1}. Just saying."], { args: [num(above.xp - mine.xp + 1), above.name], go: "scores" }]);
+          if (below && mine.xp - below.xp <= 100) out.push([3, ["{0} is right behind you. Keep moving!"], { args: [below.name] }]);
+        }
+        const s = player.streak, c = player.checkin;
+        if (s?.weeks >= 2 && s.thisWeek) out.push([3, ["{0} weeks in a row! Don't break the chain."], { args: [s.weeks] }]);
+        else if (s?.weeks >= 1 && !s.thisWeek && !s.planned) out.push([5, ["Your streak of {0} weeks wants a session this week."], { args: [s.weeks], go: "schedule" }]);
+        if (c && !c.done && !LevelUp.isTrainer()) out.push([4, ["You haven't checked in this week: +{0} XP is waiting below."], { args: [c.xp || 25] }]);
+        // ---- the day, and what he wears ----
+        if (DAYS[now.getDay()]) out.push([1.5, DAYS[now.getDay()], {}]);
         const look = LevelUp.mascotLook();
-        if (!look?.say?.length || (saidLook && Math.random() > 0.2)) return false;
-        saidLook = true;
-        const first = String(LevelUp.getPlayer()?.name || "").trim().split(/\s+/)[0] || "";
-        const lines = look.id === "laurel" && look.years === 1 ? ["One year with LEVEL-UP today. Respect! 🏆", look.say[1]] : look.say;
-        say(lines, 0, false, look.id === "laurel" ? look.years : first);
-        return true;
+        if (look?.say?.length) {
+          const lines = look.id === "laurel" && look.years === 1 ? ["One year with LEVEL-UP today. Respect! 🏆", look.say[1]] : look.say;
+          out.push([look.why === "season" ? 2.5 : 6, lines, { args: [look.id === "laurel" ? look.years : name] }]);
+        }
+        // ---- a word for everyone, and an offer to help ----
+        out.push([2.5, QUOTES, {}]);
+        if (LevelUp.getAssistant().on) out.push([saidHelp ? 2 : 4, HELP_LINES, { help: true }]);
+        return out;
       }
+      // The first thing he says: hello, by name, with a wave (or what the day is about, on a special day)
+      let greeted = false;
+      function greet() {
+        greeted = true;
+        const name = String(LevelUp.getPlayer()?.name || "").trim().split(/\s+/)[0] || "", h = new Date().getHours(), look = LevelUp.mascotLook();
+        const special = look?.say?.length && look.why && look.why !== "season";
+        if (special) say(look.id === "laurel" && look.years === 1 ? ["One year with LEVEL-UP today. Respect! 🏆"] : look.say, 0, { args: [look.id === "laurel" ? look.years : name] });
+        else say(h < 6 || h >= 22 ? ["Still up, {0}? Sleep is training too."] : h < 11 ? ["Good morning, {0}!", "Good morning, {0}! Early bird gets the gains."] : h < 18 ? ["Hey {0}! Good to see you.", "There you are, {0}!"] : ["Good evening, {0}!", "Hey {0}! Still got energy?"], 0, { args: [name] });
+        if (!plan.length && !cur) begin("wave");
+        nextSay = performance.now() + 8500; // what is on his mind follows soon
+      }
+      // now and then: one of his thoughts, the heavier ones more often
       function speak() {
-        if (lookLine()) return;
-        const canHelp = Boolean(LevelUp.getAssistant().on);
-        const help = canHelp && (!saidHelp || Math.random() < 0.45);
-        if (help) saidHelp = true;
-        say(help ? HELP_LINES : QUOTES, 0, help);
+        if (!greeted) { greet(); return; }
+        const list = thoughts().filter(([, lines]) => lines.some((l) => !said.includes(l)));
+        if (!list.length) { say(QUOTES); return; }
+        const first = said.length <= 1; // right after hello: what matters most today
+        const top = first ? [list.slice().sort((x, y) => y[0] - x[0])[0]] : list;
+        let r = Math.random() * top.reduce((n, x) => n + x[0], 0);
+        const pick = top.find((x) => (r -= x[0]) <= 0) || top[0];
+        if (pick[2].help) saidHelp = true;
+        say(pick[1], 0, pick[2]);
       }
       const chat = () => LevelUp.gotoChat({ t: LevelUp.ASSISTANT_ID });
       box.addEventListener("click", () => {
@@ -264,6 +394,7 @@
       });
       bubble?.addEventListener("click", () => {
         if (bubble.dataset.help && LevelUp.getAssistant().on) chat();
+        else if (bubble.dataset.go) location.href = link(bubble.dataset.go); // "pick an hour", "the high scores": he takes you there
         else { bubble.classList.remove("in"); bubble.hidden = true; }
       });
 
@@ -273,7 +404,9 @@
         cheer: () => begin("muscleup", () => say(["Checked in! That deserves a muscle-up.", "Nice one. See you next week!"])),
         wake: loop,
         move: (name) => { if (MOVES[name]) begin(name); },   // for a look at one move (LevelUpForYou.move("lsit"))
-        say: (help) => say(help ? HELP_LINES : QUOTES, 0, Boolean(help))
+        say: (help) => say(help ? HELP_LINES : QUOTES, 0, { help: Boolean(help) }),
+        think: () => thoughts().map(([w, lines, o]) => ({ w, line: lines[0], text: T(lines[0], ...(o.args || [])), go: o.go || "" })), // what is on his mind now
+        speak
       };
       window.addEventListener("resize", fit);
       document.addEventListener("visibilitychange", loop);
@@ -720,5 +853,5 @@
   document.addEventListener("levelup:view", () => { draw(); mascot?.wake(); }); // the phone page comes into view
   PHONE.addEventListener?.("change", () => draw());
   if (home) mount(document.getElementById("fyHome"));
-  window.LevelUpForYou = { mount, draw, move: (name) => mascot?.move(name), say: (help) => mascot?.say(help) };
+  window.LevelUpForYou = { mount, draw, move: (name) => mascot?.move(name), say: (help) => mascot?.say(help), think: () => mascot?.think() || [], speak: () => mascot?.speak() };
 })();
