@@ -934,6 +934,13 @@ Everything is run from **admin → Shop**:
   options; once that pack is paid it appears under **Gifts to hand out**, and **Handed out** puts it in their inventory.
 - **Season 1 Hoodie** (`hoodie_s1`) is the first limited drop: 25 pieces, switched off until you set it live.
 
+## Instagram (@levelup.movement)
+The folder `instagram/` holds a ready-made set in the site's style: `profielfoto.jpg`, nine posts of 1080 × 1350 px that
+form one grid (`rooster-voorbeeld.png` shows it), three story templates and six highlight covers of 1080 × 1920 px.
+`instagram/teksten.md` has the name, bio, links, a caption per post, a posting rhythm and what to check before posting.
+The pictures are made by `node tools/instagram-posts.js` from the photos in `img/`; edit a text or photo there and run
+it again (one name as argument remakes only that picture).
+
 ## Adding a shop item
 Add an entry to `ITEMS` in `game.js` (id, name, price, category `supps`, `merch`, `tools`, `fuel` or `limited`, rarity, image or
 an emoji in `art`, optional `sizes` or `options: { label: "Flavour", values: [...] }`, perks, description, and for the
