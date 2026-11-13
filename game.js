@@ -126,9 +126,177 @@ const LevelUp = (() => {
       category: "tools",
       type: "Equipment",
       rarity: "rare",
-      img: null,
+      img: "img/shop/bands.jpg",
       perks: ["+8 STR", "+8 Mobility"],
-      desc: "Resistance bands for warm-ups, assisted pull-ups and mobility. Small enough to take to every session."
+      desc: "Resistance bands for warm-ups, assisted pull-ups and mobility. Small enough to take to every session.",
+      details: ["Set of 3: light, medium and heavy", "Natural latex", "For pull-ups, warm-ups and mobility"]
+    },
+    // ----- Example articles (example: true): pictures drawn for the shop, texts and prices to check.
+    // They start switched off; switch each one on in admin -> Shop once photo, text, price and stock are right.
+    // Supplements
+    {
+      id: "whey", name: "Whey Protein 1 kg", price: 34.9, category: "supps", type: "Protein", rarity: "rare", example: true,
+      img: "img/shop/whey.jpg", options: { label: "Flavour", values: ["Chocolate", "Vanilla", "Strawberry"] },
+      perks: ["24 g protein", "33 shakes"],
+      desc: "Whey protein that mixes smooth in water or milk. 24 g protein per shake.",
+      details: ["1 kg · 33 servings of 30 g", "24 g protein per serving", "Low in sugar", "Mixes without lumps"],
+      use: "Mix 1 scoop (30 g) with 250 ml water or milk. 1 to 2 shakes a day, after training or between meals.",
+      ingredients: "Whey protein concentrate (milk), cocoa powder, flavouring, thickener (xanthan gum), sweetener (sucralose).",
+      allergens: "Contains milk. May contain traces of soy and egg."
+    },
+    {
+      id: "creatine", name: "Creatine Monohydrate 500 g", price: 24.9, category: "supps", type: "Strength", rarity: "rare", example: true, supplement: true,
+      img: "img/shop/creatine.jpg",
+      perks: ["3 g per day", "166 servings"],
+      desc: "Pure creatine monohydrate, nothing added. No taste and easy to mix.",
+      details: ["500 g · 166 servings of 3 g", "100 % creatine monohydrate", "No flavour, no sweeteners"],
+      use: "Mix 3 g (1 scoop) with water or your shake, every day.",
+      ingredients: "Creatine monohydrate.",
+      allergens: "No allergens."
+    },
+    {
+      id: "preworkout", name: "Pre-Workout 300 g", price: 27.9, category: "supps", type: "Energy", rarity: "epic", example: true, supplement: true,
+      img: "img/shop/preworkout.jpg", options: { label: "Flavour", values: ["Citrus", "Berry"] },
+      perks: ["200 mg caffeine", "30 servings"],
+      desc: "Caffeine, citrulline and beta-alanine for the session ahead.",
+      details: ["300 g · 30 servings of 10 g", "200 mg caffeine per serving", "Citrulline malate and beta-alanine", "Sugar free"],
+      use: "Mix 1 scoop (10 g) with 300 ml water, 20 to 30 minutes before training. At most 1 serving a day.",
+      ingredients: "L-citrulline malate, beta-alanine, flavouring, acid (citric acid), caffeine, sweetener (sucralose).",
+      allergens: "No allergens.",
+      warning: "High caffeine content (200 mg per serving). Not for children, or during pregnancy or breastfeeding."
+    },
+    {
+      id: "electro", name: "Electrolytes 300 g", price: 19.9, category: "supps", type: "Hydration", rarity: "common", example: true, supplement: true,
+      img: "img/shop/electro.jpg", options: { label: "Flavour", values: ["Lemon", "Orange"] },
+      perks: ["Sugar free", "60 servings"],
+      desc: "Sodium, potassium and magnesium for long or sweaty sessions.",
+      details: ["300 g · 60 servings of 5 g", "Sodium, potassium and magnesium", "Sugar free, light taste"],
+      use: "Mix 1 scoop (5 g) with 500 ml water. Drink during or after training.",
+      ingredients: "Sodium citrate, potassium citrate, magnesium citrate, acid (citric acid), flavouring, sweetener (steviol glycosides).",
+      allergens: "No allergens."
+    },
+    {
+      id: "omega3", name: "Omega-3 · 120 softgels", price: 17.9, category: "supps", type: "Health", rarity: "common", example: true, supplement: true,
+      img: "img/shop/omega3.jpg",
+      perks: ["EPA + DHA", "60 days"],
+      desc: "Fish oil softgels with EPA and DHA. Two a day, with a meal.",
+      details: ["120 softgels · 60 days", "1000 mg fish oil per softgel", "330 mg EPA and 220 mg DHA per softgel"],
+      use: "Take 2 softgels a day with a meal.",
+      ingredients: "Fish oil, gelatin (capsule), humectant (glycerol), antioxidant (tocopherols).",
+      allergens: "Contains fish."
+    },
+    {
+      id: "magnesium", name: "Magnesium · 90 capsules", price: 14.9, category: "supps", type: "Recovery", rarity: "common", example: true, supplement: true,
+      img: "img/shop/magnesium.jpg",
+      perks: ["Bisglycinate", "45 days"],
+      desc: "Magnesium bisglycinate in capsules, easy on the stomach.",
+      details: ["90 capsules · 45 days", "300 mg magnesium per 2 capsules", "Vegan capsule"],
+      use: "Take 2 capsules a day with water, in the evening.",
+      ingredients: "Magnesium bisglycinate, capsule (hydroxypropyl methylcellulose), anti-caking agent (rice flour).",
+      allergens: "No allergens."
+    },
+    {
+      id: "barbox", name: "Protein Bars · box of 12", price: 26.9, category: "supps", type: "Snack", rarity: "common", example: true,
+      img: "img/shop/barbox.jpg",
+      perks: ["20 g protein", "12 bars"],
+      desc: "Twelve protein bars: chocolate with a layer of caramel. 20 g protein per bar.",
+      details: ["12 bars of 55 g", "20 g protein per bar", "Low in sugar"],
+      use: "A bar before or after training, or as a snack.",
+      ingredients: "Milk protein, milk chocolate with sweetener, humectant (glycerol), soy crisps, caramel, flavouring.",
+      allergens: "Contains milk and soy. May contain nuts and gluten."
+    },
+    // Merch
+    {
+      id: "tank", name: "LEVEL-UP Tank Top", price: 22, category: "merch", type: "Apparel", rarity: "common", example: true,
+      img: "img/shop/tank.jpg", sizes: ["S", "M", "L", "XL"],
+      perks: ["+5 Style", "Breathable"],
+      desc: "Light tank top with the pull-up logo. Room to move in warm sessions.",
+      details: ["Light, breathable fabric", "Regular fit", "Logo print on the chest"]
+    },
+    {
+      id: "shorts", name: "LEVEL-UP Training Shorts", price: 32, category: "merch", type: "Apparel", rarity: "rare", example: true,
+      img: "img/shop/shorts.jpg", sizes: ["S", "M", "L", "XL"],
+      perks: ["+5 Style", "Stretch"],
+      desc: "Training shorts with a drawstring and two pockets. Stretch for squats and sprints.",
+      details: ["Stretch fabric that dries fast", "Drawstring and two side pockets", "Logo on the leg"]
+    },
+    {
+      id: "cap", name: "LEVEL-UP Cap", price: 20, category: "merch", type: "Accessory", rarity: "common", example: true,
+      img: "img/shop/cap.jpg",
+      perks: ["+4 Style", "One size"],
+      desc: "Black cap with the embroidered logo. One size, adjustable at the back.",
+      details: ["Embroidered logo", "Adjustable strap", "One size"]
+    },
+    {
+      id: "socks", name: "LEVEL-UP Socks · 2 pairs", price: 12, category: "merch", type: "Accessory", rarity: "common", example: true,
+      img: "img/shop/socks.jpg", sizes: ["36-40", "41-46"],
+      perks: ["2 pairs", "Cushioned"],
+      desc: "Two pairs of crew socks, one white and one black, with a cushioned sole.",
+      details: ["1 white pair and 1 black pair", "Cushioned sole", "Ribbed cuff that stays up"]
+    },
+    {
+      id: "gymbag", name: "LEVEL-UP Gym Bag", price: 39, category: "merch", type: "Accessory", rarity: "rare", example: true,
+      img: "img/shop/gymbag.jpg",
+      perks: ["30 litres", "Shoe pocket"],
+      desc: "Duffel for all your gear, with a shoe pocket and a shoulder strap.",
+      details: ["30 litres", "Separate shoe pocket", "Shoulder strap and two handles"]
+    },
+    {
+      id: "shaker", name: "LEVEL-UP Shaker", price: 9.9, category: "merch", type: "Accessory", rarity: "common", example: true,
+      img: "img/shop/shaker.jpg",
+      perks: ["700 ml", "Leak-proof"],
+      desc: "Shaker of 700 ml with a leak-proof lid and a mixing ball.",
+      details: ["700 ml with a scale", "Leak-proof flip cap", "Mixing ball included", "Dishwasher safe"]
+    },
+    {
+      id: "towel", name: "LEVEL-UP Gym Towel", price: 15, category: "merch", type: "Accessory", rarity: "common", example: true,
+      img: "img/shop/towel.jpg",
+      perks: ["50 × 100 cm", "Cotton"],
+      desc: "Cotton gym towel of 50 × 100 cm, for the bench and your forehead.",
+      details: ["50 × 100 cm", "100 % cotton", "Woven LEVEL-UP band"]
+    },
+    // Tools
+    {
+      id: "rings", name: "Wooden Gymnastic Rings", price: 39.9, category: "tools", type: "Equipment", rarity: "epic", example: true,
+      img: "img/shop/rings.jpg",
+      perks: ["+10 STR", "+10 Control"],
+      desc: "Birch rings with numbered straps, so both rings hang at the same height.",
+      details: ["Birch wood, 32 mm thick", "2 straps of 4.5 m with numbers", "Hang them indoors or outdoors"]
+    },
+    {
+      id: "rope", name: "Speed Rope", price: 14.9, category: "tools", type: "Equipment", rarity: "common", example: true,
+      img: "img/shop/rope.jpg",
+      perks: ["+8 Cardio", "Adjustable"],
+      desc: "Steel cable with bearings in the handles. Made for double-unders.",
+      details: ["Steel cable of 3 m, adjustable", "Bearings in both handles", "Spare cable included"]
+    },
+    {
+      id: "chalk", name: "Liquid Chalk 200 ml", price: 9.9, category: "tools", type: "Grip", rarity: "common", example: true,
+      img: "img/shop/chalk.jpg",
+      perks: ["+6 Grip", "No dust"],
+      desc: "Liquid chalk for a dry grip without dust. Dries in seconds.",
+      details: ["200 ml", "Dries in 10 seconds", "Washes off with water"]
+    },
+    {
+      id: "wraps", name: "Wrist Wraps", price: 14.9, category: "tools", type: "Support", rarity: "common", example: true,
+      img: "img/shop/wraps.jpg",
+      perks: ["+6 Support", "1 pair"],
+      desc: "Elastic wrist wraps with a thumb loop and velcro. Support for presses and handstands.",
+      details: ["1 pair, 45 cm each", "Thumb loop and wide velcro", "Machine washable"]
+    },
+    {
+      id: "grips", name: "Gymnastic Grips", price: 19.9, category: "tools", type: "Grip", rarity: "rare", example: true,
+      img: "img/shop/grips.jpg", sizes: ["S", "M", "L"],
+      perks: ["+8 Grip", "Leather"],
+      desc: "Leather hand grips with two finger holes. Protect your palms on the bar and the rings.",
+      details: ["1 pair, real leather", "Two finger holes", "Wrist strap with velcro"]
+    },
+    {
+      id: "roller", name: "Foam Roller", price: 19.9, category: "tools", type: "Recovery", rarity: "common", example: true,
+      img: "img/shop/roller.jpg",
+      perks: ["+8 Mobility", "33 cm"],
+      desc: "Firm foam roller with a textured surface, for before and after your session.",
+      details: ["33 cm long, 14 cm wide", "Firm, hollow core", "Fits in your gym bag"]
     },
     // Limited drop: a set number of pieces until a date (stock and end date are set in admin -> Shop)
     {
@@ -150,7 +318,16 @@ const LevelUp = (() => {
     { id: "water", name: "Water", price: 1.5, category: "fuel", type: "Fuel", rarity: "common", art: "💧", perks: ["+Hydration"], desc: "Bottle of still water." }
   ];
   // Until the server's shop list is in, only the gear that was always on sale shows
-  const ALWAYS_ON = ["merch", "tools"];
+  const CORE_ITEMS = ["tshirt", "hoodie", "parallettes", "bands"];
+  // The shop's departments, in the order the shop shows them ("sale" is a filter, not a category)
+  const SHOP_CATEGORIES = [
+    { id: "supps", name: "Supplements", blurb: "Protein, creatine and more", img: "img/shop/whey.jpg" },
+    { id: "merch", name: "Merch", blurb: "Clothes and accessories", img: "img/teammembermaximtruimerch.jpg" },
+    { id: "tools", name: "Tools", blurb: "Rings, ropes and grip", img: "img/shop/rings.jpg" },
+    { id: "fuel", name: "Fuel", blurb: "From the fridge at the gym", img: null },
+    { id: "limited", name: "Limited", blurb: "Gone is gone", img: "img/teammembermaximtruimerch.jpg" }
+  ];
+  const CART_KEY = "levelup.cart.v1";
 
   const ACHIEVEMENTS = [
     { id: "new_player", icon: "★", title: "New player", desc: "Create your player profile.", xp: 50 },
@@ -162,7 +339,7 @@ const LevelUp = (() => {
     { id: "first_loot", icon: "◆", title: "First buy", desc: "Buy your first item.", xp: 100, shop: true },
     { id: "full_drip", icon: "▣", title: "Full drip", desc: "Own the T-shirt and the hoodie.", xp: 150, shop: true },
     { id: "home_gym", icon: "⚒", title: "Home gym", desc: "Own the parallettes and the resistance bands.", xp: 150, shop: true },
-    { id: "collector", icon: "✦", title: "Collector", desc: "Own every item in the shop.", xp: 300, shop: true }
+    { id: "collector", icon: "✦", title: "Collector", desc: "Own 8 different items from the shop.", xp: 300, shop: true }
   ];
 
   // ---------- Helpers ----------
@@ -320,7 +497,8 @@ const LevelUp = (() => {
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
     packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false,
-    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: []
+    classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: [],
+    shipping: null // { on, fee, freeFrom }: sending web shop orders (null = the database doesn't know it yet)
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
@@ -338,7 +516,7 @@ const LevelUp = (() => {
   const PUSH_AFTER = new Set(["book_session", "respond_booking", "reward_session", "mark_no_show", "cancel_booking",
     "pay_in_person_instead", "mark_paid_in_person", "mark_pack_paid", "push_test", "chat_send", "admin_grant_xp",
     "class_signup", "class_cancel", "class_cancel_class", "class_mark", "class_finish", "shop_tab_paid",
-    "class_create", "admin_shop_update", "admin_shop_sale", "admin_announce", "give_like",
+    "class_create", "admin_shop_update", "admin_shop_sale", "admin_announce", "give_like", "record_order", "admin_order_set",
     "book_series", "series_stop", "move_booking"]);
 
   // Player data comes back from the database in the shape the pages use
@@ -474,18 +652,33 @@ const LevelUp = (() => {
       console.error("Loading the shop failed:", err);
     }
   }
-  // The shop's items with today's price and status; switched-off products are left out
-  function shopItems() {
+  // The shop's items with today's price and status; switched-off products are left out.
+  // all: also the ones that are not for sale (the admin's preview); they get live: false and can't be bought.
+  function shopItems({ all = false } = {}) {
+    const off = { available: false, live: false, stock: null, dropEndsAt: null, listPrice: null, saleEndsAt: null };
     return ITEMS.map((item) => {
       const c = shopCatalog?.[item.id];
-      if (!c) return ALWAYS_ON.includes(item.category) ? { ...item, available: true, stock: null, dropEndsAt: null, listPrice: null, saleEndsAt: null } : null;
-      if (!c.active) return null;
+      if (!c) {
+        if (CORE_ITEMS.includes(item.id)) return { ...item, ...off, available: true, live: true };
+        return all ? { ...item, ...off } : null; // not in the database yet: never for sale
+      }
+      if (!c.active && !all) return null;
       // listPrice: the normal price while a sale runs (price is then the sale price)
-      return { ...item, price: c.price, available: c.available, stock: c.stock, dropEndsAt: c.dropEndsAt,
+      return { ...item, price: c.price, available: c.available && c.active, live: c.active, stock: c.stock, dropEndsAt: c.dropEndsAt,
                listPrice: c.listPrice == null ? null : Number(c.listPrice), saleEndsAt: c.saleEndsAt || null };
     }).filter(Boolean);
   }
-  const shopCheck = (items) => call("shop_check", { p_items: items });
+  // Sending orders (pricing.shipping) only exists once the database knows it; until then every order is a pickup
+  const shopCheck = (items, delivery = "pickup") =>
+    call("shop_check", pricing.shipping ? { p_items: items, p_delivery: delivery } : { p_items: items });
+  // What is in the bag on this device (the shop keeps it in localStorage), for the bag button in the header
+  function cartCount() {
+    const lines = read(CART_KEY, []);
+    if (!Array.isArray(lines)) return 0;
+    // the shop's list is only loaded in the shop: there a switched-off product doesn't count, elsewhere any known product does
+    const ids = new Set((shopCatalog ? shopItems() : ITEMS).map((item) => item.id));
+    return lines.reduce((n, line) => n + (ids.has(line?.id) ? Math.max(0, Number(line.qty) || 0) : 0), 0);
+  }
   async function tabOrder(items) {
     const r = await call("shop_tab_order", { p_items: items });
     await Promise.all([refreshPlayer(), loadShopCatalog()]);
@@ -499,6 +692,9 @@ const LevelUp = (() => {
   }
   const openTab = (p = player) => (p?.purchases || []).filter((o) => o.status === "open");
   const adminShop = () => call("admin_shop");
+  const adminOrders = () => call("admin_orders");
+  const adminOrderSet = (id, fulfil) => call("admin_order_set", { p_id: id, p_fulfil: fulfil });
+  const adminShopDelivery = (on, fee, freeFrom) => call("admin_shop_delivery", { p_on: Boolean(on), p_fee: Number(fee), p_free_from: freeFrom === "" || freeFrom == null ? null : Number(freeFrom) });
   const adminShopUpdate = (id, p) => call("admin_shop_update", { p_id: id, p });
   const adminShopSale = (category, pct, ends, notify) => call("admin_shop_sale", { p_category: category, p_pct: Number(pct), p_ends: ends || null, p_notify: Boolean(notify) });
   const adminAnnounce = (title, body, url) => call("admin_announce", { p_title: title, p_body: body || "", p_url: url || "index.html" });
@@ -676,6 +872,7 @@ const LevelUp = (() => {
         classCapacity: Number(p.classCapacity ?? pricing.classCapacity), classCancelHours: Number(p.classCancelHours ?? pricing.classCancelHours),
         classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee), tabLimit: Number(p.tabLimit ?? pricing.tabLimit),
         news: (p.news || []).map((n) => ({ ...n, id: Number(n.id) })),
+        shipping: p.shipping ? { on: Boolean(p.shipping.on), fee: Number(p.shipping.fee) || 0, freeFrom: p.shipping.freeFrom == null ? null : Number(p.shipping.freeFrom) } : null,
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
     } catch (err) {
@@ -1832,7 +2029,8 @@ const LevelUp = (() => {
     const levelBefore = player ? levelFromXp(player.xp) : 1;
     const result = await call("record_order", {
       p_id: order.id,
-      p_items: order.items.map(({ id, size, qty }) => ({ id, size, qty }))
+      p_items: order.items.map(({ id, size, qty }) => ({ id, size, qty })),
+      ...(pricing.shipping ? { p_delivery: order.delivery || "pickup", p_contact: order.contact || null, p_note: order.note || null } : {})
     });
     const xp = Number(result?.xp) || orderXp(order.total);
     await loadShopCatalog(); // stock of limited drops
@@ -3018,6 +3216,15 @@ const LevelUp = (() => {
     await call("admin_clear_avatar", { p_user: userId });
   }
 
+  // The shopping bag in the header: always in the shop, elsewhere only when something is in it
+  const BAG_ICON = `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 8h13.6l1 12.2H4.2Z"/><path d="M8.8 8V6.6a3.2 3.2 0 0 1 6.4 0V8"/></svg>`;
+  function cartButtonHtml() {
+    const n = cartCount();
+    const inShop = /shop\.html$/.test(location.pathname) && !new URLSearchParams(location.search).has("fridge");
+    if (!n && !inShop) return "";
+    return `<a href="shop.html#bag" class="hud-cart${n ? " has-items" : ""}" data-bag-open title="Bag" aria-label="Bag"><span class="sr-only">Bag</span>${BAG_ICON}<i class="cart-badge" data-cart-count ${n ? "" : "hidden"}>${n > 99 ? "99+" : n}</i></a>`;
+  }
+
   function renderHud() {
     const slot = document.getElementById("hudAccount");
     if (!slot) return;
@@ -3026,11 +3233,12 @@ const LevelUp = (() => {
       return;
     }
     if (!player) {
-      slot.innerHTML = `${newsButtonHtml()}<button type="button" class="btn btn-small hud-login" data-auth-open="login">▶ Log in</button>`;
+      slot.innerHTML = `${cartButtonHtml()}${newsButtonHtml()}<button type="button" class="btn btn-small hud-login" data-auth-open="login">▶ Log in</button>`;
       return;
     }
     const p = progress(player.xp);
     slot.innerHTML = `
+      ${cartButtonHtml()}
       ${newsButtonHtml()}
       <a href="chat.html" class="hud-chat" title="Chat" aria-label="Chat">${CHAT_ICON}<i class="chat-badge" data-chat-badge ${chatUnread ? "" : "hidden"}>${chatUnread > 9 ? "9+" : chatUnread}</i></a>
       <a href="profile.html" class="hud-player" title="Your profile · ${p.xp} XP">
@@ -4181,6 +4389,7 @@ const LevelUp = (() => {
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
-    shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven
+    shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven,
+    SHOP_CATEGORIES, cartCount, renderHud, adminOrders, adminOrderSet, adminShopDelivery, BAG_ICON
   };
 })();

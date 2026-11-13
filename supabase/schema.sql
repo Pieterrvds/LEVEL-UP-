@@ -59,6 +59,9 @@ insert into public.app_config (key, value) values
   ('class_chat_hours', '24'),     -- (no longer used: group chats are per kind of class now, see class_chat_days)
   ('class_chat_days', '60'),      -- group chat: you stay in a group's chat this many days after your last class of it
   ('tab_limit', '30'),            -- shop: most a member can have open "on their tab" (drinks and bars at the gym)
+  ('ship_on', 'off'),             -- shop: 'on' = an order can be sent to an address in Belgium (admin -> Shop -> Delivery)
+  ('ship_fee', '5.95'),           -- shop: what sending an order costs (euro)
+  ('ship_free_from', '75'),       -- shop: orders from this amount are sent for free (empty = never free)
   ('room_places', '2'),           -- the gym room: how many 1:1 sessions (own coaches and renters) fit at the same time
   ('rent_shared_price', '15'),    -- room rental per hour: a renter who shares the room (takes one place)
   ('rent_full_price', '25'),      -- room rental per hour: the whole room, weekdays before 17:00
@@ -128,6 +131,30 @@ insert into public.shop_items (id, name, price, category, active, stock) values
   ('energy', 'Energy drink', 2.5, 'fuel', false, null),
   ('water', 'Water', 1.5, 'fuel', false, null),
   ('hoodie_s1', 'Season 1 Hoodie', 55, 'limited', false, 25)
+on conflict (id) do nothing;
+-- The web shop's example articles (supplements, merch and tools). They start switched off: check the photo,
+-- the text, the price and the stock first, then switch each one on in admin -> Shop.
+insert into public.shop_items (id, name, price, category, active, stock) values
+  ('whey', 'Whey Protein 1 kg', 34.90, 'supps', false, null),
+  ('creatine', 'Creatine Monohydrate 500 g', 24.90, 'supps', false, null),
+  ('preworkout', 'Pre-Workout 300 g', 27.90, 'supps', false, null),
+  ('electro', 'Electrolytes 300 g', 19.90, 'supps', false, null),
+  ('omega3', 'Omega-3 · 120 softgels', 17.90, 'supps', false, null),
+  ('magnesium', 'Magnesium · 90 capsules', 14.90, 'supps', false, null),
+  ('barbox', 'Protein Bars · box of 12', 26.90, 'supps', false, null),
+  ('tank', 'LEVEL-UP Tank Top', 22, 'merch', false, null),
+  ('shorts', 'LEVEL-UP Training Shorts', 32, 'merch', false, null),
+  ('cap', 'LEVEL-UP Cap', 20, 'merch', false, null),
+  ('socks', 'LEVEL-UP Socks · 2 pairs', 12, 'merch', false, null),
+  ('gymbag', 'LEVEL-UP Gym Bag', 39, 'merch', false, null),
+  ('shaker', 'LEVEL-UP Shaker', 9.90, 'merch', false, null),
+  ('towel', 'LEVEL-UP Gym Towel', 15, 'merch', false, null),
+  ('rings', 'Wooden Gymnastic Rings', 39.90, 'tools', false, null),
+  ('rope', 'Speed Rope', 14.90, 'tools', false, null),
+  ('chalk', 'Liquid Chalk 200 ml', 9.90, 'tools', false, null),
+  ('wraps', 'Wrist Wraps', 14.90, 'tools', false, null),
+  ('grips', 'Gymnastic Grips', 19.90, 'tools', false, null),
+  ('roller', 'Foam Roller', 19.90, 'tools', false, null)
 on conflict (id) do nothing;
 
 create table if not exists public.profiles (
@@ -356,6 +383,14 @@ create table if not exists public.orders (
 -- "On my tab": drinks and bars taken at the gym, paid later at the desk. The XP comes once it's paid.
 alter table public.orders add column if not exists status text not null default 'paid' check (status in ('paid', 'open', 'cancelled'));
 alter table public.orders add column if not exists paid_at timestamptz;
+-- Web shop orders: how the buyer gets it (pickup at the gym or sent), what sending cost, and where the order stands:
+-- new -> ready (to pick up) or sent -> done. Older orders and tabs count as done. "total" is what was paid, sending included.
+alter table public.orders add column if not exists delivery text not null default 'pickup' check (delivery in ('pickup', 'ship'));
+alter table public.orders add column if not exists shipping numeric(10, 2) not null default 0;
+alter table public.orders add column if not exists fulfil text not null default 'done' check (fulfil in ('new', 'ready', 'sent', 'done'));
+alter table public.orders add column if not exists contact jsonb;       -- name, e-mail and address from the payment, to hand over or send the order
+alter table public.orders add column if not exists note text;           -- a remark from the buyer
+alter table public.orders add column if not exists handled_at timestamptz;
 
 -- Session packs: a player requests a pack, an admin marks it as paid, then each 1:1
 -- booking uses one credit. A declined, expired or freely cancelled booking gives it back.
@@ -810,7 +845,9 @@ begin
   if coalesce((p.inventory ->> 'parallettes')::int, 0) > 0 and coalesce((p.inventory ->> 'bands')::int, 0) > 0 then
     perform public._unlock(p_user, 'home_gym', 150, 'Home gym');
   end if;
-  select bool_and(coalesce((p.inventory ->> s.id)::int, 0) > 0) into owns_all from public.shop_items s where s.category in ('merch', 'tools');
+  -- Collector: 8 different articles (drinks and bars from the fridge don't count)
+  select count(*) >= 8 into owns_all from public.shop_items s
+    where s.category <> 'fuel' and coalesce((p.inventory ->> s.id)::int, 0) > 0;
   if owns_all then perform public._unlock(p_user, 'collector', 300, 'Collector'); end if;
 end $$;
 
@@ -1040,7 +1077,8 @@ returns jsonb language sql stable security definer set search_path = public as $
                               'sex', b.sex, 'goal', b.goal, 'bmi', b.bmi, 'bmr', b.bmr, 'maintenance', b.maintenance,
                               'target', b.target, 'protein', b.protein, 'activity', b.activity) order by b.day desc, b.id desc)
                            from public.body_stats b where b.user_id = p.id), '[]'::jsonb),
-    'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total, 'status', o.status, 'xp', o.xp) order by o.created_at desc)
+    'purchases', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total, 'status', o.status, 'xp', o.xp,
+                              'delivery', o.delivery, 'shipping', o.shipping, 'fulfil', o.fulfil) order by o.created_at desc)
                            from public.orders o where o.user_id = p.id and o.status <> 'cancelled'), '[]'::jsonb),
     'bookings', coalesce((select jsonb_agg(public._booking_json(k) order by k.day, k.hour)
                           from public.bookings k where k.user_id = p.id), '[]'::jsonb),
@@ -2566,11 +2604,36 @@ begin
   return jsonb_build_object('items', clean, 'total', v_total, 'xp', round(v_total * 10));
 end $$;
 
--- Before paying: is everything still for sale (sold out, drop ended)? Returns the total and XP.
-create or replace function public.shop_check(p_items jsonb)
+-- What sending this basket costs: nothing for pickup, else the fee (free from ship_free_from)
+create or replace function public._shop_shipping(p_delivery text, p_subtotal numeric)
+returns numeric language sql stable security definer set search_path = public as $$
+  select case when coalesce(p_delivery, 'pickup') <> 'ship' then 0
+              when nullif(public._config('ship_free_from'), '') is not null
+                   and p_subtotal >= public._config('ship_free_from')::numeric then 0
+              else coalesce(nullif(public._config('ship_fee'), '')::numeric, 0) end;
+$$;
+
+-- Before paying: is everything still for sale (sold out, drop ended)? Returns the items, what sending costs
+-- and the total to pay. p_delivery: 'pickup' (at the gym, free) or 'ship' (to an address in Belgium).
+drop function if exists public.shop_check(jsonb);
+create or replace function public.shop_check(p_items jsonb, p_delivery text default 'pickup')
 returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  basket jsonb;
+  v_delivery text := coalesce(nullif(p_delivery, ''), 'pickup');
+  ship numeric := 0;
 begin
-  return public._shop_basket(p_items, true);
+  if v_delivery not in ('pickup', 'ship') then raise exception 'Choose pickup or delivery.'; end if;
+  basket := public._shop_basket(p_items, true);
+  if v_delivery = 'ship' then
+    if public._config('ship_on') <> 'on' then raise exception 'We can''t send orders right now. Choose pickup at the gym.'; end if;
+    if exists (select 1 from jsonb_array_elements(basket -> 'items') i join public.shop_items s on s.id = i ->> 'id' where s.category = 'fuel') then
+      raise exception 'Drinks and bars from the fridge are for at the gym. Choose pickup or take them out of your bag.';
+    end if;
+    ship := public._shop_shipping('ship', (basket ->> 'total')::numeric);
+  end if;
+  return basket || jsonb_build_object('subtotal', (basket ->> 'total')::numeric, 'shipping', ship,
+                                      'total', (basket ->> 'total')::numeric + ship, 'delivery', v_delivery);
 end $$;
 
 -- Sold: lower the stock of limited items (never below 0)
@@ -2583,10 +2646,17 @@ $$;
 
 -- Records a paid PayPal order. The total and XP are recalculated from the
 -- shop prices, so a changed price in the browser can't inflate the XP.
-create or replace function public.record_order(p_id text, p_items jsonb)
+-- The order starts as "new": the admin sees it under admin -> Shop -> Orders and marks it ready, sent and done.
+drop function if exists public.record_order(text, jsonb);
+create or replace function public.record_order(p_id text, p_items jsonb, p_delivery text default 'pickup',
+                                               p_contact jsonb default null, p_note text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   basket jsonb;
+  v_delivery text := case when p_delivery = 'ship' then 'ship' else 'pickup' end;
+  ship numeric;
+  v_contact jsonb;
+  admin_id uuid;
 begin
   if p_id is null or length(p_id) < 6 or p_id like 'TAB-%' then raise exception 'Invalid order.'; end if;
   if exists (select 1 from public.orders where id = p_id) then
@@ -2594,15 +2664,34 @@ begin
   end if;
   -- already paid: record it even if it sold out in the meantime (the stock just stays at 0)
   basket := public._shop_basket(p_items, false);
-  insert into public.orders (id, user_id, items, total, xp, status, paid_at)
-  values (p_id, null, basket -> 'items', (basket ->> 'total')::numeric, (basket ->> 'xp')::int, 'paid', now());
+  ship := public._shop_shipping(v_delivery, (basket ->> 'total')::numeric);
+  -- only the fields we need to hand over or send the order, each cut to a sane length
+  if p_contact is not null and jsonb_typeof(p_contact) = 'object' then
+    v_contact := jsonb_strip_nulls(jsonb_build_object(
+      'name', nullif(left(btrim(p_contact ->> 'name'), 120), ''),
+      'email', nullif(left(btrim(p_contact ->> 'email'), 160), ''),
+      'address', nullif(left(btrim(p_contact ->> 'address'), 300), '')));
+    if v_contact = '{}'::jsonb then v_contact := null; end if;
+  end if;
+  insert into public.orders (id, user_id, items, total, xp, status, paid_at, delivery, shipping, fulfil, contact, note)
+  values (p_id, null, basket -> 'items', (basket ->> 'total')::numeric + ship, (basket ->> 'xp')::int, 'paid', now(),
+          v_delivery, ship, 'new', v_contact, nullif(left(btrim(p_note), 300), ''));
   perform public._shop_take_stock(basket -> 'items');
   if auth.uid() is not null then
     perform public._credit_order(p_id, auth.uid());
     perform public._celebrate(auth.uid(), 'purchase', jsonb_build_object('what', 'order', 'order', p_id,
       'items', (select jsonb_agg(i ->> 'name') from jsonb_array_elements(basket -> 'items') i), 'xp', (basket ->> 'xp')::int));
   end if;
-  return jsonb_build_object('xp', (basket ->> 'xp')::int, 'total', (basket ->> 'total')::numeric, 'guest', auth.uid() is null);
+  -- the admins hear about it
+  for admin_id in select p.id from public.profiles p
+      where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) loop
+    perform public._push(admin_id, '🛒 New order · ' || public._euro((basket ->> 'total')::numeric + ship),
+      (select string_agg((i ->> 'qty') || '× ' || (i ->> 'name'), ', ') from jsonb_array_elements(basket -> 'items') i)
+        || case when v_delivery = 'ship' then ' · to send' else ' · pickup' end,
+      'admin.html#shop', 'order-' || p_id);
+  end loop;
+  return jsonb_build_object('xp', (basket ->> 'xp')::int, 'total', (basket ->> 'total')::numeric + ship,
+                            'shipping', ship, 'delivery', v_delivery, 'guest', auth.uid() is null);
 end $$;
 
 -- "On my tab": a member takes drinks or bars at the gym and pays later at the desk.
@@ -2748,7 +2837,7 @@ declare
   reached integer := 0;
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
-  if cat not in ('all', 'merch', 'tools', 'fuel', 'limited') then raise exception 'Unknown category.'; end if;
+  if cat not in ('all', 'supps', 'merch', 'tools', 'fuel', 'limited') then raise exception 'Unknown category.'; end if;
   if p_pct is null or p_pct < 0 or p_pct > 90 then raise exception 'Choose a discount between 0 and 90%%.'; end if;
   if p_pct > 0 and p_ends is not null and p_ends <= now() then raise exception 'The end of the sale must be in the future.'; end if;
   if p_pct = 0 then
@@ -2764,13 +2853,61 @@ begin
   if n = 0 then raise exception 'No products on sale in this category. Switch them on first.'; end if;
   if p_notify then
     reached := public._broadcast('shop_sale',
-      '🔥 −' || p_pct || '% on ' || case cat when 'all' then 'everything in the shop' when 'merch' then 'all merch'
+      '🔥 −' || p_pct || '% on ' || case cat when 'all' then 'everything in the shop' when 'merch' then 'all merch' when 'supps' then 'all supplements'
         when 'tools' then 'all training tools' when 'fuel' then 'all drinks and bars' else 'the limited drops' end,
       case when p_ends is not null then 'Until ' || to_char(p_ends at time zone 'Europe/Brussels', 'Dy DD Mon') || ' · ' else '' end || 'Every euro still earns 10 XP',
       'shop.html', 'shop-sale-' || cat, coalesce(p_ends, now() + interval '10 days'));
     update public.shop_items set sale_announced_at = now() where active and (cat = 'all' or category = cat);
   end if;
   return jsonb_build_object('items', n, 'reached', reached);
+end $$;
+
+-- Admin: the web shop's orders (not the tabs from the fridge), newest first; what is still to do comes first
+create or replace function public.admin_orders()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'date', o.created_at, 'items', o.items, 'total', o.total,
+             'shipping', o.shipping, 'delivery', o.delivery, 'fulfil', o.fulfil, 'note', o.note, 'handledAt', o.handled_at,
+             'userId', o.user_id, 'name', coalesce(p.name, o.contact ->> 'name'), 'email', coalesce(p.email, o.contact ->> 'email'),
+             'address', o.contact ->> 'address', 'guest', o.user_id is null)
+           order by (o.fulfil = 'done'), o.created_at desc)
+    from (select * from public.orders where status = 'paid' and id not like 'TAB-%' order by (fulfil = 'done'), created_at desc limit 150) o
+    left join public.profiles p on p.id = o.user_id), '[]'::jsonb);
+end $$;
+
+-- Admin: move an order on: ready (to pick up), sent, done, or back to new. The buyer with an account gets a notification.
+create or replace function public.admin_order_set(p_id text, p_fulfil text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare o public.orders;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if p_fulfil not in ('new', 'ready', 'sent', 'done') then raise exception 'Unknown status.'; end if;
+  select * into o from public.orders where id = p_id and status = 'paid' and id not like 'TAB-%' for update;
+  if not found then raise exception 'Order not found.'; end if;
+  update public.orders set fulfil = p_fulfil, handled_at = case when p_fulfil = 'new' then null else now() end where id = p_id;
+  if o.user_id is not null and p_fulfil is distinct from o.fulfil then
+    if p_fulfil = 'ready' then
+      perform public._push(o.user_id, '📦 Your order is ready', 'Pick it up at the desk at your next session.', 'profile.html#inventory', 'order-' || p_id);
+    elsif p_fulfil = 'sent' then
+      perform public._push(o.user_id, '📦 Your order is on its way', 'It was sent today. You get it in a few working days.', 'profile.html#inventory', 'order-' || p_id);
+    end if;
+  end if;
+  return jsonb_build_object('id', p_id, 'fulfil', p_fulfil);
+end $$;
+
+-- Admin: sending orders on or off, the fee and from which amount it is free (empty = never free)
+create or replace function public.admin_shop_delivery(p_on boolean, p_fee numeric, p_free_from numeric default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if p_fee is null or p_fee < 0 or p_fee > 50 then raise exception 'Enter a fee between 0 and 50 euro.'; end if;
+  if p_free_from is not null and (p_free_from < 0 or p_free_from > 1000) then raise exception 'Enter an amount between 0 and 1000 euro.'; end if;
+  insert into public.app_config (key, value) values
+    ('ship_on', case when coalesce(p_on, false) then 'on' else 'off' end),
+    ('ship_fee', p_fee::text),
+    ('ship_free_from', coalesce(p_free_from::text, ''))
+  on conflict (key) do update set value = excluded.value;
 end $$;
 
 -- Admin: a message for everyone (bell on the website + notification), e.g. "Closed on Monday"
@@ -2995,6 +3132,10 @@ returns jsonb language sql stable security definer set search_path = public as $
     'classCancelHours', public._config('class_cancel_hours')::int,
     'classTrainerFee', public._config('class_trainer_fee')::numeric,
     'tabLimit', public._config('tab_limit')::numeric,
+    -- sending web shop orders: on or off, the fee and from which amount it is free (null = never)
+    'shipping', jsonb_build_object('on', coalesce(public._config('ship_on'), 'off') = 'on',
+                                   'fee', coalesce(nullif(public._config('ship_fee'), '')::numeric, 0),
+                                   'freeFrom', nullif(public._config('ship_free_from'), '')::numeric),
     -- the latest news (new classes, products, sales, messages) for the bell on every page
     'news', coalesce((select jsonb_agg(jsonb_build_object('id', n.id, 'kind', n.kind, 'title', n.title, 'body', n.body, 'url', n.url, 'date', n.created_at) order by n.id desc)
                       from (select * from public.news where created_at > now() - interval '14 days' and (expires_at is null or expires_at > now())
@@ -5432,7 +5573,7 @@ grant execute on function public.admin_data() to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.slot_status(date, date) to anon, authenticated;
 grant execute on function public.trainer_stats() to anon, authenticated;
-grant execute on function public.record_order(text, jsonb) to anon, authenticated;
+grant execute on function public.record_order(text, jsonb, text, jsonb, text) to anon, authenticated;
 grant execute on function public.calendar_feed() to anon, authenticated;
 
 -- Group classes: helpers private; the class list is public, the rest needs an account
@@ -5496,7 +5637,14 @@ grant execute on function public.admin_shop_sale(text, integer, timestamptz, boo
 grant execute on function public.admin_announce(text, text, text) to authenticated;
 grant execute on function public.admin_delete_news(bigint) to authenticated;
 grant execute on function public.set_push_news(boolean) to authenticated;
-grant execute on function public.shop_check(jsonb) to anon, authenticated;
+grant execute on function public.shop_check(jsonb, text) to anon, authenticated;
+revoke execute on function public._shop_shipping(text, numeric) from public, anon, authenticated;
+revoke execute on function public.admin_orders() from public, anon;
+revoke execute on function public.admin_order_set(text, text) from public, anon;
+revoke execute on function public.admin_shop_delivery(boolean, numeric, numeric) from public, anon;
+grant execute on function public.admin_orders() to authenticated;
+grant execute on function public.admin_order_set(text, text) to authenticated;
+grant execute on function public.admin_shop_delivery(boolean, numeric, numeric) to authenticated;
 grant execute on function public.shop_tab_order(jsonb) to authenticated;
 grant execute on function public.shop_tab_cancel(text) to authenticated;
 grant execute on function public.shop_tab_paid(text) to authenticated;

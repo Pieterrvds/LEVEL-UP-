@@ -2713,6 +2713,27 @@ input, select, textarea { border-radius: 8px; }
 }
 .has-chat-unread .hud-chat { border-color: rgba(var(--accent-rgb), 0.6); }
 
+/* The shopping bag in the header: always in the shop, on other pages only when something is in it */
+.hud-cart {
+  position: relative; display: grid; place-items: center; width: 46px; height: 46px; margin-right: 8px; flex: none;
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.hud-cart:hover { border-color: var(--accent); color: var(--accent); }
+.hud-cart.has-items { border-color: var(--gold); }
+.hud-cart.bump { animation: cartBump 0.45s ease-in-out; }
+@keyframes cartBump { 40% { transform: scale(1.18) rotate(-6deg); } }
+.cart-badge {
+  position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 99px;
+  font: 700 0.68rem/1 var(--sans); font-style: normal; color: #000; background: var(--gold);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.cart-badge[hidden] { display: none; }
+@media (max-width: 760px) { .hud-cart { width: 42px; height: 42px; margin-right: 6px; } }
+/* A narrow phone with the bag in the header: the logo stays, the name makes room for the menu button */
+@media (max-width: 400px) { .hud:has(.hud-cart) .brand-name { display: none; } }
+
 .nav .nav-profile { display: none; }
 @media (max-width: 1140px) {
   .nav .nav-profile {

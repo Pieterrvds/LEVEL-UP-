@@ -748,6 +748,12 @@ function renderAchievements(player) {
     </section>`;
 }
 
+// Where a web shop order stands: [tone, text for a pickup, text for a delivery] (done = nothing to show)
+const ORDER_STATUS = {
+  new: ["pending", "We're getting it ready", "We're packing it"],
+  ready: ["confirmed", "Ready to pick up", "Ready to pick up"],
+  sent: ["confirmed", "On its way", "On its way"]
+};
 function renderInventory(player) {
   const owned = ITEMS.filter((item) => player.inventory[item.id]);
   const tab = LevelUp.openTab(player);
@@ -786,6 +792,7 @@ function renderInventory(player) {
             <li>
               <span>${order.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</span>
               <span class="muted">${formatDate(order.date)} · ${euro(order.total)}</span>
+              ${ORDER_STATUS[order.fulfil] ? `<span class="status-chip ${ORDER_STATUS[order.fulfil][0]}">${ORDER_STATUS[order.fulfil][order.delivery === "ship" ? 2 : 1]}</span>` : ""}
               <span class="log-xp">+${order.xp ?? LevelUp.orderXp(order.total)} XP</span>
             </li>`).join("")}
         </ul>` : ""}

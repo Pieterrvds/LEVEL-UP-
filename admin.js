@@ -42,13 +42,14 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop, room] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop, room, orders] = await Promise.all([
     LevelUp.adminData(),
     LevelUp.pushServerReady(),
     LevelUp.adminReviews().catch(() => []),
     LevelUp.classManageList(800).catch(() => []),
     LevelUp.adminShop().catch(() => null),
-    LevelUp.adminRoom().catch(() => null) // the room rentals, for the finances (null: database not updated yet)
+    LevelUp.adminRoom().catch(() => null), // the room rentals, for the finances (null: database not updated yet)
+    LevelUp.adminOrders().catch(() => null) // the web shop's orders (null: database not updated yet)
   ]);
   // Finished group classes count in the finances as one line each: what the players were charged and the trainer's fee
   const classLines = classes.filter((c) => c.status === "done").map((c) => ({
@@ -79,6 +80,7 @@ async function loadData() {
     rawBookings: bookings,
     classes,
     shop: shop || { items: [], tabs: [], packs: [], gifts: [] },
+    orders,
     finLines: [...bookings, ...classLines],
     // room rentals that stand (not cancelled); "past" = over, so it counts as income
     rentals: (room?.rentals || []).filter((x) => x.status === "booked").map((x) => ({ ...x, hours: Number(x.hours), price: Number(x.price), total: Number(x.total) })),
@@ -207,8 +209,10 @@ async function render() {
     <div data-pane="levelupy" id="adminLevelupy"></div>
 
     <div data-pane="shop">
+    <section class="panel admin-panel" id="ordersPanel"></section>
     <section class="panel admin-panel" id="tabsPanel"></section>
     <section class="panel admin-panel" id="shopPanel"></section>
+    <section class="panel admin-panel" id="deliveryPanel"></section>
     <section class="panel admin-panel" id="bundlePanel"></section>
     <section class="panel admin-panel" id="fridgePanel"></section>
     </div>
@@ -364,7 +368,7 @@ function adminTabs() {
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
       + data.rawBookings.filter((b) => b.refundStatus === "manual").length,
-    shop: new Set(data.shop.tabs.map((o) => o.userId)).size + data.shop.gifts.length
+    shop: new Set(data.shop.tabs.map((o) => o.userId)).size + data.shop.gifts.length + (data.orders || []).filter((o) => o.fulfil !== "done").length
   };
   return ADMIN_TABS.map((t) => ({ ...t, badge: badge[t.id] || 0 }));
 }
@@ -1702,7 +1706,8 @@ labelTables();
 // ---------- Shop: products, open tabs, bundles and the fridge poster ----------
 const SHOP_URL = "https://pieterrvds.github.io/LEVEL-UP-/shop.html";
 const FRIDGE_URL = `${SHOP_URL}?fridge`;
-const CATEGORY_LABEL = { merch: "Merch", tools: "Tools", fuel: "Fuel", limited: "Limited" };
+const CATEGORY_LABEL = { supps: "Supplements", merch: "Merch", tools: "Tools", fuel: "Fuel", limited: "Limited" };
+const shopItemInfo = (id) => LevelUp.ITEMS.find((i) => i.id === id);
 const shopName = (id) => LevelUp.ITEMS.find((i) => i.id === id)?.name || data.shop.items.find((i) => i.id === id)?.name || id;
 // <input type="datetime-local"> wants local time without a zone
 const localInput = (iso) => {
@@ -1720,10 +1725,83 @@ function shopStatus(i) {
 }
 
 function renderShopAdmin() {
+  renderOrdersPanel();
   renderTabsPanel();
   renderShopPanel();
+  renderDeliveryPanel();
   renderBundlePanel();
   renderFridgePanel();
+}
+
+// Web shop orders: what to hand over or send. new -> ready (pickup) or sent (delivery) -> done.
+const ORDER_STEP = {
+  pickup: { new: ["ready", "Ready to pick up"], ready: ["done", "Picked up"] },
+  ship: { new: ["sent", "Sent"], sent: ["done", "Done"] }
+};
+const ORDER_STATE = { new: ["pending", "To do"], ready: ["confirmed", "Ready to pick up"], sent: ["confirmed", "Sent"], done: ["", "Done"] };
+function orderRow(o) {
+  const step = ORDER_STEP[o.delivery]?.[o.fulfil];
+  const [tone, label] = ORDER_STATE[o.fulfil] || ["", o.fulfil];
+  return `
+    <li class="application-item order-item">
+      <div>
+        <p class="coach-who">${esc(o.name || "Guest")} ${o.email ? `<span class="muted small">· ${esc(o.email)}</span>` : ""} ${o.guest ? `<span class="status-chip">No account</span>` : ""}</p>
+        <p class="order-lines">${o.items.map((i) => `${i.qty}× ${esc(i.name)}${i.size ? ` (${esc(i.size)})` : ""}`).join(", ")}</p>
+        <p class="muted small">${fmtDate(o.date)} · €${Number(o.total).toFixed(2)}${Number(o.shipping) ? ` (€${Number(o.shipping).toFixed(2)} delivery)` : ""} · <span class="order-id">${esc(o.id)}</span></p>
+        <p class="order-how">${o.delivery === "ship" ? `🚚 Send to: <strong>${esc(o.address || "no address received: mail the buyer")}</strong>` : "📍 Pickup at the gym"}</p>
+        ${o.note ? `<p class="order-note">💬 ${esc(o.note)}</p>` : ""}
+      </div>
+      <div class="application-actions">
+        <span class="status-chip ${tone}">${label}</span>
+        ${step ? `<button type="button" class="btn btn-small btn-primary" data-order-set="${esc(o.id)}" data-to="${step[0]}">${step[1]}</button>` : ""}
+        ${o.fulfil !== "new" ? `<button type="button" class="btn btn-small btn-ghost" data-order-set="${esc(o.id)}" data-to="new" title="Put it back on the to-do list">↩ Undo</button>` : ""}
+      </div>
+    </li>`;
+}
+function renderOrdersPanel() {
+  const el = document.getElementById("ordersPanel");
+  if (!el) return;
+  if (!data.orders) {
+    el.innerHTML = `<div class="panel-head"><h2>Orders</h2></div>
+      <p class="muted">Run the latest <code>supabase/schema.sql</code> in the Supabase SQL Editor to see the web shop's orders here.</p>`;
+    return;
+  }
+  const todo = data.orders.filter((o) => o.fulfil !== "done");
+  const done = data.orders.filter((o) => o.fulfil === "done");
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Orders ${todo.length ? `<span class="count-chip">${todo.length}</span>` : ""}</h2>
+      <span class="muted">${todo.length ? "Paid in the web shop: hand over or send" : "Orders paid in the web shop show up here"}</span>
+    </div>
+    ${todo.length ? `<ul class="application-list">${todo.map(orderRow).join("")}</ul>`
+      : `<p class="muted">Nothing to do. A new order shows here with what was bought, pickup or delivery, and the address. The buyer hears it when you mark it ready or sent.</p>`}
+    ${done.length ? `<details class="order-done"><summary>Handled orders (${done.length})</summary><ul class="application-list">${done.map(orderRow).join("")}</ul></details>` : ""}
+    <p class="form-error" role="alert" id="ordersError"></p>`;
+}
+
+// Delivery: pickup is always possible; sending is a switch with a fee and a "free from" amount
+function renderDeliveryPanel() {
+  const el = document.getElementById("deliveryPanel");
+  if (!el) return;
+  const s = LevelUp.getPricing().shipping;
+  if (!s) {
+    el.innerHTML = `<div class="panel-head"><h2>Delivery</h2></div>
+      <p class="muted">Run the latest <code>supabase/schema.sql</code> in the Supabase SQL Editor to set up delivery.</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Delivery</h2>
+      <span class="muted">${s.on ? "Pickup at the gym or sent in Belgium" : "Pickup at the gym only"}</span>
+    </div>
+    <form class="bulk-sale" id="deliveryForm">
+      <label class="switch-field"><input type="checkbox" name="on" ${s.on ? "checked" : ""}> <span>Send orders to addresses in Belgium</span></label>
+      <label><span>Fee €</span><input type="number" name="fee" min="0" max="50" step="0.05" value="${s.fee}" required></label>
+      <label><span>Free from € (empty = never)</span><input type="number" name="freeFrom" min="0" max="1000" step="1" value="${s.freeFrom ?? ""}" placeholder="—"></label>
+      <button type="submit" class="btn btn-small btn-primary">Save</button>
+    </form>
+    <p class="muted small">Pickup at the gym is always free. With sending on, the buyer chooses in the bag and gives the address to PayPal. Drinks and bars from the fridge are never sent.</p>
+    <p class="form-error" role="alert" id="deliveryError"></p>`;
 }
 
 // Open tabs, per member: what they took and "Paid" once they paid at the desk
@@ -1764,20 +1842,15 @@ function renderTabsPanel() {
 function renderShopPanel() {
   const el = document.getElementById("shopPanel");
   const anySale = data.shop.items.some((i) => i.salePrice != null);
-  el.innerHTML = `
-    <div class="panel-head">
-      <h2>Products</h2>
-      <a class="btn btn-small btn-ghost" href="shop.html" target="_blank" rel="noopener">Open the shop ↗</a>
-    </div>
-    <p class="muted small">Switched-off products don't show in the shop. Leave stock empty for unlimited; a limited drop shows "Only N left" and counts down.
-    A discount shows the normal price crossed out with a −% label; XP counts on what the member pays. Prices count for new orders.</p>
-    <ul class="shop-admin-list">${data.shop.items.map((i) => `
+  const off = data.shop.items.filter((i) => !i.active).length;
+  const row = (i) => { const info = shopItemInfo(i.id); return `
       <li>
         <form class="shop-row" data-shop-item="${esc(i.id)}">
           <div class="shop-row-main">
             <div class="shop-row-name">
-              <strong>${esc(shopName(i.id))}</strong>
-              <span class="muted small">${CATEGORY_LABEL[i.category] || esc(i.category)} · ${i.sold} sold</span>
+              <span class="shop-row-title">${info?.img ? `<img src="${info.img}" alt="" loading="lazy" width="44" height="44">` : `<span class="shop-row-art" aria-hidden="true">${info?.art || "📦"}</span>`}
+                <span><strong>${esc(shopName(i.id))}</strong>
+                <span class="muted small">${i.sold} sold${info?.example ? " · example article" : ""}</span></span></span>
               <span>${shopStatus(i)}</span>
             </div>
             <label class="switch-field"><input type="checkbox" name="active" ${i.active ? "checked" : ""}> <span>In the shop</span></label>
@@ -1797,13 +1870,34 @@ function renderShopPanel() {
             <label class="switch-field"><input type="checkbox" name="notify" ${i.category === "fuel" ? "" : "checked"}> <span>📣 Tell members when it's new or on sale</span></label>
           </div>
         </form>
-      </li>`).join("")}</ul>
+      </li>`; };
+  const groups = Object.keys(CATEGORY_LABEL).map((c) => [c, data.shop.items.filter((i) => i.category === c)]).filter(([, list]) => list.length);
+  const rest = data.shop.items.filter((i) => !CATEGORY_LABEL[i.category]);
+  if (rest.length) groups.push(["other", rest]);
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2>Products</h2>
+      <span class="panel-links">
+        <a class="btn btn-small btn-ghost" href="shop.html?preview" target="_blank" rel="noopener">Preview all ${data.shop.items.length} ↗</a>
+        <a class="btn btn-small btn-ghost" href="shop.html" target="_blank" rel="noopener">Open the shop ↗</a>
+      </span>
+    </div>
+    <p class="muted small">Switched-off products don't show in the shop${off ? ` (${off} are off now)` : ""}. "Preview" shows you all of them, also the ones that are off.
+    Leave stock empty for unlimited; a limited drop shows "Only N left" and counts down.
+    A discount shows the normal price crossed out with a −% label; XP counts on what the member pays. Prices count for new orders.</p>
+    <p class="muted small"><strong>Example articles</strong> have a drawn picture and an example text. Before you switch one on: check that you really sell it,
+    set the price and the stock, and for supplements make sure the ingredients and allergens match the label of the product you sell.</p>
+    ${groups.map(([c, list]) => `
+      <details class="shop-group" ${list.some((i) => i.active) || c === "fuel" ? "open" : ""}>
+        <summary>${CATEGORY_LABEL[c] || "Other"} <span class="muted small">${list.filter((i) => i.active).length} of ${list.length} in the shop</span></summary>
+        <ul class="shop-admin-list">${list.map(row).join("")}</ul>
+      </details>`).join("")}
     <p class="form-error" role="alert" id="shopError"></p>
 
     <h3 class="panel-sub">Sale on a whole category</h3>
     <form class="bulk-sale" id="bulkSale">
       <label><span>What</span><select name="category">
-        <option value="all">Everything in the shop</option><option value="merch">Merch</option><option value="tools">Tools</option>
+        <option value="all">Everything in the shop</option><option value="supps">Supplements</option><option value="merch">Merch</option><option value="tools">Tools</option>
         <option value="fuel">Fuel</option><option value="limited">Limited</option></select></label>
       <label><span>Discount</span><select name="pct">${[10, 15, 20, 25, 30, 40, 50].map((pct) => `<option value="${pct}" ${pct === 20 ? "selected" : ""}>−${pct}%</option>`).join("")}</select></label>
       <label><span>Until (optional)</span><input type="datetime-local" name="ends"></label>
@@ -1934,6 +2028,21 @@ function printFridgePoster() {
 }
 
 root.addEventListener("submit", async (event) => {
+  const delivery = event.target.closest("#deliveryForm");
+  if (delivery) {
+    event.preventDefault();
+    const error = document.getElementById("deliveryError");
+    const btn = delivery.querySelector("button[type=submit]");
+    error.textContent = "";
+    btn.disabled = true;
+    try {
+      await LevelUp.adminShopDelivery(delivery.on.checked, delivery.fee.value, delivery.freeFrom.value);
+      await LevelUp.loadPricing();
+      LevelUp.toast({ title: "Delivery saved", text: delivery.on.checked ? `Sending on · €${Number(delivery.fee.value).toFixed(2)}` : "Pickup at the gym only", icon: "🚚", tone: "green" });
+      renderDeliveryPanel();
+    } catch (err) { btn.disabled = false; error.textContent = err.message; }
+    return;
+  }
   const form = event.target.closest("[data-shop-item]");
   if (!form) return;
   event.preventDefault();
@@ -2073,6 +2182,19 @@ root.addEventListener("click", async (event) => {
     newsDel.disabled = true;
     try { await LevelUp.adminDeleteNews(Number(newsDel.dataset.newsDelete)); await LevelUp.loadPricing(); render(); }
     catch (err) { newsDel.disabled = false; alert(err.message); }
+    return;
+  }
+  const orderSet = event.target.closest("[data-order-set]");
+  if (orderSet) {
+    const o = (data.orders || []).find((x) => x.id === orderSet.dataset.orderSet);
+    if (!o) return;
+    orderSet.disabled = true;
+    try {
+      await LevelUp.adminOrderSet(o.id, orderSet.dataset.to);
+      const told = !o.guest && ["ready", "sent"].includes(orderSet.dataset.to);
+      LevelUp.toast({ title: "Order updated", text: `${o.name || "Guest"}${told ? " · they got a notification" : ""}`, icon: "📦", tone: "green" });
+      render();
+    } catch (err) { orderSet.disabled = false; document.getElementById("ordersError").textContent = err.message; }
     return;
   }
   const paid = event.target.closest("[data-tab-paid]");

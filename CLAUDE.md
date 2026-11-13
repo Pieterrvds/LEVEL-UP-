@@ -46,10 +46,13 @@ Recent afgewerkt en live:
 - Levelupy heeft een eigen account dat één keer per maand post (Admin → Levelupy → "His own account").
 - Eerste boeking duidelijker (stappen, gekozen uur blijft bewaard tijdens het aanmaken van een account), meldingen in het menu met schakelaars, profiel met 4 tabs.
 - Chat blijft bij het nieuwste bericht als het venster van hoogte verandert. De oude "Highlights"-pop-up is verwijderd.
+- Webshop uitgewerkt (`shop.html`, `shop.js`, `shop.css`; zie "The web shop" in `README.md`): afdelingen (supplementen, merch, tools), zoeken en sorteren, een productpagina per artikel (`?p=<id>`), de winkeltas als knop in de kopbalk (geen zwevende knop meer), afhalen of leveren, bestellingen met status in Admin → Shop → Orders en in het profiel. 20 voorbeeldartikelen met getekende foto's in `img/shop/` staan in de databank **uitgeschakeld**; `shop.html?preview` toont ze aan de admin.
 
 Wat Pieter zelf nog moet doen (vraag of het gebeurd is voor je erop bouwt):
 
-- De laatste `supabase/schema.sql` uitvoeren (geboortedag, chatmeldingen aan/uit, account van Levelupy).
+- De laatste `supabase/schema.sql` uitvoeren (geboortedag, chatmeldingen aan/uit, account van Levelupy, en voor de shop: voorbeeldartikelen, levering, bestelstatus). Tot dan werkt de shop zoals vroeger, zonder leveringskeuze.
+- Shop: per voorbeeldartikel beslissen of hij het echt verkoopt, dan foto, tekst, prijs en voorraad nakijken en het aanzetten in Admin → Shop. Levering (prijs, gratis vanaf) instellen in Admin → Shop → Delivery; staat standaard uit.
+- Shop, wettelijk: ondernemingsgegevens (naam, adres, btw-nummer), algemene voorwaarden en het herroepingsrecht horen op een Belgische webshop; supplementen onder eigen merk moeten genotificeerd zijn (FOODSUP). Dat moet hij zelf aanleveren of laten nakijken.
 - In Admin → Levelupy het e-mailadres van het testaccount invullen als account van de mascotte, en het wachtwoord van dat account veranderen.
 - Eén keer alles echt doorlopen op een iPhone en een Android: account maken, boeken, bevestigingsmail, melding.
 
@@ -65,3 +68,6 @@ Open verbeterpunten die voorgesteld maar nog niet gevraagd zijn:
 - Onderste balk op de telefoon: "Profiel" in plaats van "Klassement".
 - Op 360 px drukt de admin-knop de menuknop weg (alleen voor de admin).
 - Echte foto's en reviews in plaats van stockfoto's; privacytekst en bewaartermijnen laten nalezen (gezondheidsantwoorden, geboortedag).
+- Shop: producten beheren zonder code (naam, tekst, foto, varianten toevoegen in Admin) bestaat nog niet: nieuwe artikelen komen in `ITEMS` (`game.js`) en in `shop_items` (`schema.sql`).
+- Shop: de betaling wordt niet op de server nagekeken bij PayPal. `record_order` vertrouwt het bestelnummer van de browser en rekent zelf de prijzen na; wie de functie rechtstreeks aanroept, kan zo XP krijgen zonder te betalen. Een Edge Function die de PayPal-betaling controleert, lost dat op.
+- Shop: voorraad per maat of smaak bestaat niet (alleen per artikel).

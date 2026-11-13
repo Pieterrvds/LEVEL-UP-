@@ -5,7 +5,7 @@ Personal training platform with a sports-game look ("FC Ultimate"): players and 
 - `index.html`: home page: "Up next" card with the next open sessions, how it works + XP table, trainings, coaches with trainer levels and high scores, weekly booking schedule (on phones a strip of 7 days, one day at a time), contact (one address line, small social buttons; on phones the form opens on request). Coach cards show the open hours in the coming 7 days on the photo ("Only 2 spots left this week") and their specialties as chips. Section intros are one short sentence, no "Read more" buttons. The old "Highlights" pop-up is gone (its posters stay in `img/highlights/`; the cycling one is the picture of a cycling class). Behind the hero: a black-and-white CrossFit box, `img/hero-box.jpg` (`hero-box-small.jpg` on phones), Unsplash photo `photo-1623874514711-0f321325f318` under the free Unsplash licence (commercial use allowed, no credit required)
   Sections in order: Level 1 · How it works, Level 2 · Training, Level 3 · The coaches (one row that scrolls sideways,
   ◀ ▶ buttons on a computer), Level 4 · High scores, Reviews, Level 5 · Schedule, Level 6 · Contact, Level 7 · Questions.
-- `shop.html`: item shop for merch, tools, fuel (drinks and bars) and limited drops. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
+- `shop.html`: the web shop (see "The web shop"): supplements, merch, tools, fuel (drinks and bars) and limited drops, with departments, search, product pages, a bag in the header and pickup or delivery. Every €1 spent = 10 XP, and complete sets unlock achievements. Checkout via PayPal; each order is emailed to the LEVEL-UP inbox (FormSubmit) and the buyer gets an automatic confirmation. `shop.html?fridge` is the fridge mode behind the QR code on the fridge (see Shop below).
 - `profile.html`: **your page and your account in one**, and the page of any other member or coach (see "Member pages"). On your own page only you see the tabs, four of them: My page (what others see), My sessions (sessions, group classes, packs), Progress (rewards, achievements, ranks, body stats, likes, inventory) and Settings (notifications first, then account, health check); trainers also get Coach. `profile.html#rewards` (or any section id such as `#packs`) opens that tab, and the links of the earlier tabs (`#shop`, `#body`, `#settings`) still land right (`TAB_ALIAS` in `profile.js`). Sign-up is one step (name, email, password); body stats are filled in later in their own tab.
 - `chat.html`: private chat between a player and a coach (see "Chat"); a phone has it as a page of `index.html`
 - `member.html`: only sends old links on to `profile.html` (the member pages used to live here)
@@ -877,6 +877,43 @@ change or delete files in their own folder. The photo shows on the high scores (
 the account page, coach booking requests and in admin. Remove sets it back to the letter. As admin you can remove
 someone's photo in the member details (Remove photo). The bucket and its rules are created by `supabase/schema.sql`.
 
+## The web shop (shop.html)
+What a visitor sees, top to bottom: a short hero, a strip with why to buy here (pickup in Aalst, delivery when it is on,
+safe payment, €1 = 10 XP), the **departments** as tiles (Supplements, Merch, Tools, and Fuel or Limited when something
+is for sale there), then the collection with a **search field**, **sorting** (featured, price, name) and a tab per
+department. "All" without a search shows one row of products per department. On a phone the products stand two by two.
+
+- **Product page:** a tap on a product opens its page over the shop (`#productDialog`, full screen on a phone). The
+  address becomes `shop.html?p=<id>`, so the page can be shared and Back closes it. It shows the picture, the price, the
+  XP, the choice (a **size** for clothes: `sizes`, a **flavour** for powders: `options`), the number, "Add to bag", and
+  folding parts: details, how to use, ingredients and allergens (supplements), delivery and returns. Below: four
+  products of the same department. A product without a choice can go straight into the bag from its card.
+- **The bag** opens from the **bag button in the header** (`.hud-cart`, drawn by `renderHud` in `game.js`; it shows on
+  every page as soon as something is in the bag and links to `shop.html#bag`). There is no floating bag button any
+  more, so nothing sits on top of Levelupy's button. The bag shows each line with its total, pickup or delivery, a bar
+  that says how much is missing for free delivery, a remark for the order, subtotal, delivery and total, and the XP.
+- **Delivery** (admin → Shop → Delivery, `app_config`: `ship_on`, `ship_fee`, `ship_free_from`): pickup at the gym is
+  always free. With sending switched on, the buyer chooses in the bag; the fee is added (free from the set amount) and
+  PayPal asks the address. Only Belgian addresses are accepted. Drinks and bars from the fridge are never sent.
+  The server decides the amount: `shop_check(p_items, p_delivery)` returns the items, `subtotal`, `shipping` and
+  `total`, and that total is what PayPal charges. Sending is **off** until the admin switches it on.
+- **Orders** (admin → Shop → Orders): every paid order shows with what was bought, pickup or delivery, the name,
+  e-mail and address PayPal gave, and the buyer's remark. The admin moves it on: *Ready to pick up* → *Picked up*, or
+  *Sent* → *Done* (`admin_order_set`). A buyer with an account gets a notification and sees the status under
+  Profile → Progress → Inventory → Orders. The admins get a notification for each new order (`record_order`); the
+  e-mail through formsubmit.co still goes out as before.
+- **Example articles:** 20 products in `ITEMS` (`game.js`) carry `example: true`: 7 supplements, 7 merch, 6 tools.
+  Their pictures in `img/shop/` are drawn (1000 × 1000 px, made by `node tools/shop-art.js`), their texts and prices are examples. They are in
+  `shop_items` **switched off**: nobody can see or buy them until the admin switches each one on. Replace a picture by
+  putting a real photo under the same file name. For supplements, the ingredients and allergens must match the label
+  of the product that is really sold.
+- **Preview for the admin:** `shop.html?preview` (button in admin → Shop → Products) shows every product, also the
+  switched-off ones, marked "Not live"; those can't go into a bag.
+- **An older database:** until the latest `supabase/schema.sql` has run, `pricing_info` has no `shipping`. The shop then
+  works as before: no delivery choice, no remark, and the old one-argument check. A product that is not in
+  `shop_items` yet never shows, except the four that were always for sale (`CORE_ITEMS`).
+- **Collector** now unlocks at 8 different articles (drinks and bars don't count), because "every item" grew to 24.
+
 ## Shop: fuel, limited drops, the tab and bundles
 Everything is run from **admin → Shop**:
 - **Products**: switch each product on or off, change its price, set the stock and the end date of a drop. New
@@ -898,6 +935,7 @@ Everything is run from **admin → Shop**:
 - **Season 1 Hoodie** (`hoodie_s1`) is the first limited drop: 25 pieces, switched off until you set it live.
 
 ## Adding a shop item
-Add an entry to `ITEMS` in `game.js` (id, name, price, category `merch`, `tools`, `fuel` or `limited`, rarity, image or
-an emoji in `art`, optional sizes, perks, description) and the same id, name, price and category to the `shop_items`
+Add an entry to `ITEMS` in `game.js` (id, name, price, category `supps`, `merch`, `tools`, `fuel` or `limited`, rarity, image or
+an emoji in `art`, optional `sizes` or `options: { label: "Flavour", values: [...] }`, perks, description, and for the
+product page `details`, `use`, `ingredients`, `allergens`, `warning`, `supplement: true`) and the same id, name, price and category to the `shop_items`
 table (in `supabase/schema.sql`, with `active false`). Then switch it on in admin → Shop.

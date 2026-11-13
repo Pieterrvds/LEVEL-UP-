@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Item Shop | LEVEL-UP</title>
-  <script src="i18n-nl.js?v=202611251000"></script>
-  <script src="i18n.js?v=202611251000"></script>
-  <meta name="description" content="LEVEL-UP merch and training tools. Every euro you spend earns XP, so gear up and level up.">
+  <title>Shop | LEVEL-UP</title>
+  <script src="i18n-nl.js?v=202611261000"></script>
+  <script src="i18n.js?v=202611261000"></script>
+  <meta name="description" content="The LEVEL-UP shop: supplements, merch and training tools. Pick up in Aalst or have it sent. Every euro earns XP.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
   <meta property="og:title" content="Shop | LEVEL-UP">
-  <meta property="og:description" content="Official LEVEL-UP merch and training gear. Every euro you spend earns XP.">
+  <meta property="og:description" content="Supplements, merch and training tools from LEVEL-UP. Every euro you spend earns XP.">
   <meta property="og:url" content="https://pieterrvds.github.io/LEVEL-UP-/shop.html">
   <meta property="og:image" content="https://pieterrvds.github.io/LEVEL-UP-/img/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -29,8 +29,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611251000">
-  <link rel="stylesheet" href="shop.css?v=202611251000">
+  <link rel="stylesheet" href="style.css?v=202611261000">
+  <link rel="stylesheet" href="shop.css?v=202611261000">
   <script src="https://www.paypal.com/sdk/js?client-id=AcJLXipsreQDWPNqUNKBknNhohnvhY3QtkXKNNSk0zMkYhvPgxcF-kFYKxaTadXAAbiyW4ZOO1Fummpb&currency=EUR" defer></script>
 </head>
 <body>
@@ -81,10 +81,10 @@
       <div class="container shop-hero-grid">
         <div>
           <p class="eyebrow shop-only">▸ Official store</p>
-          <h1 class="shop-title shop-only">Gear up.<br><span>Level up.</span></h1>
-          <p class="lead shop-only">Official LEVEL-UP merch, training tools and fuel for after your session. Every euro you spend earns <strong>10 XP</strong>, and complete sets unlock bonus achievements.</p>
+          <h1 class="shop-title shop-only">Gear up. <span>Level up.</span></h1>
+          <p class="lead shop-only">Supplements, merch and training tools from LEVEL-UP. Every euro earns <strong>10 XP</strong>.</p>
           <p class="eyebrow fridge-only">▸ The fridge</p>
-          <h1 class="shop-title fridge-only">Grab it.<br><span>Tap it.</span></h1>
+          <h1 class="shop-title fridge-only">Grab it. <span>Tap it.</span></h1>
           <p class="lead fridge-only">Took a drink or a bar? Tap it here and put it on your tab, or pay right away. Pay your tab at the desk and the XP lands on your profile.</p>
           <div class="xp-banner" id="xpBanner"></div>
         </div>
@@ -92,7 +92,22 @@
       </div>
     </section>
 
-    <div class="vine-divider" aria-hidden="true"></div>
+    <!-- Why buy here -->
+    <section class="shop-usps shop-only" aria-label="Why shop here">
+      <ul class="container usp-list" id="uspList"></ul>
+    </section>
+
+    <!-- Preview for the admin: every product, also the ones that are switched off -->
+    <div class="container shop-preview" id="shopPreview" hidden></div>
+
+    <!-- Departments -->
+    <section class="section shop-cats shop-only" id="categories">
+      <div class="container">
+        <p class="section-kicker">Departments</p>
+        <h2 class="section-title">Shop by category</h2>
+        <div class="cat-grid" id="catGrid"></div>
+      </div>
+    </section>
 
     <!-- Items -->
     <section class="section shop-section" id="items">
@@ -100,18 +115,36 @@
         <div class="shop-toolbar">
           <div>
             <p class="section-kicker">The collection</p>
-            <h2 class="section-title">Shop the gear</h2>
+            <h2 class="section-title" id="itemsTitle">All products</h2>
           </div>
-          <div class="filter-tabs" role="tablist" aria-label="Filter items">
-            <button type="button" role="tab" aria-selected="true" data-filter="all">All</button>
-            <button type="button" role="tab" aria-selected="false" data-filter="merch">Merch</button>
-            <button type="button" role="tab" aria-selected="false" data-filter="tools">Tools</button>
-            <button type="button" role="tab" aria-selected="false" data-filter="fuel" hidden>Fuel</button>
-            <button type="button" role="tab" aria-selected="false" data-filter="limited" hidden>Limited</button>
-            <button type="button" role="tab" aria-selected="false" data-filter="sale" hidden>🔥 Sale</button>
+          <div class="shop-tools shop-only">
+            <label class="shop-search">
+              <span class="sr-only">Search the shop</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+              <input type="search" id="shopSearch" placeholder="Search products…" autocomplete="off" enterkeyhint="search">
+            </label>
+            <label class="shop-sort">
+              <span class="sr-only">Sort</span>
+              <select id="shopSort">
+                <option value="featured">Featured</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+                <option value="name">Name: A to Z</option>
+              </select>
+            </label>
           </div>
         </div>
-        <div class="item-grid" id="itemGrid"></div>
+        <div class="filter-tabs" role="tablist" aria-label="Filter items">
+          <button type="button" role="tab" aria-selected="true" data-filter="all">All</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="supps" hidden>Supplements</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="merch">Merch</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="tools">Tools</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="fuel" hidden>Fuel</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="limited" hidden>Limited</button>
+          <button type="button" role="tab" aria-selected="false" data-filter="sale" hidden>🔥 Sale</button>
+        </div>
+        <p class="shop-count muted shop-only" id="shopCount" aria-live="polite"></p>
+        <div id="itemGrid"></div>
       </div>
     </section>
 
@@ -125,8 +158,17 @@
       </div>
     </section>
 
+    <!-- Delivery, returns and payment -->
+    <section class="section section-alt shop-only" id="service">
+      <div class="container">
+        <p class="section-kicker">Good to know</p>
+        <h2 class="section-title">Delivery and returns</h2>
+        <div class="service-grid" id="serviceGrid"></div>
+      </div>
+    </section>
+
     <!-- Set bonuses -->
-    <section class="section section-alt shop-only">
+    <section class="section shop-only">
       <div class="container">
         <p class="section-kicker">Set bonuses</p>
         <h2 class="section-title">Unlock achievements</h2>
@@ -136,15 +178,15 @@
     </section>
 
     <!-- How it works -->
-    <section class="section shop-only">
+    <section class="section section-alt shop-only">
       <div class="container">
         <p class="section-kicker">How it works</p>
         <h2 class="section-title">From order to XP</h2>
         <ol class="loot-steps">
-          <li><span class="step-no">1</span><h3>Log in</h3><p>Create your player profile so your XP gets saved.</p></li>
-          <li><span class="step-no">2</span><h3>Fill your bag</h3><p>Pick your items and sizes. The bag shows how much XP you'll earn.</p></li>
-          <li><span class="step-no">3</span><h3>Check out</h3><p>Pay safely with PayPal or card. We contact you by email about delivery or pickup. Drinks and bars from the fridge can go on your tab.</p></li>
-          <li><span class="step-no">★</span><h3>Level up</h3><p>Your XP and items land on your profile right away.</p></li>
+          <li><span class="step-no">1</span><h3>Fill your bag</h3><p>Pick your products, size or flavour. The bag shows what you pay and the XP you earn.</p></li>
+          <li><span class="step-no">2</span><h3>Choose pickup or delivery</h3><p>Pick up at the gym for free. Delivery shows in your bag when it is available.</p></li>
+          <li><span class="step-no">3</span><h3>Pay safely</h3><p>Pay with PayPal or card. You get a confirmation by email.</p></li>
+          <li><span class="step-no">★</span><h3>Level up</h3><p>Logged in? Your XP and items land on your profile right away.</p></li>
         </ol>
       </div>
     </section>
@@ -163,14 +205,7 @@
     </div>
   </footer>
 
-  <!-- Bag button -->
-  <button type="button" class="bag-button" id="bagButton" aria-controls="bag" aria-expanded="false">
-    <span class="bag-icon" aria-hidden="true">🎒</span>
-    <span class="bag-button-label">Bag</span>
-    <span class="bag-count" id="bagCount">0</span>
-  </button>
-
-  <!-- Bag drawer -->
+  <!-- Bag drawer (opened from the bag button in the header) -->
   <div class="bag-backdrop" id="bagBackdrop" hidden></div>
   <aside class="bag" id="bag" aria-labelledby="bagTitle" aria-hidden="true">
     <div class="bag-head">
@@ -178,22 +213,31 @@
       <button type="button" class="dialog-close" id="bagClose" aria-label="Close bag">✕</button>
     </div>
     <div class="bag-body">
+      <div class="bag-ship-bar" id="bagShipBar" hidden></div>
       <ul class="bag-items" id="bagItems"></ul>
       <div class="bag-empty" id="bagEmpty">
         <p>Your bag is empty.</p>
         <p class="muted">Pick some gear to start earning XP.</p>
+        <button type="button" class="btn btn-small btn-ghost" data-bag-close>Keep shopping</button>
       </div>
     </div>
     <div class="bag-foot" id="bagFoot">
-      <div class="bag-total"><span>Total</span><strong id="bagTotal">€0.00</strong></div>
+      <div class="bag-delivery" id="bagDelivery"></div>
+      <dl class="bag-sum" id="bagSum"></dl>
       <div class="bag-xp" id="bagXp"></div>
       <div class="bag-login" id="bagLogin"></div>
       <div class="bag-tab" id="bagTab"></div>
       <div id="paypal-button-container"></div>
       <p class="bag-status" id="bagStatus" role="alert"></p>
-      <p class="bag-note">Secure payment with PayPal. After checkout we contact you by email to arrange delivery or pickup.</p>
+      <p class="bag-note" id="bagNote"></p>
     </div>
   </aside>
+
+  <!-- Product page: opens over the shop; the address gets ?p=<id> so it can be shared -->
+  <dialog class="auth-dialog product-dialog" id="productDialog" aria-labelledby="productName">
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <div id="productContent"></div>
+  </dialog>
 
   <!-- Order complete -->
   <dialog class="auth-dialog loot-dialog" id="lootDialog" aria-labelledby="lootTitle">
@@ -202,7 +246,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="game.js?v=202611251000"></script>
-  <script src="shop.js?v=202611251000"></script>
+  <script src="game.js?v=202611261000"></script>
+  <script src="shop.js?v=202611261000"></script>
 </body>
 </html>

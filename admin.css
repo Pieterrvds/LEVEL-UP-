@@ -390,3 +390,21 @@
 .lv-account small { color: var(--muted); }
 .lv-account-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
 .lv-account-form label { flex: 1 1 260px; margin: 0; }
+
+/* Shop: orders, products per department, delivery */
+.order-item p { margin: 0 0 4px; }
+.order-lines { font-weight: 600; }
+.order-id { font-family: ui-monospace, monospace; font-size: 0.78em; }
+.order-how strong { font-weight: 700; }
+.order-note { padding: 6px 10px; background: var(--inset); border-left: 3px solid var(--gold); }
+.order-done { margin-top: 14px; }
+.order-done summary, .shop-group summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.order-done .application-item { opacity: 0.8; }
+.shop-group { border-top: 1px solid var(--line); }
+.shop-group summary .muted { margin-left: 8px; font-weight: 500; }
+.shop-group .shop-admin-list { margin: 0 0 14px; }
+.shop-row-title { display: flex; align-items: center; gap: 10px; }
+.shop-row-title > span { display: grid; gap: 2px; }
+.shop-row-title img, .shop-row-art { width: 44px; height: 44px; flex: none; object-fit: cover; border-radius: 8px; background: var(--panel); display: grid; place-items: center; font-size: 1.4rem; }
+.panel-links { display: flex; flex-wrap: wrap; gap: 8px; }
+#deliveryForm { align-items: end; }
