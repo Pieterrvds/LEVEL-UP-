@@ -298,6 +298,86 @@ const LevelUp = (() => {
       desc: "Firm foam roller with a textured surface, for before and after your session.",
       details: ["33 cm long, 14 cm wide", "Firm, hollow core", "Fits in your gym bag"]
     },
+    // More example articles
+    {
+      id: "eaa", name: "EAA Amino 300 g", price: 24.9, category: "supps", type: "Recovery", rarity: "rare", example: true, supplement: true,
+      img: "img/shop/eaa.jpg", options: { label: "Flavour", values: ["Berry", "Lemon"] },
+      perks: ["9 amino acids", "30 servings"],
+      desc: "All nine essential amino acids, to sip during or after training.",
+      details: ["300 g · 30 servings of 10 g", "9 essential amino acids", "Sugar free"],
+      use: "Mix 1 scoop (10 g) with 400 ml water. Drink during or after training.",
+      ingredients: "Essential amino acids (L-leucine, L-lysine, L-valine, L-isoleucine, L-threonine, L-phenylalanine, L-methionine, L-histidine, L-tryptophan), acid (citric acid), flavouring, sweetener (sucralose).",
+      allergens: "No allergens."
+    },
+    {
+      id: "vitd", name: "Vitamin D3 + K2 · 120 capsules", price: 12.9, category: "supps", type: "Health", rarity: "common", example: true, supplement: true,
+      img: "img/shop/vitd.jpg",
+      perks: ["D3 + K2", "120 days"],
+      desc: "Vitamin D3 with K2 in one small capsule a day, for the dark months.",
+      details: ["120 capsules · 120 days", "25 µg vitamin D3 per capsule", "75 µg vitamin K2 per capsule"],
+      use: "Take 1 capsule a day with a meal.",
+      ingredients: "Olive oil, gelatin (capsule), humectant (glycerol), vitamin K2 (menaquinone), vitamin D3 (cholecalciferol).",
+      allergens: "No allergens."
+    },
+    {
+      id: "pancake", name: "Protein Pancake Mix 500 g", price: 14.9, category: "supps", type: "Snack", rarity: "common", example: true,
+      img: "img/shop/pancake.jpg",
+      perks: ["30 g protein", "10 servings"],
+      desc: "Pancake mix with 30 g protein per serving. Just add water and bake.",
+      details: ["500 g · 10 servings of 50 g", "30 g protein per serving", "Ready in 5 minutes"],
+      use: "Mix 50 g with 100 ml water or milk and bake in a hot pan.",
+      ingredients: "Oat flour (gluten), whey protein concentrate (milk), egg white powder, raising agent (sodium bicarbonate), flavouring, sweetener (sucralose).",
+      allergens: "Contains gluten, milk and egg."
+    },
+    {
+      id: "beanie", name: "LEVEL-UP Beanie", price: 18, category: "merch", type: "Accessory", rarity: "common", example: true,
+      img: "img/shop/beanie.jpg",
+      perks: ["+4 Style", "+5 Warmth"],
+      desc: "Knitted beanie with a woven logo patch. For the run club in winter.",
+      details: ["Soft ribbed knit", "Woven logo patch", "One size"]
+    },
+    {
+      id: "longsleeve", name: "LEVEL-UP Long Sleeve", price: 32, category: "merch", type: "Apparel", rarity: "rare", example: true,
+      img: "img/shop/longsleeve.jpg", sizes: ["S", "M", "L", "XL"],
+      perks: ["+6 Style", "Breathable"],
+      desc: "Long sleeve training shirt with the pull-up logo. Light enough to train in.",
+      details: ["Light, breathable fabric", "Regular fit", "Logo print on the chest"]
+    },
+    {
+      id: "bottle", name: "LEVEL-UP Steel Bottle", price: 22, category: "merch", type: "Accessory", rarity: "rare", example: true,
+      img: "img/shop/bottle.jpg",
+      perks: ["750 ml", "Hot & cold"],
+      desc: "Insulated steel bottle of 750 ml. Keeps water cold for the whole session.",
+      details: ["750 ml, stainless steel", "Cold for 24 hours, hot for 12 hours", "Leak-proof cap with a carry loop"]
+    },
+    {
+      id: "straps", name: "Lifting Straps", price: 12.9, category: "tools", type: "Grip", rarity: "common", example: true,
+      img: "img/shop/straps.jpg",
+      perks: ["+6 Grip", "1 pair"],
+      desc: "Cotton lifting straps with a padded loop, for heavy pulls when your grip gives up first.",
+      details: ["1 pair, 60 cm each", "Padded wrist loop", "Strong cotton"]
+    },
+    {
+      id: "kettlebell", name: "Kettlebell 12 kg", price: 44.9, category: "tools", type: "Equipment", rarity: "epic", example: true,
+      img: "img/shop/kettlebell.jpg",
+      perks: ["+10 STR", "+8 Cardio"],
+      desc: "Cast iron kettlebell of 12 kg with a wide handle. Swings, squats and carries at home.",
+      details: ["12 kg, cast iron", "Wide handle for two hands", "Flat base that stands firm", "Pickup at the gym only"]
+    },
+    {
+      id: "pullbar", name: "Doorway Pull-up Bar", price: 34.9, category: "tools", type: "Equipment", rarity: "rare", example: true,
+      img: "img/shop/pullbar.jpg",
+      perks: ["+10 STR", "No drilling"],
+      desc: "Pull-up bar that clamps in a door frame. Your first pull-up starts at home.",
+      details: ["Fits door frames of 70 to 95 cm", "Clamps without drilling", "Three foam grips"]
+    },
+    {
+      id: "balls", name: "Massage Ball Set", price: 14.9, category: "tools", type: "Recovery", rarity: "common", example: true,
+      img: "img/shop/balls.jpg",
+      perks: ["+8 Mobility", "2 pieces"],
+      desc: "A single ball and a double ball to loosen your back, shoulders and feet.",
+      details: ["1 single ball and 1 double ball", "Firm rubber with grip", "Fits in your gym bag"]
+    },
     // Limited drop: a set number of pieces until a date (stock and end date are set in admin -> Shop)
     {
       id: "hoodie_s1",
@@ -312,10 +392,16 @@ const LevelUp = (() => {
       desc: "Numbered Season 1 hoodie with the gold pull-up logo. Only made once: when it's gone, it's gone."
     },
     // Fuel: drinks and bars from the fridge at the gym (shop.html?fridge, the QR code on the fridge)
-    { id: "shake", name: "Protein shake", price: 3.5, category: "fuel", type: "Fuel", rarity: "common", art: "🥤", perks: ["+20 g protein"], desc: "Ready-to-drink protein shake, cold from the fridge. Recovery starts now." },
-    { id: "bar", name: "Protein bar", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "🍫", perks: ["+20 g protein"], desc: "Protein bar for before or after the session." },
-    { id: "energy", name: "Energy drink", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "⚡", perks: ["+Energy"], desc: "A sugar-free energy drink to get going." },
-    { id: "water", name: "Water", price: 1.5, category: "fuel", type: "Fuel", rarity: "common", art: "💧", perks: ["+Hydration"], desc: "Bottle of still water." }
+    { id: "shake", name: "Protein shake", price: 3.5, category: "fuel", type: "Fuel", rarity: "common", art: "🥤", img: "img/shop/shake.jpg", perks: ["+25 g protein"], desc: "Ready-to-drink protein shake, cold from the fridge. Recovery starts now." },
+    { id: "recovery", name: "Recovery shake", price: 4, category: "fuel", type: "Fuel", rarity: "common", art: "🥛", img: "img/shop/recovery.jpg", perks: ["Carbs + protein"], desc: "Carbs and protein in one bottle, for after a long or hard session." },
+    { id: "bar", name: "Protein bar", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "🍫", img: "img/shop/bar.jpg", perks: ["+20 g protein"], desc: "Protein bar for before or after the session." },
+    { id: "pudding", name: "Protein pudding", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "🍮", img: "img/shop/pudding.jpg", perks: ["+20 g protein"], desc: "Creamy protein pudding with a spoon in the lid." },
+    { id: "energy", name: "Energy drink", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "⚡", img: "img/shop/energy.jpg", perks: ["+Energy"], desc: "A sugar-free energy drink to get going." },
+    { id: "coldbrew", name: "Cold brew coffee", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "☕", img: "img/shop/coldbrew.jpg", perks: ["+Focus"], desc: "Cold coffee in a can, black and without sugar." },
+    { id: "sportsdrink", name: "Sports drink", price: 2.5, category: "fuel", type: "Fuel", rarity: "common", art: "🧃", img: "img/shop/sportsdrink.jpg", perks: ["+Electrolytes"], desc: "Isotonic sports drink for during a long session." },
+    { id: "water", name: "Water", price: 1.5, category: "fuel", type: "Fuel", rarity: "common", art: "💧", img: "img/shop/water.jpg", perks: ["+Hydration"], desc: "Bottle of still water." },
+    { id: "gel", name: "Energy gel", price: 2, category: "fuel", type: "Fuel", rarity: "common", art: "🍯", img: "img/shop/gel.jpg", perks: ["+25 g carbs"], desc: "Fast carbs in a sachet, for the last part of a long effort." },
+    { id: "nuts", name: "Nut mix", price: 2, category: "fuel", type: "Fuel", rarity: "common", art: "🥜", img: "img/shop/nuts.jpg", perks: ["Unsalted"], desc: "A small bag of unsalted nuts for in between." }
   ];
   // Until the server's shop list is in, only the gear that was always on sale shows
   const CORE_ITEMS = ["tshirt", "hoodie", "parallettes", "bands"];

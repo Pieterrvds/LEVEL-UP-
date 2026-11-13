@@ -1,14 +1,16 @@
 // LEVEL-UP shop: departments, search, product pages, the bag, delivery, PayPal checkout, the tab for the fridge and XP.
-// shop.html?fridge is the fridge mode (the QR code on the fridge at the gym): drinks and bars only.
+// shop.html?fridge is the fridge mode (the QR code on the fridge at the gym): drinks and snacks only, on your tab or paid at once.
+// shop.html?fridge&take=<id> is the QR code of one product: it lands in the fridge bag right away.
 // shop.html?p=<id> opens a product page; shop.html?preview shows the admin every product, also the switched-off ones.
 
-const CART_KEY = "levelup.cart.v1";
 const DELIVERY_KEY = "levelup.delivery";
 const OWNER_EMAIL = "PieterV-D-S@hotmail.com";
 const MAX_QTY = 10;
 const { ITEMS, ACHIEVEMENTS, SHOP_CATEGORIES, esc } = LevelUp;
 const params = new URLSearchParams(location.search);
 const FRIDGE = params.has("fridge");
+// The fridge keeps its own bag, so what you took at the gym never mixes with an order from the shop
+const CART_KEY = FRIDGE ? "levelup.fridge.v1" : "levelup.cart.v1";
 const PREVIEW_ASKED = params.has("preview") && !FRIDGE;
 const T = (s) => (window.t ? window.t(s) : s);
 
@@ -34,7 +36,9 @@ const xpBanner = $("xpBanner");
 const bundleSection = $("bundles");
 const bundleGrid = $("bundleGrid");
 
-let filter = FRIDGE ? "fuel" : location.hash === "#fuel" ? "fuel" : "all";
+// an old link to the drinks in the shop now leads to the fridge
+if (!FRIDGE && location.hash === "#fuel") location.replace("shop.html?fridge");
+let filter = FRIDGE ? "fuel" : "all";
 let query = "";
 let sort = "featured";
 let tabBusy = false;
@@ -66,7 +70,10 @@ try { if (localStorage.getItem(DELIVERY_KEY) === "ship") delivery = "ship"; } ca
 // The admin's preview: every product, also the ones that are switched off (those can't be bought)
 const preview = () => PREVIEW_ASKED && LevelUp.isAdmin();
 // What the shop shows, with today's price, stock and drop
-const shopItems = () => LevelUp.shopItems({ all: preview() });
+// Drinks and snacks live in the fridge (shop.html?fridge); the shop shows everything else
+const here = (item) => (item.category === "fuel") === FRIDGE;
+const shopItems = () => LevelUp.shopItems({ all: preview() }).filter(here);
+const fuelItems = () => LevelUp.shopItems().filter((item) => item.category === "fuel");
 // What can be in a bag: only what is for sale
 const itemById = (id) => LevelUp.shopItems().find((item) => item.id === id);
 const anyItem = (id) => shopItems().find((item) => item.id === id);
@@ -84,6 +91,8 @@ const inFilter = (item, f) => f === "all" || (f === "sale" ? onSale(item) : item
 // A product's choice: a size for clothes, a flavour for powders
 const optionOf = (item) => item.sizes ? { label: "Size", values: item.sizes } : item.options || null;
 const catName = (id) => SHOP_CATEGORIES.find((c) => c.id === id)?.name || id;
+// How many of a product are in the bag (the fridge shows it on the tile)
+const inBag = (id) => cart.filter((line) => line.id === id).reduce((n, line) => n + line.qty, 0);
 
 // Delivery: sending only exists when the admin switched it on; drinks and bars from the fridge are never sent
 const shipping = () => LevelUp.getPricing().shipping;
@@ -116,7 +125,7 @@ function renderTabs() {
   const all = shopItems();
   document.querySelectorAll("[data-filter]").forEach((tab) => {
     const f = tab.dataset.filter;
-    tab.hidden = f !== "all" && !all.some((item) => inFilter(item, f));
+    tab.hidden = FRIDGE || (f !== "all" && !all.some((item) => inFilter(item, f)));
   });
   if (filter !== "all" && !FRIDGE && !all.some((item) => inFilter(item, filter))) filter = "all";
   document.querySelectorAll("[data-filter]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.filter === filter)));
@@ -143,10 +152,10 @@ function cardHtml(item, player) {
   const timer = item.dropEndsAt && !out ? `<p class="drop-timer" data-ends="${esc(item.dropEndsAt)}">${endsIn(item.dropEndsAt)}</p>` : "";
   const saleTimer = sale && item.saleEndsAt ? `<p class="drop-timer sale-timer" data-ends="${esc(item.saleEndsAt)}" data-ends-label="Sale">${endsIn(item.saleEndsAt, "Sale")}</p>` : "";
   const label = !item.live ? "Not for sale yet" : out ? (ended ? "Drop ended" : "Sold out")
-    : FRIDGE ? "Take one" : opt ? (opt.label === "Size" ? "Choose size" : "Choose flavour") : "Add to bag";
+    : FRIDGE ? "Take" : opt ? (opt.label === "Size" ? "Choose size" : "Choose flavour") : "Add to bag";
   const media = `${itemArt(item)}${tagsHtml(item, owned)}`;
   return `
-    <article class="item-card rarity-${item.rarity}${out ? " sold-out" : ""}${sale ? " on-sale" : ""}${item.category === "fuel" ? " fuel-card" : ""}${item.live ? "" : " not-live"}" data-id="${item.id}">
+    <article class="item-card rarity-${item.rarity}${out ? " sold-out" : ""}${sale ? " on-sale" : ""}${item.category === "fuel" ? " fuel-card" : ""}${item.live ? "" : " not-live"}${FRIDGE && inBag(item.id) ? " taken" : ""}" data-id="${item.id}">
       ${FRIDGE ? `<div class="item-media">${media}</div>` : `<a class="item-media" href="shop.html?p=${item.id}" data-open="${item.id}" aria-label="${esc(item.name)}">${media}</a>`}
       <div class="item-body">
         <p class="item-type">${item.type}</p>
@@ -158,7 +167,8 @@ function cardHtml(item, player) {
           <span class="price">${euro(item.price)}${sale ? ` <s class="was-price">${euro(item.listPrice)}</s>` : ""}</span>
           <span class="xp-reward">+${LevelUp.orderXp(item.price)} XP</span>
         </div>
-        <button type="button" class="btn ${out ? "btn-ghost" : "btn-primary"} btn-block add-btn" ${out ? "disabled" : ""}${opt && !FRIDGE ? ` data-open="${item.id}"` : ""}>${label}</button>
+        ${FRIDGE && inBag(item.id) && !out ? `<div class="qty take-qty"><button type="button" data-take="-1" aria-label="Remove one">−</button><span aria-label="Quantity">${inBag(item.id)}</span><button type="button" data-take="1" aria-label="Add one" ${inBag(item.id) >= MAX_QTY ? "disabled" : ""}>+</button></div>`
+          : `<button type="button" class="btn ${out ? "btn-ghost" : "btn-primary"} btn-block add-btn" ${out ? "disabled" : ""}${opt && !FRIDGE ? ` data-open="${item.id}"` : ""}>${label}</button>`}
       </div>
     </article>`;
 }
@@ -264,6 +274,41 @@ function renderService() {
   ].map(([i, title, text]) => `<article class="service-card">${icon(i)}<h3>${title}</h3><p>${text}</p></article>`).join("");
 }
 
+// In the shop: what the fridge at the gym is and how the QR codes work (only when drinks or snacks are for sale)
+function renderFridgeInfo() {
+  const box = $("fridgeInfo");
+  if (!box) return;
+  const fuel = fuelItems().filter((item) => item.available);
+  box.hidden = FRIDGE || !fuel.length;
+  if (box.hidden) return;
+  $("fridgeTeaser").innerHTML = fuel.slice(0, 6).map((item) => `
+    <a class="fridge-thumb" href="shop.html?fridge&take=${item.id}">
+      ${item.img ? `<img src="${item.img}" alt="" loading="lazy" width="200" height="200">` : `<span class="item-emoji" aria-hidden="true">${item.art || "🥤"}</span>`}
+      <b>${esc(item.name)}</b><span>${euro(item.price)}</span>
+    </a>`).join("");
+}
+
+// On the fridge page: what you took so far and one button to put it on your tab
+function renderFridgeBar() {
+  const bar = $("fridgeBar");
+  if (!bar) return;
+  const lines = cartLines();
+  const show = FRIDGE && lines.length > 0 && !bag.classList.contains("open");
+  bar.hidden = !show;
+  document.body.classList.toggle("has-fridge-bar", show);
+  if (!show) return;
+  const total = cartTotal();
+  const player = LevelUp.getPlayer();
+  const over = player && tabTotal() + total > LevelUp.getPricing().tabLimit;
+  bar.innerHTML = `
+    <div class="fridge-bar-sum"><b>${cartQty()} × · ${euro(total)}</b>
+      <small><span>+${LevelUp.orderXp(total)} XP</span> <button type="button" class="text-link link-button" data-bag-open>${player && !over ? "or pay now" : "View"}</button></small></div>
+    ${player && !over
+      ? `<button type="button" class="btn btn-primary" data-tab-order ${tabBusy ? "disabled" : ""}>🧾 On my tab</button>`
+      : player ? `<button type="button" class="btn btn-primary" data-bag-open>Pay now</button>`
+      : `<button type="button" class="btn btn-primary" data-auth-open="login">Log in for your tab</button>`}`;
+}
+
 // The admin's preview bar
 function renderPreview() {
   const bar = $("shopPreview");
@@ -336,8 +381,9 @@ function renderPlayerPanel() {
   if (!player) {
     playerPanel.innerHTML = `
       <p class="panel-kicker">Not logged in</p>
-      <h2>Earn XP with every item</h2>
-      <p>Log in or create a player before you check out, so your purchase counts toward your level.</p>
+      <h2>${FRIDGE ? "Log in to use your tab" : "Earn XP with every item"}</h2>
+      <p>${FRIDGE ? "With an account you put drinks and snacks on your tab and pay at the desk later. Without one you pay right away."
+        : "Log in or create a player before you check out, so your purchase counts toward your level."}</p>
       <div class="btn-row">
         <button type="button" class="btn btn-primary btn-small" data-auth-open="signup">New player</button>
         <button type="button" class="btn btn-ghost btn-small" data-auth-open="login">Log in</button>
@@ -527,6 +573,7 @@ function renderBag() {
     : "Secure payment with PayPal or card. You get a confirmation by email and a message when your order is ready.";
 
   renderTabOption(lines, subtotal);
+  renderFridgeBar();
   paypalContainer.hidden = empty;
   if (!empty && bag.classList.contains("open")) renderPayPal();
 }
@@ -623,6 +670,7 @@ function renderAll() {
   renderTabs();
   renderPreview();
   renderCategories();
+  renderFridgeInfo();
   renderItems();
   renderService();
   renderXpBanner();
@@ -657,7 +705,7 @@ function addToCart(id, size, qty = 1, quiet = false) {
   saveCart();
   renderBag();
   bumpBag();
-  if (FRIDGE) { openBag(); return true; }
+  if (FRIDGE) { renderItems(); return true; }
   if (!quiet) LevelUp.toast({ title: "Added to bag", text: `${item.name}${size ? ` (${size})` : ""}`, icon: "🛍", tone: "green" });
   return true;
 }
@@ -679,6 +727,19 @@ document.addEventListener("click", (event) => {
     openProduct(open.dataset.open, productDialog.open ? "replace" : "push");
     return;
   }
+  const take = event.target.closest("[data-take]");
+  if (take) { // the − and + on a tile in the fridge
+    const id = take.closest(".item-card").dataset.id;
+    if (Number(take.dataset.take) > 0) { addToCart(id, null); return; }
+    const line = cart.find((l) => l.id === id);
+    if (!line) return;
+    line.qty -= 1;
+    if (line.qty <= 0) cart.splice(cart.indexOf(line), 1);
+    saveCart();
+    renderBag();
+    renderItems();
+    return;
+  }
   const button = event.target.closest(".add-btn");
   if (button) addToCart(button.closest(".item-card").dataset.id, null);
 });
@@ -698,6 +759,7 @@ bagItems.addEventListener("click", (event) => {
   }
   saveCart();
   renderBag();
+  if (FRIDGE) renderItems();
 });
 
 function openBag() {
@@ -708,18 +770,25 @@ function openBag() {
   renderBag();
   $("bagClose").focus();
 }
+// the "On my tab" button in the bar at the bottom of the fridge page
+$("fridgeBar")?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-tab-order]")) putOnTab();
+});
 
 function closeBag() {
   bag.classList.remove("open");
   bag.setAttribute("aria-hidden", "true");
   bagBackdrop.hidden = true;
   document.body.classList.remove("no-scroll");
+  renderFridgeBar();
   if (location.hash === "#bag") history.replaceState(history.state, "", location.pathname + location.search);
 }
 
 // The bag button lives in the header (game.js draws it)
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-bag-open]")) { event.preventDefault(); openBag(); }
+  const bagLink = event.target.closest("[data-bag-open]");
+  // in the fridge the header's bag button belongs to the shop: it goes there
+  if (bagLink && !(FRIDGE && bagLink.matches(".hud-cart"))) { event.preventDefault(); openBag(); }
   else if (event.target.closest("[data-bag-close]")) closeBag();
   else if (event.target.closest("[data-search-clear]")) { query = ""; $("shopSearch").value = ""; renderItems(); }
 });
@@ -1007,6 +1076,18 @@ LevelUp.ready.then(() => {
   const id = params.get("p");
   if (id && !openProduct(id, "none")) history.replaceState(history.state, "", productUrl(null));
   if (location.hash === "#bag") openBag();
+  // the QR code of one drink or snack: it is in the fridge bag at once (the address is cleaned, so a reload doesn't add it again)
+  const take = FRIDGE && params.get("take");
+  if (take) {
+    history.replaceState(history.state, "", "shop.html?fridge");
+    const item = itemById(take);
+    if (item && item.category === "fuel" && addToCart(take, null, 1, true)) {
+      document.querySelector(`.item-card[data-id="${take}"]`)?.scrollIntoView({ block: "center" });
+      LevelUp.toast({ title: "Scanned", text: item.name, icon: "✓", tone: "green" });
+    } else {
+      LevelUp.toast({ title: "Not in the fridge right now", text: "Pick something else or ask at the desk.", icon: "✋", tone: "gold" });
+    }
+  }
 });
 // Drop countdowns tick every minute
 setInterval(() => {

@@ -46,7 +46,9 @@ Recent afgewerkt en live:
 - Levelupy heeft een eigen account dat één keer per maand post (Admin → Levelupy → "His own account").
 - Eerste boeking duidelijker (stappen, gekozen uur blijft bewaard tijdens het aanmaken van een account), meldingen in het menu met schakelaars, profiel met 4 tabs.
 - Chat blijft bij het nieuwste bericht als het venster van hoogte verandert. De oude "Highlights"-pop-up is verwijderd.
-- Webshop uitgewerkt (`shop.html`, `shop.js`, `shop.css`; zie "The web shop" in `README.md`): afdelingen (supplementen, merch, tools), zoeken en sorteren, een productpagina per artikel (`?p=<id>`), de winkeltas als knop in de kopbalk (geen zwevende knop meer), afhalen of leveren, bestellingen met status in Admin → Shop → Orders en in het profiel. 20 voorbeeldartikelen met getekende foto's in `img/shop/` staan in de databank **uitgeschakeld**; `shop.html?preview` toont ze aan de admin.
+- Webshop uitgewerkt (`shop.html`, `shop.js`, `shop.css`; zie "The web shop" in `README.md`): afdelingen (supplementen, merch, tools), zoeken en sorteren, een productpagina per artikel (`?p=<id>`), de winkeltas als knop in de kopbalk (geen zwevende knop meer), afhalen of leveren, bestellingen met status in Admin → Shop → Orders en in het profiel. 30 voorbeeldartikelen met getekende foto's in `img/shop/` staan in de databank **uitgeschakeld**; `shop.html?preview` toont ze aan de admin.
+- Frigo en QR-codes: drank en snacks (10 artikelen) staan alleen op `shop.html?fridge`, met een eigen tas. Daar tik je aan wat je neemt en zet je het met één knop op je rekening. Admin → Shop drukt de frigo-poster en een QR-etiket per product af (`?fridge&take=<id>` telt dat product meteen); voor merch en tools opent het etiket de productpagina. De shop legt dit uit in de kaart "Scan en pak".
+- Instagram: de map `instagram/` bevat profielfoto, 9 posts, story-sjablonen, covers en `teksten.md`; `tools/instagram-posts.js` en `tools/shop-art.js` maken de beelden opnieuw.
 
 Wat Pieter zelf nog moet doen (vraag of het gebeurd is voor je erop bouwt):
 

@@ -156,6 +156,25 @@ insert into public.shop_items (id, name, price, category, active, stock) values
   ('grips', 'Gymnastic Grips', 19.90, 'tools', false, null),
   ('roller', 'Foam Roller', 19.90, 'tools', false, null)
 on conflict (id) do nothing;
+-- More example articles, and more drinks and snacks for the fridge (all switched off until the admin switches them on)
+insert into public.shop_items (id, name, price, category, active, stock) values
+  ('eaa', 'EAA Amino 300 g', 24.90, 'supps', false, null),
+  ('vitd', 'Vitamin D3 + K2 · 120 capsules', 12.90, 'supps', false, null),
+  ('pancake', 'Protein Pancake Mix 500 g', 14.90, 'supps', false, null),
+  ('beanie', 'LEVEL-UP Beanie', 18, 'merch', false, null),
+  ('longsleeve', 'LEVEL-UP Long Sleeve', 32, 'merch', false, null),
+  ('bottle', 'LEVEL-UP Steel Bottle', 22, 'merch', false, null),
+  ('straps', 'Lifting Straps', 12.90, 'tools', false, null),
+  ('kettlebell', 'Kettlebell 12 kg', 44.90, 'tools', false, null),
+  ('pullbar', 'Doorway Pull-up Bar', 34.90, 'tools', false, null),
+  ('balls', 'Massage Ball Set', 14.90, 'tools', false, null),
+  ('recovery', 'Recovery shake', 4, 'fuel', false, null),
+  ('pudding', 'Protein pudding', 2.5, 'fuel', false, null),
+  ('coldbrew', 'Cold brew coffee', 2.5, 'fuel', false, null),
+  ('sportsdrink', 'Sports drink', 2.5, 'fuel', false, null),
+  ('gel', 'Energy gel', 2, 'fuel', false, null),
+  ('nuts', 'Nut mix', 2, 'fuel', false, null)
+on conflict (id) do nothing;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,

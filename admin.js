@@ -1878,6 +1878,7 @@ function renderShopPanel() {
     <div class="panel-head">
       <h2>Products</h2>
       <span class="panel-links">
+        <button type="button" class="btn btn-small btn-ghost" data-qr-labels="shop" title="A QR code per product that is in the shop, to stick next to it at the gym">QR labels</button>
         <a class="btn btn-small btn-ghost" href="shop.html?preview" target="_blank" rel="noopener">Preview all ${data.shop.items.length} ↗</a>
         <a class="btn btn-small btn-ghost" href="shop.html" target="_blank" rel="noopener">Open the shop ↗</a>
       </span>
@@ -1966,10 +1967,17 @@ function renderFridgePanel() {
     <div class="fridge-admin">
       <div class="fridge-qr" id="fridgeQr" aria-label="QR code to the fridge page"></div>
       <div>
-        <p>Stick this QR code on the fridge. Members scan it, tap what they take and pay right away or put it on their tab (max ${money(LevelUp.getPricing().tabLimit)}).
-        They pay the tab here at the desk: tap <strong>Paid</strong> under Open tabs and the XP lands on their profile.</p>
+        <p>Two kinds of QR codes, both made here:</p>
+        <ul class="qr-kinds">
+          <li><strong>The fridge poster</strong> (this code): members scan it, tap what they take and put it on their tab (max ${money(LevelUp.getPricing().tabLimit)}) or pay right away.</li>
+          <li><strong>A label per product</strong>: stick it on the shelf or next to the price. One scan and that drink or snack is already counted; the member only confirms.</li>
+        </ul>
+        <p>They pay the tab here at the desk: tap <strong>Paid</strong> under Open tabs and the XP lands on their profile.</p>
         <p class="muted small"><a class="text-link" href="shop.html?fridge" target="_blank" rel="noopener">${esc(FRIDGE_URL)}</a></p>
-        <div class="btn-row"><button type="button" class="btn btn-small btn-primary" data-fridge-poster>Print fridge poster</button></div>
+        <div class="btn-row">
+          <button type="button" class="btn btn-small btn-primary" data-fridge-poster>Print fridge poster</button>
+          <button type="button" class="btn btn-small btn-ghost" data-qr-labels="fuel" ${on.length ? "" : "disabled"}>Print QR labels (${on.length})</button>
+        </div>
       </div>
     </div>`;
   loadQrLib().then(() => {
@@ -1982,15 +1990,66 @@ function renderFridgePanel() {
 }
 
 // A printable A4 poster: logo, QR code and the prices
+// The admin page is English, but what hangs at the gym is Dutch: fetch the dictionary when something is printed
+let nlDict = null;
+function loadNl() {
+  if (window.LEVELUP_NL) return Promise.resolve();
+  nlDict ||= new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "i18n-nl.js";
+    script.onload = script.onerror = () => resolve(); // without it the names stay English
+    document.head.appendChild(script);
+  });
+  return nlDict;
+}
+// A product's name in Dutch (the labels and the poster hang at the gym)
+const nlName = (id) => { const name = shopName(id); return window.LEVELUP_NL?.translate(name) ?? name; };
+
+// QR labels to cut out: one per product. A drink or snack: one scan and it is counted in the fridge bag.
+// Anything else: the scan opens that product's page in the shop.
+function printQrLabels(kind) {
+  const items = data.shop.items.filter((i) => i.active && (kind === "fuel" ? i.category === "fuel" : i.category !== "fuel"));
+  if (!items.length) { alert("Switch on the products first."); return; }
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups for this page to print the labels."); return; }
+  w.document.write("<p style='font-family:sans-serif'>Making the labels…</p>");
+  Promise.all([loadQrLib(), loadNl()]).then(() => {
+    const url = (i) => (i.category === "fuel" ? `${FRIDGE_URL}&take=${encodeURIComponent(i.id)}` : `${SHOP_URL}?p=${encodeURIComponent(i.id)}`);
+    const price = (i) => `€${Number(i.salePrice != null && i.onSale ? i.salePrice : i.price).toFixed(2).replace(".", ",")}`;
+    w.document.open();
+    w.document.write(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>LEVEL-UP QR-etiketten</title>
+      <style>
+        @page { size: A4; margin: 10mm; }
+        body { margin: 0; font-family: Arial, sans-serif; color: #000; }
+        .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+        .label { box-sizing: border-box; height: 68mm; padding: 4mm 4mm 3mm; border: 0.3mm dashed #999; text-align: center; break-inside: avoid; display: grid; grid-template-rows: auto auto 1fr auto; justify-items: center; }
+        .name { font: italic 900 13pt "Arial Black", Arial, sans-serif; line-height: 1.1; }
+        .price { font: 900 15pt "Arial Black", Arial, sans-serif; margin-top: 1mm; }
+        .qr { width: 34mm; align-self: center; } .qr svg { width: 100%; height: auto; display: block; }
+        .how { font-size: 8pt; color: #333; }
+        .brand { font: italic 900 7pt "Arial Black", Arial, sans-serif; letter-spacing: 1px; }
+      </style></head><body>
+      <div class="sheet">${items.map((i) => `
+        <div class="label">
+          <div class="name">${esc(nlName(i.id))}</div>
+          <div class="price">${price(i)}</div>
+          <div class="qr">${qrSvg(url(i), 6)}</div>
+          <div class="how">${i.category === "fuel" ? "Scan · tik · op je rekening" : "Scan en bestel in de shop"}<br><span class="brand">LEVEL-UP · €1 = 10 XP</span></div>
+        </div>`).join("")}</div>
+      <script>setTimeout(function () { window.print(); }, 400);<\/script>
+      </body></html>`);
+    w.document.close();
+  }).catch((err) => { w.close(); alert(err.message); });
+}
+
 function printFridgePoster() {
   const w = window.open("", "_blank");
   if (!w) { alert("Allow pop-ups for this page to print the poster."); return; }
   w.document.write("<p style='font-family:sans-serif'>Making the poster…</p>");
-  loadQrLib().then(() => {
+  Promise.all([loadQrLib(), loadNl()]).then(() => {
     const fuel = data.shop.items.filter((i) => i.category === "fuel" && i.active);
     const base = new URL(".", location.href).href;
     // The poster hangs at the gym: Dutch, with a short English line for everyone else
-    const NL_NAMES = { shake: "Proteïneshake", bar: "Proteïnereep", energy: "Energiedrank", water: "Water" };
     w.document.open();
     w.document.write(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>LEVEL-UP frigo</title>
       <style>
@@ -2012,8 +2071,8 @@ function printFridgePoster() {
       <h1>PAK HET. TIK HET AAN.</h1>
       <p class="sub">Scan, tik aan wat je neemt, betaal meteen of zet het op je rekening.</p>
       <div class="qr">${qrSvg(FRIDGE_URL, 10)}</div>
-      <ol><li>Scan de code en log in</li><li>Tik aan wat je nam</li><li>Betaal meteen, of zet het op je rekening en betaal aan de balie</li></ol>
-      ${fuel.length ? `<table>${fuel.map((i) => `<tr><td>${esc(NL_NAMES[i.id] || shopName(i.id))}</td><td>€${Number(i.price).toFixed(2).replace(".", ",")}</td></tr>`).join("")}</table>` : ""}
+      <ol><li>Scan de code en log in</li><li>Tik aan wat je neemt</li><li>Zet het op je rekening en betaal aan de balie, of betaal meteen</li></ol>
+      ${fuel.length ? `<table>${fuel.map((i) => `<tr><td>${esc(nlName(i.id))}</td><td>€${Number(i.price).toFixed(2).replace(".", ",")}</td></tr>`).join("")}</table>` : ""}
       <p class="xp">€1 = 10 XP ⚡</p>
       <p class="en">EN · Scan, tap what you took, pay now or put it on your tab and pay at the desk.</p>
       <p class="url">${esc(FRIDGE_URL)}</p>
@@ -2170,6 +2229,8 @@ async function saveShopItem(form) {
 }
 root.addEventListener("click", async (event) => {
   if (event.target.closest("[data-fridge-poster]")) { printFridgePoster(); return; }
+  const labels = event.target.closest("[data-qr-labels]");
+  if (labels) { printQrLabels(labels.dataset.qrLabels); return; }
   const endSales = event.target.closest("[data-end-sales]");
   if (endSales) {
     if (!confirm("End every discount in the shop? All products go back to their normal price.")) return;

@@ -622,3 +622,47 @@ body.no-scroll { overflow: hidden; }
 .delivery-pick b, .delivery-fixed b { font-weight: 700; }
 .delivery-pick small, .delivery-fixed small { font-weight: 400; }
 .bag-note-field span { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+
+/* ==========================================================================
+   The fridge and the QR codes: the steps, the card in the shop, tiles with a counter
+   and the bar at the bottom of the fridge page
+   ========================================================================== */
+.fridge-steps { list-style: none; display: grid; gap: 10px; padding: 0; margin: 1rem 0 1.25rem; }
+.fridge-steps li { display: flex; align-items: center; gap: 12px; font-size: 0.95rem; }
+.fridge-steps b { flex: none; display: grid; place-items: center; width: 32px; height: 32px; color: var(--bg); background: var(--text); border-radius: 10px; font: italic 800 1.1rem/1 var(--display); font-size-adjust: none; }
+.fridge-steps li:last-child b { background: var(--gold); }
+.fridge-mode ol.fridge-steps.fridge-only { display: grid; margin-bottom: 0; }
+.shop-fridge { padding-bottom: 0; }
+.shop-fridge[hidden] { display: none; }
+.fridge-card { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: center; padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
+.fridge-card .section-title { margin-bottom: 0.5rem; }
+.fridge-card .section-intro { margin-bottom: 0; }
+.fridge-teaser { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fridge-thumb { display: grid; gap: 2px; padding-bottom: 8px; overflow: hidden; text-align: center; text-decoration: none; font-size: 0.78rem; color: var(--text); background: var(--inset); border: 1px solid var(--line); border-radius: 12px; transition: border-color 0.2s; }
+.fridge-thumb:hover { border-color: var(--accent); }
+.fridge-thumb img, .fridge-thumb .item-emoji { display: grid; width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; font-size: 2.4rem; }
+.fridge-thumb b { padding: 4px 4px 0; font-weight: 600; font-size: 0.74rem; line-height: 1.25; hyphens: auto; overflow-wrap: break-word; }
+.fridge-thumb span { font-weight: 700; color: var(--gold); }
+
+.fridge-mode .fuel-card .item-media { aspect-ratio: 1 / 1; }
+.take-qty { display: flex; width: 100%; overflow: hidden; border-color: var(--gold); border-radius: 10px; }
+.take-qty button { flex: 1; width: auto; height: 52px; font-size: 1.4rem; }
+.take-qty span { flex: 1; min-width: 0; font: italic 800 1.4rem/52px var(--display); font-size-adjust: none; color: var(--gold); }
+.item-card.taken { border-color: var(--gold); }
+
+.fridge-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 940; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px max(16px, calc((100% - 1180px) / 2)) calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 2px solid var(--gold); box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.55); }
+.fridge-bar[hidden] { display: none; }
+.fridge-bar-sum { flex: 1 1 110px; min-width: 0; display: grid; }
+.fridge-bar-sum b { font: italic 800 1.35rem/1.2 var(--display); font-size-adjust: none; }
+.fridge-bar-sum small { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; font-weight: 700; color: var(--gold); }
+.fridge-bar-sum small .text-link { font-weight: 600; text-decoration: underline; color: var(--text); }
+.fridge-bar .btn { white-space: nowrap; }
+body.has-fridge-bar .footer-inner { padding-bottom: 110px; }
+body.has-fridge-bar .lvy-fab { bottom: 96px; }
+@media (max-width: 760px) {
+  .fridge-card { grid-template-columns: minmax(0, 1fr); padding: 18px; gap: 18px; }
+  body.has-tabbar .fridge-bar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: 12px; }
+  body.has-fridge-bar .lvy-fab { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 92px); }
+  body.has-fridge-bar .footer-inner { padding-bottom: 150px; }
+  .fridge-bar .btn { padding-inline: 14px; }
+}

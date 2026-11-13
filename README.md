@@ -902,7 +902,7 @@ department. "All" without a search shows one row of products per department. On 
   *Sent* → *Done* (`admin_order_set`). A buyer with an account gets a notification and sees the status under
   Profile → Progress → Inventory → Orders. The admins get a notification for each new order (`record_order`); the
   e-mail through formsubmit.co still goes out as before.
-- **Example articles:** 20 products in `ITEMS` (`game.js`) carry `example: true`: 7 supplements, 7 merch, 6 tools.
+- **Example articles:** 30 products in `ITEMS` (`game.js`) carry `example: true`: 10 supplements, 10 merch, 10 tools.
   Their pictures in `img/shop/` are drawn (1000 × 1000 px, made by `node tools/shop-art.js`), their texts and prices are examples. They are in
   `shop_items` **switched off**: nobody can see or buy them until the admin switches each one on. Replace a picture by
   putting a real photo under the same file name. For supplements, the ingredients and allergens must match the label
@@ -912,7 +912,25 @@ department. "All" without a search shows one row of products per department. On 
 - **An older database:** until the latest `supabase/schema.sql` has run, `pricing_info` has no `shipping`. The shop then
   works as before: no delivery choice, no remark, and the old one-argument check. A product that is not in
   `shop_items` yet never shows, except the four that were always for sale (`CORE_ITEMS`).
-- **Collector** now unlocks at 8 different articles (drinks and bars don't count), because "every item" grew to 24.
+- **Collector** now unlocks at 8 different articles (drinks and bars don't count), because "every item" grew a lot.
+
+### The fridge and the QR codes
+Drinks and snacks (category `fuel`, ten of them, each with a drawn picture) are **not** in the shop's collection: they
+live on the fridge page, `shop.html?fridge`, which keeps its own bag (`levelup.fridge.v1`), apart from a shop order.
+- **In the shop** a card "Scan and grab" (`#fridgeInfo`) explains it in three steps, shows what is in the fridge and
+  has a button "Open the fridge". It only shows when something from the fridge is switched on. An old link
+  `shop.html#fuel` leads to the fridge page.
+- **The fridge page** starts with the three steps. A tap on "Take" counts on the tile (− 1 +) and a bar at the bottom
+  shows the number, the amount and the XP, with one button: **On my tab** for a member (straight away, no bag in
+  between), "Log in for your tab" for a visitor, and "or pay now" to open the bag with PayPal. While the bar shows,
+  Levelupy's button moves up so nothing overlaps.
+- **Two kinds of QR codes**, both printed from admin → Shop → The fridge:
+  the **poster** (the fridge page) and **a label per product** (`shop.html?fridge&take=<id>`). Scanning a label puts
+  that product in the fridge bag at once; the address is cleaned, so a reload doesn't add it twice. Something that is
+  not in the fridge adds nothing and says so.
+- **QR labels for the rest of the shop:** admin → Shop → Products → "QR labels" prints a label per product that is
+  switched on; that code opens the product's page (`shop.html?p=<id>`), to stick next to merch or tools at the gym.
+- Labels and poster are Dutch (the admin page fetches `i18n-nl.js` when it prints).
 
 ## Shop: fuel, limited drops, the tab and bundles
 Everything is run from **admin → Shop**:
@@ -925,7 +943,7 @@ Everything is run from **admin → Shop**:
   🔥 Sale filter; the XP counts on what the member pays. "Sale on a whole category" does this for everything, merch,
   tools, fuel or limited in one go, and "End all discounts" puts every price back. With "Tell members" ticked,
   members get one message when a product is new or goes on sale.
-- **Fuel** (protein shake, bar, energy drink, water) is for the fridge at the gym. **The fridge**: print the poster with
+- **Fuel** (shakes, bars, pudding, energy drink, cold brew, sports drink, water, gel, nuts) is for the fridge at the gym. **The fridge**: print the poster with
   the QR code to `shop.html?fridge`. Members scan it, tap what they took and pay right away with PayPal, or put it
   **on their tab** (logged in, drinks and bars only, at most `tab_limit` euro open, default €30 in `app_config`). A wrong
   tap can be undone within 15 minutes. Open tabs appear under **Open tabs**: tap **Paid** when they pay at the desk;

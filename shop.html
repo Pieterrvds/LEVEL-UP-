@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Shop | LEVEL-UP</title>
-  <script src="i18n-nl.js?v=202611261000"></script>
-  <script src="i18n.js?v=202611261000"></script>
+  <script src="i18n-nl.js?v=202611271000"></script>
+  <script src="i18n.js?v=202611271000"></script>
   <meta name="description" content="The LEVEL-UP shop: supplements, merch and training tools. Pick up in Aalst or have it sent. Every euro earns XP.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LEVEL-UP">
@@ -29,8 +29,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611261000">
-  <link rel="stylesheet" href="shop.css?v=202611261000">
+  <link rel="stylesheet" href="style.css?v=202611271000">
+  <link rel="stylesheet" href="shop.css?v=202611271000">
   <script src="https://www.paypal.com/sdk/js?client-id=AcJLXipsreQDWPNqUNKBknNhohnvhY3QtkXKNNSk0zMkYhvPgxcF-kFYKxaTadXAAbiyW4ZOO1Fummpb&currency=EUR" defer></script>
 </head>
 <body>
@@ -85,7 +85,11 @@
           <p class="lead shop-only">Supplements, merch and training tools from LEVEL-UP. Every euro earns <strong>10 XP</strong>.</p>
           <p class="eyebrow fridge-only">▸ The fridge</p>
           <h1 class="shop-title fridge-only">Grab it. <span>Tap it.</span></h1>
-          <p class="lead fridge-only">Took a drink or a bar? Tap it here and put it on your tab, or pay right away. Pay your tab at the desk and the XP lands on your profile.</p>
+          <ol class="fridge-steps fridge-only">
+            <li><b>1</b><span>Tap what you take</span></li>
+            <li><b>2</b><span>Put it on your tab, or pay right away</span></li>
+            <li><b>3</b><span>Pay your tab at the desk and get the XP</span></li>
+          </ol>
           <div class="xp-banner" id="xpBanner"></div>
         </div>
         <aside class="player-panel" id="playerPanel" aria-live="polite"></aside>
@@ -106,6 +110,26 @@
         <p class="section-kicker">Departments</p>
         <h2 class="section-title">Shop by category</h2>
         <div class="cat-grid" id="catGrid"></div>
+      </div>
+    </section>
+
+    <!-- The fridge at the gym: what it is and how the QR codes work (shows when drinks or snacks are for sale) -->
+    <section class="section shop-only shop-fridge" id="fridgeInfo" hidden>
+      <div class="container">
+        <div class="fridge-card">
+          <div class="fridge-card-text">
+            <p class="section-kicker">At the gym</p>
+            <h2 class="section-title">Scan and grab</h2>
+            <p class="section-intro">Thirsty after your session? Drinks and snacks are in the fridge at the gym. You don't need cash.</p>
+            <ol class="fridge-steps">
+              <li><b>1</b><span>Scan the QR code on the fridge or on the product</span></li>
+              <li><b>2</b><span>Tap what you take</span></li>
+              <li><b>3</b><span>Put it on your tab and pay at the desk, or pay right away</span></li>
+            </ol>
+            <a href="shop.html?fridge" class="btn btn-primary">Open the fridge</a>
+          </div>
+          <div class="fridge-teaser" id="fridgeTeaser"></div>
+        </div>
       </div>
     </section>
 
@@ -139,7 +163,6 @@
           <button type="button" role="tab" aria-selected="false" data-filter="supps" hidden>Supplements</button>
           <button type="button" role="tab" aria-selected="false" data-filter="merch">Merch</button>
           <button type="button" role="tab" aria-selected="false" data-filter="tools">Tools</button>
-          <button type="button" role="tab" aria-selected="false" data-filter="fuel" hidden>Fuel</button>
           <button type="button" role="tab" aria-selected="false" data-filter="limited" hidden>Limited</button>
           <button type="button" role="tab" aria-selected="false" data-filter="sale" hidden>🔥 Sale</button>
         </div>
@@ -205,6 +228,9 @@
     </div>
   </footer>
 
+  <!-- The fridge page: what you took so far, with one button to put it on your tab -->
+  <div class="fridge-bar" id="fridgeBar" hidden></div>
+
   <!-- Bag drawer (opened from the bag button in the header) -->
   <div class="bag-backdrop" id="bagBackdrop" hidden></div>
   <aside class="bag" id="bag" aria-labelledby="bagTitle" aria-hidden="true">
@@ -246,7 +272,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-  <script src="game.js?v=202611261000"></script>
-  <script src="shop.js?v=202611261000"></script>
+  <script src="game.js?v=202611271000"></script>
+  <script src="shop.js?v=202611271000"></script>
 </body>
 </html>

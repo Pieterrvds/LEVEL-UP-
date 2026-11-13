@@ -408,3 +408,4 @@
 .shop-row-title img, .shop-row-art { width: 44px; height: 44px; flex: none; object-fit: cover; border-radius: 8px; background: var(--panel); display: grid; place-items: center; font-size: 1.4rem; }
 .panel-links { display: flex; flex-wrap: wrap; gap: 8px; }
 #deliveryForm { align-items: end; }
+.qr-kinds { margin: 6px 0 10px; padding-left: 18px; display: grid; gap: 4px; }
