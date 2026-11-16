@@ -135,7 +135,7 @@ A player who found their trainer can ask for the same hour every week, and a tra
   `_series_extend()` plans it, confirmed at once and without a message (it runs with every profile load and in the
   10-minute job). If the hour is taken that week, the week is left out and both hear it ("Weekly session not planned").
   A series closes by itself after its last week.
-- **Moving (trainer or admin):** "Move" next to an upcoming session in the Coach tab, after agreeing on it with the
+- **Moving (trainer or admin):** "Move" next to an upcoming session in the Coach tab's agenda, after agreeing on it with the
   client in the chat (the window links to it). Pick the new day and hour; for a weekly session choose **only this
   week** or **every week from then on** (then the series gets the new day and hour, also for the weeks still to be
   planned). The new moment must be free for the trainer, the player and the room. The player gets a message that says
@@ -147,6 +147,29 @@ A player who found their trainer can ask for the same hour every week, and a tra
 - Server: `book_series`, `_series_answer` (through `respond_booking`), `_series_extend`, `move_booking`, `series_stop`;
   `book_session` and the weekly sessions share `_book` (all checks and the price). Limits: 2 to 26 weeks or open-ended,
   at most 4 weekly sessions per player.
+
+## The coach panel (profile → Coach)
+What a trainer sees, built for a quick look on a phone and a full view on a computer (`renderCoachPanel` in
+`profile.js`, the classes come from `classes.js`):
+- **On top, four tiles** that each open the part they count: **To do** (requests, sessions to settle and classes to
+  finish, with what waits written out), **Today** (and the next thing coming), **Next 7 days** (how many 1:1 and how
+  many group classes) and the money (**To receive**, or **Earned** for the owner).
+- **Five parts, one at a time** (the bar stays in sight while scrolling):
+  - **To do**: requests (Confirm / Decline) and sessions to settle (Reward / No-show), both marked `1:1`, then the
+    **group classes to finish**. "Settled today" folds away. With nothing waiting it says "All done". The panel opens
+    here when something waits, otherwise on the agenda.
+  - **Agenda**: 1:1 sessions and group classes in **one list, a heading per day** (Today, Tomorrow, then the weekday),
+    each row with its hour, a `1:1` or `Group` tag, the name and one button: **Move** for a session, **Open** for a
+    class (that goes to Group classes with its list of who is coming open). Chips filter All / 1:1 / Group classes.
+    Two weeks show; "Later" opens the rest. On a computer the days stand in two columns.
+  - **Group classes**: plan a class and manage the upcoming ones. The **next 14 days** show, later classes fold away
+    behind "Later · n" (a weekly class is otherwise a very long list), past classes behind their own button.
+    On a phone a class card is compact; Change and Cancel show once its list is open.
+  - **Earnings**: the tiles and the monthly statement (PDF / CSV).
+  - **My hours**: the trainer's own opening hours (week planner on a computer, list editor on a phone).
+- `classes.js` can mount in parts (`part: "todo"` only the classes to finish, `part: "plan"` the rest; the admin keeps
+  `"all"`), shares its list (`LevelUpClasses.list()`), opens one class (`show(id)`) and tells when it changed
+  (`onChange`), so the tiles, the tab counter and the agenda follow without a reload.
 
 ## Group classes
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every

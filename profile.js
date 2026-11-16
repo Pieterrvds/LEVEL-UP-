@@ -406,65 +406,237 @@ function renderEarnings() {
 `;
 }
 
-// Trainers: answer requests, see upcoming sessions and reward today's sessions
-function renderCoachPanel() {
-  if (!LevelUp.isTrainer()) return "";
+// ---------- The coach panel ----------
+// One overview on top (what waits, today, the coming week, the money) and five parts below it, one at a time:
+// To do (requests, sessions to settle, classes to finish) · Agenda (1:1 sessions and group classes together, per day)
+// · Group classes (plan and manage) · Earnings · My hours.
+const COACH_VIEWS = [["todo", "To do"], ["agenda", "Agenda"], ["classes", "Group classes"], ["earnings", "Earnings"], ["hours", "My hours"]];
+const AGENDA_DAYS = 14; // the agenda shows two weeks; later sessions fold away
+
+function coachData() {
   const now = new Date();
   const today = LevelUp.dateKey();
   const all = LevelUp.getCoachBookings();
   const requests = LevelUp.oneRowPerSeries(all.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now));
   const toSettle = all.filter((b) => LevelUp.canSettle(b));
   const upcoming = all.filter((b) => b.status === "confirmed" && LevelUp.slotStart(b.date, b.hour) > now && !LevelUp.canSettle(b));
-  const asked = (b) => b.series && b.series.status === "requested"; // a weekly request: one answer for all its weeks
-  const weeksOf = (b) => all.filter((x) => x.series && x.series.id === b.series.id && x.status === "pending").length;
-  const moveBtn = (b) => `<button type="button" class="btn btn-small btn-ghost" data-move-booking="${b.id}">Move</button>`;
   const missed = all.filter((b) => b.status === "confirmed" && b.date < today && !LevelUp.canSettle(b));
   const settledToday = all.filter((b) => b.date === today && ["completed", "no_show", "late_cancel"].includes(b.status));
+  const classes = LevelUpClasses.list() || [];
+  const classTodo = classes.filter((c) => c.canFinish);
+  const classSoon = classes.filter((c) => c.status === "scheduled" && !c.canFinish && c.end > now);
+  const agenda = [
+    ...upcoming.map((x) => ({ kind: "solo", at: LevelUp.slotStart(x.date, x.hour), b: x })),
+    // a class is listed on its own day and hour (as on its card), whatever the time zone of this device
+    ...classSoon.map((c) => ({ kind: "group", at: new Date(`${c.date}T${c.time}:00`), c }))
+  ].sort((x, y) => x.at - y.at);
+  const dayOf = (x) => LevelUp.dateKey(x.at);
+  const weekEnd = LevelUp.dateKey(new Date(now.getTime() + 7 * 864e5));
+  const week = agenda.filter((x) => dayOf(x) < weekEnd);
+  return { now, today, all, requests, toSettle, upcoming, missed, settledToday, classes, classTodo, classSoon, agenda, week,
+    todo: requests.length + toSettle.length + classTodo.length,
+    todayItems: agenda.filter((x) => dayOf(x) === today) };
+}
+const coachView = (d) => state.coachView || (d.todo || !d.agenda.length ? "todo" : "agenda");
+const hhmm = (at) => `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 
-  const row = (b, actions = "") => `
+// The four tiles on top: each one opens the part it counts
+function coachOverviewHtml(d) {
+  const e = LevelUp.getCoachEarnings();
+  const tile = (view, value, label, note, cls = "") => `
+    <button type="button" class="co-tile ${cls}" data-coach-view="${view}">
+      <b>${value}</b><span>${label}</span><small>${note}</small>
+    </button>`;
+  const waits = [
+    d.requests.length && `${d.requests.length} ${d.requests.length === 1 ? "request" : "requests"}`,
+    d.toSettle.length && `${d.toSettle.length} to settle`,
+    d.classTodo.length && `${d.classTodo.length} ${d.classTodo.length === 1 ? "class" : "classes"} to finish`
+  ].filter(Boolean).join(" · ");
+  const next = d.agenda[0];
+  const nextText = next ? `${LevelUp.dateKey(next.at) === d.today ? "" : `${next.at.toLocaleDateString("en-GB", { weekday: "short" })} `}${hhmm(next.at)} <span data-no-i18n>${esc(next.kind === "solo" ? String(next.b.name || "").split(" ")[0] : next.c.title)}</span>` : "";
+  const solo = d.week.filter((x) => x.kind === "solo").length;
+  return `
+    ${tile("todo", d.todo, "To do", waits || "All done", d.todo ? "alert" : "ok")}
+    ${tile("agenda", d.todayItems.length, "Today", d.todayItems.length ? `Next: ${nextText}` : next ? `Next: ${nextText}` : "Nothing planned")}
+    ${tile("agenda", d.week.length, "Next 7 days", `${solo} × 1:1 · ${d.week.length - solo} × group`)}
+    ${e ? tile("earnings", LevelUp.euro(e.isOwner ? e.earned : e.owed), e.isOwner ? "Earned" : "To receive", e.isOwner ? "You keep it all" : "From LEVEL-UP", "money") : ""}`;
+}
+
+function coachTabsHtml(d) {
+  const view = coachView(d);
+  const badge = { todo: d.todo };
+  return COACH_VIEWS.map(([id, label]) => `
+    <button type="button" role="tab" data-coach-view="${id}" aria-selected="${view === id}">${label}${badge[id] ? ` <span class="count-chip">${badge[id]}</span>` : ""}</button>`).join("");
+}
+
+// One row of a 1:1 session in "To do": who, when, how it is paid, and the buttons
+function coachRow(d, b, actions = "") {
+  const asked = b.series && b.series.status === "requested"; // a weekly request: one answer for all its weeks
+  const weeks = asked ? d.all.filter((x) => x.series && x.series.id === b.series.id && x.status === "pending").length : 0;
+  return `
     <li class="session-row coach-row">
       ${LevelUp.avatarHtml({ name: b.name, avatar: b.avatar })}
       <div>
-        <p class="session-trainer">${esc(b.name)} ${statusChip(b.status)}${b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
-        ${asked(b) ? `<p class="weekly-line"><b>${LevelUp.seriesText(b.series)}</b> · <span>${LevelUp.seriesUntil(b.series)}</span> · <span>${weeksOf(b) === 1 ? "1 week planned now" : `${weeksOf(b)} weeks planned now`}</span></p>` : ""}
+        <p class="session-trainer"><span data-no-i18n>${esc(b.name)}</span> ${statusChip(b.status)}${b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
+        ${asked ? `<p class="weekly-line"><b>${LevelUp.seriesText(b.series)}</b> · <span>${LevelUp.seriesUntil(b.series)}</span> · <span>${weeks === 1 ? "1 week planned now" : `${weeks} weeks planned now`}</span></p>` : ""}
         ${LevelUp.healthFlagHtml(b.health)}
-        <p class="muted">${asked(b) ? "First session: " : ""}${LevelUp.formatSlot(b.date, b.hour)}${b.movedFrom && b.status === "confirmed" ? ` · moved, was ${esc(b.movedFrom)}` : ""}${b.kind === "duo" ? ` · duo with ${esc(b.partner)}` : ""}${LevelUp.payLabel(b) ? ` · ${esc(LevelUp.payLabel(b))}` : b.payMethod === "pack" ? " · pack credit" : b.payMethod === "reward" ? " · free session 🎁" : ""} · <a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
+        <p class="coach-when">${asked ? "First session: " : ""}${LevelUp.formatSlot(b.date, b.hour)}</p>
+        <p class="muted coach-meta">${soloMeta(b)}${soloMeta(b) ? " · " : ""}<a class="text-link" href="mailto:${esc(b.email)}">${esc(b.email)}</a>${b.note ? ` · “${esc(b.note)}”` : ""}</p>
         <p class="form-error" role="alert"></p>
       </div>
       <div class="coach-actions">${actions}</div>
     </li>`;
+}
+// How a 1:1 session is paid, whether it was moved, and with whom (a duo)
+const soloMeta = (b) => [
+  b.movedFrom && b.status === "confirmed" ? `moved, was ${esc(b.movedFrom)}` : "",
+  b.kind === "duo" ? `duo with ${esc(b.partner)}` : "",
+  LevelUp.payLabel(b) ? esc(LevelUp.payLabel(b)) : b.payMethod === "pack" ? "pack credit" : b.payMethod === "reward" ? "free session 🎁" : ""
+].filter(Boolean).join(" · ");
 
+// The agenda: 1:1 sessions and group classes in one list, a heading per day
+function coachAgendaHtml(d) {
+  const f = state.agendaFilter || "all";
+  const tomorrow = LevelUp.dateKey(new Date(d.now.getTime() + 864e5));
+  const horizon = LevelUp.dateKey(new Date(d.now.getTime() + AGENDA_DAYS * 864e5));
+  const mine = d.agenda.filter((x) => f === "all" || x.kind === f);
+  const later = mine.filter((x) => LevelUp.dateKey(x.at) > horizon);
+  const items = state.agendaAll ? mine : mine.filter((x) => LevelUp.dateKey(x.at) <= horizon);
+  const count = (k) => d.agenda.filter((x) => k === "all" || x.kind === k).length;
+  const chips = [["all", "All"], ["solo", "1:1"], ["group", "Group classes"]].map(([id, label]) =>
+    `<button type="button" data-agenda-filter="${id}" aria-pressed="${f === id}">${label} <i>${count(id)}</i></button>`).join("");
+  const days = [];
+  items.forEach((x) => {
+    const key = LevelUp.dateKey(x.at);
+    if (!days.length || days[days.length - 1].key !== key) days.push({ key, at: x.at, rows: [] });
+    days[days.length - 1].rows.push(x);
+  });
+  const row = (x) => x.kind === "solo" ? `
+      <li class="ag-row solo">
+        <span class="ag-time">${hhmm(x.at)}</span>
+        <span class="ag-kind">1:1</span>
+        <div class="ag-main">
+          <p><b data-no-i18n>${esc(x.b.name)}</b>${x.b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
+          ${soloMeta(x.b) ? `<small>${soloMeta(x.b)}</small>` : ""}
+          ${LevelUp.healthFlagHtml(x.b.health)}
+        </div>
+        <button type="button" class="btn btn-small btn-ghost" data-move-booking="${x.b.id}">Move</button>
+      </li>` : `
+      <li class="ag-row group">
+        <span class="ag-time">${hhmm(x.at)}</span>
+        <span class="ag-kind">Group</span>
+        <div class="ag-main">
+          <p><b data-no-i18n>${esc(x.c.title)}</b></p>
+          <small>${x.c.taken}/${x.c.capacity} signed up${x.c.waitlist ? ` · ${x.c.waitlist} waitlist` : ""}${x.c.unpaid ? ` · <span class="gc-warn">${x.c.unpaid} to pay</span>` : ""}</small>
+        </div>
+        <button type="button" class="btn btn-small btn-ghost" data-agenda-class="${x.c.id}">Open</button>
+      </li>`;
+  return `
+    <div class="ag-head">
+      <div class="ag-filter" role="group" aria-label="Show">${chips}</div>
+      <p class="muted small-text">Can't make it? Agree on another moment with your client in the chat, then move the session here: they get a message.</p>
+    </div>
+    ${days.length ? `<div class="ag-days">${days.map((day) => `
+      <section class="ag-day${day.key === d.today ? " today" : ""}">
+        <h4><b>${day.key === d.today ? "Today" : day.key === tomorrow ? "Tomorrow" : day.at.toLocaleDateString("en-GB", { weekday: "long" })}</b>
+          <span>${day.at.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}</span><i>${day.rows.length}</i></h4>
+        <ul class="ag-list">${day.rows.map(row).join("")}</ul>
+      </section>`).join("")}</div>`
+      : `<p class="coach-empty">${f === "group" ? "No group classes planned." : f === "solo" ? "No 1:1 sessions planned." : `Nothing planned in the next ${AGENDA_DAYS} days.`}</p>`}
+    ${later.length ? `<button type="button" class="btn btn-ghost btn-small history-btn" data-agenda-more aria-expanded="${Boolean(state.agendaAll)}">${state.agendaAll ? "Hide later ▲" : `Later · ${later.length} ▼`}</button>` : ""}`;
+}
+
+function renderCoachPanel() {
+  if (!LevelUp.isTrainer()) return "";
+  const d = coachData();
+  const view = coachView(d);
+  const pane = (id, html) => `<div class="coach-pane" data-coach-pane="${id}" ${view === id ? "" : "hidden"}>${html}</div>`;
+  const solo = d.requests.length + d.toSettle.length;
   return `
     <section class="panel panel-wide coach-panel" id="coach">
       <div class="panel-head">
         <h2>Coach panel</h2>
-        <span class="muted">${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
+        <span class="muted" data-no-i18n>${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
       </div>
-      ${renderEarnings()}
+      <div class="coach-overview" id="coachOverview">${coachOverviewHtml(d)}</div>
       ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}
-      <div class="gc-wrap" id="coachClasses"></div>
-      <h3 class="panel-sub">Requests ${requests.length ? `<span class="count-chip">${requests.length}</span>` : ""}</h3>
-      ${requests.length ? `<ul class="session-list">${requests.map((b) => row(b, `
-          <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">${asked(b) ? "Confirm all weeks" : "Confirm"}</button>
-          <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>`
-        : `<p class="muted">No open requests.</p>`}
-      <h3 class="panel-sub">To settle ${toSettle.length ? `<span class="count-chip">${toSettle.length}</span>` : ""}</h3>
-      ${toSettle.length ? `
-        <ul class="session-list">${toSettle.map((b) => row(b, `
-          <button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>
-          ${LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-coach="noshow" data-id="${b.id}">No-show</button>` : ""}`)).join("")}</ul>`
-        : `<p class="muted">Nothing to settle.</p>`}
-      ${settledToday.length ? `<h3 class="panel-sub">Settled today</h3><ul class="session-list">${settledToday.map((b) => row(b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul>` : ""}
-      ${upcoming.length ? `<h3 class="panel-sub">Upcoming</h3>
-        <p class="muted small-text">Can't make it? Agree on another moment with your client in the chat, then move the session here: they get a message.</p>
-        <ul class="session-list">${upcoming.map((b) => row(b, moveBtn(b))).join("")}</ul>` : ""}
-      <details class="my-hours" id="myHoursBox" ${state.hoursOpen ? "open" : ""}>
-        <summary><span class="panel-sub">My opening hours</span> <span class="muted small-text">${esc(LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId) || "no weekly hours yet: players can't book you")}</span></summary>
-        <div id="myHours"></div>
-      </details>
-      ${missed.length ? `<h3 class="panel-sub">Past the ${LevelUp.REWARD_WINDOW_DAYS}-day window</h3><p class="muted small-text">Ask Pieter to settle these in the admin dashboard.</p><ul class="session-list">${missed.map((b) => row(b)).join("")}</ul>` : ""}
+      <div class="coach-tabs" id="coachTabs" role="tablist" aria-label="Coach panel">${coachTabsHtml(d)}</div>
+
+      ${pane("todo", `
+        <p class="coach-empty" id="coachTodoEmpty" ${d.todo ? "hidden" : ""}>✓ All done. Nothing is waiting for you.</p>
+        ${d.requests.length ? `<h3 class="panel-sub">Requests <span class="kind-tag">1:1</span> <span class="count-chip">${d.requests.length}</span></h3>
+          <ul class="session-list">${d.requests.map((b) => coachRow(d, b, `
+            <button type="button" class="btn btn-small btn-primary" data-coach="confirm" data-id="${b.id}">${b.series && b.series.status === "requested" ? "Confirm all weeks" : "Confirm"}</button>
+            <button type="button" class="btn btn-small btn-ghost" data-coach="decline" data-id="${b.id}">Decline</button>`)).join("")}</ul>` : ""}
+        ${d.toSettle.length ? `<h3 class="panel-sub">To settle <span class="kind-tag">1:1</span> <span class="count-chip">${d.toSettle.length}</span></h3>
+          <ul class="session-list">${d.toSettle.map((b) => coachRow(d, b, `
+            <button type="button" class="btn btn-small btn-primary" data-coach="reward" data-id="${b.id}">Reward +${b.xp} XP</button>
+            ${LevelUp.hasStarted(b) ? `<button type="button" class="btn btn-small btn-ghost" data-coach="noshow" data-id="${b.id}">No-show</button>` : ""}`)).join("")}</ul>` : ""}
+        <div class="gc-wrap" id="coachClassesTodo"></div>
+        ${d.settledToday.length ? `<details class="coach-fold"><summary>Settled today · ${d.settledToday.length}</summary><ul class="session-list">${d.settledToday.map((b) => coachRow(d, b, b.status === "completed" ? `<span class="log-xp">Rewarded</span>` : "")).join("")}</ul></details>` : ""}
+        ${d.missed.length ? `<h3 class="panel-sub">Past the ${LevelUp.REWARD_WINDOW_DAYS}-day window</h3><p class="muted small-text">Ask Pieter to settle these in the admin dashboard.</p><ul class="session-list">${d.missed.map((b) => coachRow(d, b)).join("")}</ul>` : ""}
+        ${solo || d.agenda.length ? "" : `<p class="muted small-text">New requests, sessions to reward and group classes to finish show up here.</p>`}`)}
+
+      ${pane("agenda", `<div id="coachAgenda">${coachAgendaHtml(d)}</div>`)}
+
+      ${pane("classes", `<div class="gc-wrap" id="coachClasses"></div>`)}
+
+      ${pane("earnings", renderEarnings() || `<p class="muted">No earnings yet.</p>`)}
+
+      ${pane("hours", `
+        <p class="muted small-text my-hours-now">${esc(LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId) || "no weekly hours yet: players can't book you")}</p>
+        <div id="myHours"></div>`)}
     </section>`;
 }
+
+// The parts of the coach panel that follow the group classes (they load a moment later, and change when a class is finished)
+function refreshCoachCounts() {
+  const overview = document.getElementById("coachOverview");
+  if (!overview || !LevelUp.isTrainer()) return;
+  const d = coachData();
+  overview.innerHTML = coachOverviewHtml(d);
+  document.getElementById("coachTabs").innerHTML = coachTabsHtml(d);
+  document.getElementById("coachAgenda").innerHTML = coachAgendaHtml(d);
+  const empty = document.getElementById("coachTodoEmpty");
+  if (empty) empty.hidden = d.todo > 0;
+  showCoachView(coachView(d), false);
+}
+
+// Open one part of the coach panel (the others hide)
+function showCoachView(view, byHand = true) {
+  if (byHand) state.coachView = view;
+  document.querySelectorAll("[data-coach-pane]").forEach((el) => { el.hidden = el.dataset.coachPane !== view; });
+  document.querySelectorAll("#coachTabs [data-coach-view]").forEach((el) => {
+    el.setAttribute("aria-selected", String(el.dataset.coachView === view));
+    if (byHand && el.dataset.coachView === view) { const bar = el.parentElement; bar.scrollTo({ left: el.offsetLeft - (bar.clientWidth - el.offsetWidth) / 2, behavior: "smooth" }); } // keep the chosen part in sight on a phone
+  });
+  if (view === "hours") renderMyHours(); // the week planner measures itself, so it draws when it is on screen
+}
+
+document.addEventListener("click", (event) => {
+  const go = event.target.closest("[data-coach-view]");
+  if (go) {
+    showCoachView(go.dataset.coachView);
+    if (go.classList.contains("co-tile")) document.getElementById("coachTabs")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  const filter = event.target.closest("[data-agenda-filter]");
+  const more = event.target.closest("[data-agenda-more]");
+  if (filter || more) {
+    if (filter) state.agendaFilter = filter.dataset.agendaFilter; else state.agendaAll = !state.agendaAll;
+    document.getElementById("coachAgenda").innerHTML = coachAgendaHtml(coachData());
+    return;
+  }
+  const move = event.target.closest("[data-move-booking]");
+  if (move) { openMove(move.dataset.moveBooking); return; }
+  const cls = event.target.closest("[data-agenda-class]");
+  if (cls) { // a group class in the agenda: its list of who is coming, in "Group classes"
+    showCoachView("classes");
+    LevelUpClasses.show(cls.dataset.agendaClass);
+    setTimeout(() => document.querySelector(`#coachClasses [data-gc="${cls.dataset.agendaClass}"]`)?.scrollIntoView({ block: "center" }), 350);
+  }
+});
+LevelUpClasses.onChange((key) => { if (key === "coach") refreshCoachCounts(); });
 
 // ---------- The trainer moves a session (after agreeing on it with the client in the chat) ----------
 let moveDialog = null;
@@ -1026,9 +1198,9 @@ function profileTabs(player) {
 
 function bindEvents(player) {
   if (LevelUp.isTrainer()) {
-    LevelUpClasses.mount(document.getElementById("coachClasses"));
-    renderMyHours();
-    document.getElementById("myHoursBox")?.addEventListener("toggle", (event) => { state.hoursOpen = event.target.open; });
+    LevelUpClasses.mount(document.getElementById("coachClassesTodo"), { part: "todo" });
+    LevelUpClasses.mount(document.getElementById("coachClasses"), { part: "plan" });
+    if (!document.querySelector('[data-coach-pane="hours"]')?.hidden) renderMyHours();
   }
 
   document.getElementById("healthEditBtn")?.addEventListener("click", () => { state.healthEdit = true; render(); document.getElementById("health")?.scrollIntoView({ block: "start" }); });
@@ -1117,9 +1289,6 @@ function bindEvents(player) {
         button.closest(".session-row").querySelector(".form-error").textContent = err.message;
       }
     });
-  });
-  root.querySelectorAll("[data-move-booking]").forEach((button) => {
-    button.addEventListener("click", () => openMove(button.dataset.moveBooking));
   });
 
   const applyForm = document.getElementById("applyForm");

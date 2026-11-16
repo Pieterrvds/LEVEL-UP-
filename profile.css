@@ -315,3 +315,77 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .birthday-setting > span:first-child { font-weight: 700; }
 .birthday-picks { display: flex; gap: 8px; }
 .birthday-picks select { width: auto; min-width: 84px; min-height: 42px; padding: 8px 10px; }
+
+/* ==========================================================================
+   Coach panel: the overview on top, the five parts, compact rows and the agenda
+   ========================================================================== */
+.coach-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.co-tile { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 14px 16px; text-align: left; color: var(--text); background: var(--inset); border: 1px solid var(--line); border-radius: 14px; cursor: pointer; transition: border-color 0.2s, transform 0.2s; }
+.co-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.co-tile b { font: italic 800 2rem/1.1 var(--display); font-size-adjust: none; }
+.co-tile span { font: italic 800 0.95rem/1.2 var(--display); font-size-adjust: none; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.co-tile small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.8rem; line-height: 1.3; color: var(--muted); }
+.co-tile small span { font: inherit; text-transform: none; letter-spacing: 0; color: inherit; }
+.co-tile.alert { border-color: var(--gold); }
+.co-tile.alert b { color: var(--gold); }
+.co-tile.ok b { color: var(--ok); }
+.co-tile.money b { font-size: 1.6rem; line-height: 1.38; }
+
+.coach-tabs { position: sticky; top: calc(var(--hud-h) + 56px); scroll-margin-top: calc(var(--hud-h) + 64px); z-index: 40; display: flex; gap: 4px; margin: 4px 0 18px; padding: 4px; overflow-x: auto; scrollbar-width: none; background: var(--inset); border: 1px solid var(--line); border-radius: 12px; }
+.coach-tabs::-webkit-scrollbar { display: none; }
+.coach-tabs button { flex: 1 0 auto; padding: 9px 14px; white-space: nowrap; color: var(--muted); background: none; border: 0; border-radius: 9px; cursor: pointer; font: italic 800 0.95rem/1.2 var(--display); font-size-adjust: none; text-transform: uppercase; }
+.coach-tabs button:hover { color: var(--text); }
+.coach-tabs button[aria-selected="true"] { color: var(--bg); background: var(--text); }
+.coach-tabs .count-chip { margin-left: 4px; }
+.coach-pane[hidden] { display: none; }
+.coach-pane > .panel-sub:first-child, .coach-pane > .gc-wrap:first-child .panel-sub { margin-top: 0; }
+.coach-empty { margin: 0 0 12px; padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
+.coach-empty[hidden] { display: none; }
+.kind-tag { display: inline-block; padding: 1px 8px; vertical-align: middle; font: 700 0.7rem/1.5 var(--sans); font-size-adjust: none; text-transform: none; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; }
+.coach-when { font-weight: 600; }
+.coach-meta { font-size: 0.85rem; overflow-wrap: anywhere; }
+.coach-fold { margin-top: 14px; }
+.coach-fold summary { padding: 8px 0; font-weight: 700; cursor: pointer; }
+#coachClassesTodo[hidden] { display: none; }
+#coachClassesTodo { margin-top: 12px; }
+.my-hours-now { margin: 0 0 10px; }
+
+.ag-head { display: grid; gap: 8px; margin-bottom: 4px; }
+.ag-head p { margin: 0; }
+.ag-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-filter button { padding: 6px 12px; font: 600 0.85rem var(--sans); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 99px; cursor: pointer; }
+.ag-filter button[aria-pressed="true"] { color: var(--text); background: var(--inset); border-color: var(--text); }
+.ag-filter i { margin-left: 2px; font-style: normal; opacity: 0.7; }
+.ag-day { margin-top: 16px; }
+@media (min-width: 1000px) { .ag-days { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; align-items: start; } }
+.ag-day h4 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.ag-day h4 b { font: italic 800 1.15rem/1.2 var(--display); font-size-adjust: none; text-transform: uppercase; }
+.ag-day h4 span { font-size: 0.85rem; font-weight: 500; color: var(--muted); }
+.ag-day h4 i { margin-left: auto; font-size: 0.78rem; font-style: normal; color: var(--muted); }
+.ag-day.today h4 b { color: var(--gold); }
+.ag-list { list-style: none; display: grid; gap: 6px; margin: 0; padding: 0; }
+.ag-row { display: grid; grid-template-columns: 50px 46px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--inset); border: 1px solid var(--line); border-left: 4px solid var(--tier-1); border-radius: 10px; }
+.ag-row.group { border-left-color: var(--gold); }
+.ag-time { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ag-kind { justify-self: start; padding: 1px 7px; font: 700 0.68rem/1.6 var(--sans); color: var(--tier-1); background: var(--panel-2); border-radius: 6px; }
+.ag-row.group .ag-kind { color: var(--gold); }
+.ag-main { min-width: 0; }
+.ag-main p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-main small { display: block; font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .coach-overview { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .co-tile { padding: 10px 12px; border-radius: 12px; }
+  .co-tile b { font-size: 1.6rem; }
+  .co-tile.money b { font-size: 1.35rem; line-height: 1.3; }
+  .co-tile span { font-size: 0.85rem; }
+  .coach-tabs { top: calc(var(--hud-h) + 46px); scroll-margin-top: calc(var(--hud-h) + 54px); margin-inline: -6px; }
+  .coach-tabs button { padding: 8px 11px; font-size: 0.88rem; }
+  .ag-row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; padding: 8px; }
+  .ag-kind { grid-column: 1; grid-row: 2; font-size: 0.62rem; padding: 0 5px; }
+  .ag-time { grid-column: 1; grid-row: 1; }
+  .ag-main { grid-column: 2; grid-row: 1 / span 2; }
+  .ag-row .btn { grid-column: 3; grid-row: 1 / span 2; padding-inline: 12px; }
+  .coach-row .coach-actions { display: flex; flex-wrap: nowrap; gap: 8px; }
+  .coach-row .coach-actions .btn { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
+}

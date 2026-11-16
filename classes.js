@@ -11,20 +11,32 @@ window.LevelUpClasses = (() => {
     attended: ["Present", "completed"], no_show: ["No-show", "declined"], late_cancel: ["Late sign-out", "declined"]
   };
   const states = new Map(); // one state per place (coach / admin), kept between re-renders of the page
+  const painters = new Map(); // per place: the parts of the page that show its classes (they repaint together)
+  const listeners = new Set(); // told when a list changed (the coach panel's agenda and counters)
+  const SOON_DAYS = 14;        // classes later than this fold away behind "Later"
 
   const dayText = (c) => c.day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
   const tomorrow = () => LevelUp.dateKey(new Date(Date.now() + 864e5));
   const chip = (s) => `<span class="status-chip ${STATUS[s]?.[1] || ""}">${STATUS[s]?.[0] || s}</span>`;
 
-  function mount(el, { admin = false } = {}) {
+  // part: "all" (the admin), or for the coach panel "todo" (only the classes to finish) and "plan" (plan and upcoming)
+  function mount(el, { admin = false, part = "all" } = {}) {
     if (!el) return;
     const key = admin ? "admin" : "coach";
-    if (!states.has(key)) states.set(key, { list: null, loadedAt: 0, open: null, roster: null, creating: false, editing: null, showPast: false, busy: false, error: "" });
+    if (!states.has(key)) states.set(key, { list: null, loadedAt: 0, open: null, roster: null, creating: false, editing: null, showPast: false, showLater: false, busy: false, loading: false, error: "" });
     const st = states.get(key);
+    if (!painters.has(key)) painters.set(key, new Set());
+    // every part that shows these classes repaints, and whoever listens hears about it
+    const paintAll = () => {
+      painters.get(key).forEach((fn) => fn());
+      listeners.forEach((fn) => { try { fn(key); } catch (err) { console.error(err); } });
+    };
     const pricing = LevelUp.getPricing();
     const player = LevelUp.getPlayer();
 
     async function load() {
+      if (st.loading) return;
+      st.loading = true;
       try {
         st.list = await LevelUp.classManageList(admin ? 120 : 35);
         st.loadedAt = Date.now();
@@ -33,8 +45,18 @@ window.LevelUpClasses = (() => {
         st.error = err.message;
         st.list = st.list || [];
       }
-      paint();
+      st.loading = false;
+      paintAll();
     }
+    st.reload = load;
+    // open one class's list from outside (the agenda of the coach panel)
+    st.show = async (id) => {
+      st.open = id; st.roster = null; st.error = "";
+      const c = (st.list || []).find((x) => x.id === id);
+      if (c && c.start - Date.now() > SOON_DAYS * 864e5) st.showLater = true;
+      paintAll();
+      await withRoster(LevelUp.classRoster(id));
+    };
 
     function classCard(c) {
       const t = LevelUp.trainerById(c.trainerId);
@@ -45,7 +67,7 @@ window.LevelUpClasses = (() => {
         : c.status === "done" ? `<span class="status-chip completed">Finished</span>`
         : c.canFinish ? `<span class="status-chip pending">To finish</span>` : "";
       return `
-        <li class="gc-card ${open ? "open" : ""} ${c.status}" style="--c:${t?.color || "#7cff6b"}" data-gc="${c.id}">
+        <li class="gc-card ${open ? "open" : ""} ${st.editing === c.id ? "gc-editing" : ""} ${c.status}" style="--c:${t?.color || "#7cff6b"}" data-gc="${c.id}">
           <div class="gc-top">
             <div class="gc-when"><b>${esc(dayText(c))}</b><span>${c.time}</span></div>
             <div class="gc-main">
@@ -153,7 +175,7 @@ window.LevelUpClasses = (() => {
     }
 
     function paint() {
-      if (!el.isConnected) return;
+      if (!el.isConnected) { painters.get(key).delete(paint); return; }
       const list = st.list;
       const now = new Date();
       const toFinish = (list || []).filter((c) => c.canFinish);
@@ -162,16 +184,30 @@ window.LevelUpClasses = (() => {
       // the admin keeps no archive: a finished or cancelled class only stays while money is still open on it
       const openMoney = admin ? rest.filter((c) => c.unpaid > 0 || c.refunds?.length) : [];
       const past = admin ? [] : rest;
+      // the coming two weeks show; what comes later folds away (a weekly class is otherwise a very long list)
+      const horizon = now.getTime() + SOON_DAYS * 864e5;
+      let soon = upcoming.filter((c) => c.start <= horizon);
+      if (!soon.length) soon = upcoming.slice(0, 3);
+      const later = upcoming.filter((c) => !soon.includes(c));
+      const finishHtml = toFinish.length ? `<p class="gc-sub">${part === "todo" ? "Group classes to finish" : "To finish"}</p><ul class="gc-list">${toFinish.map(classCard).join("")}</ul>` : "";
+
+      if (part === "todo") { // the coach panel's "To do": nothing else than the classes that wait for a finish
+        el.innerHTML = list === null ? "" : finishHtml;
+        el.hidden = !toFinish.length;
+        return;
+      }
       el.innerHTML = `
         <div class="panel-head gc-head">
-          <h3 class="panel-sub first">Group classes ${toFinish.length ? `<span class="count-chip">${toFinish.length}</span>` : ""}</h3>
+          <h3 class="panel-sub first">Group classes ${part === "all" && toFinish.length ? `<span class="count-chip">${toFinish.length}</span>` : ""}</h3>
           ${st.creating ? "" : `<button type="button" class="btn btn-small btn-primary" data-gc-new>+ New class</button>`}
         </div>
         ${st.creating ? formHtml() : ""}
         ${list === null ? `<p class="muted">Loading classes…</p>` : `
-          ${toFinish.length ? `<p class="gc-sub">To finish</p><ul class="gc-list">${toFinish.map(classCard).join("")}</ul>` : ""}
-          ${upcoming.length ? `<p class="gc-sub">Upcoming</p><ul class="gc-list">${upcoming.map(classCard).join("")}</ul>`
+          ${part === "all" ? finishHtml : ""}
+          ${upcoming.length ? `<p class="gc-sub">${later.length ? `The next ${SOON_DAYS} days` : "Upcoming"}</p><ul class="gc-list">${soon.map(classCard).join("")}</ul>`
             : st.creating ? "" : `<p class="muted">No group classes planned. Plan one: players see it on the schedule and sign up right away.</p>`}
+          ${later.length ? `<button type="button" class="btn btn-ghost btn-small history-btn" data-gc-later aria-expanded="${st.showLater}">${st.showLater ? "Hide later classes ▲" : `Later · ${later.length} ▼`}</button>
+            ${st.showLater ? `<ul class="gc-list">${later.map(classCard).join("")}</ul>` : ""}` : ""}
           ${openMoney.length ? `<p class="gc-sub">Money still open</p><ul class="gc-list">${openMoney.map(classCard).join("")}</ul>` : ""}
           ${past.length ? `<button type="button" class="btn btn-ghost btn-small history-btn" data-gc-past aria-expanded="${st.showPast}">${st.showPast ? "Hide past classes ▲" : `Past classes · ${past.length} ▼`}</button>
             ${st.showPast ? `<ul class="gc-list">${past.map(classCard).join("")}</ul>` : ""}` : ""}`}`;
@@ -231,7 +267,7 @@ window.LevelUpClasses = (() => {
         st.error = err.message;
       }
       st.busy = false;
-      paint();
+      paintAll();
     }
     // the counts on the card follow the list
     const pick = (r) => ({ taken: Number(r.taken), waitlist: Number(r.waitlist), present: Number(r.present), unpaid: Number(r.unpaid),
@@ -240,15 +276,16 @@ window.LevelUpClasses = (() => {
     el.onclick = async (event) => {
       const t = event.target.closest("button, a");
       if (!t || t.disabled) return;
-      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.editing = null; st.error = ""; paint(); return; }
-      if (t.dataset.gcEdit) { st.editing = st.editing === t.dataset.gcEdit ? null : t.dataset.gcEdit; st.creating = false; st.error = ""; paint(); return; }
-      if (t.hasAttribute("data-gc-past")) { st.showPast = !st.showPast; paint(); return; }
+      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.editing = null; st.error = ""; paintAll(); return; }
+      if (t.dataset.gcEdit) { st.editing = st.editing === t.dataset.gcEdit ? null : t.dataset.gcEdit; st.creating = false; st.error = ""; paintAll(); return; }
+      if (t.hasAttribute("data-gc-past")) { st.showPast = !st.showPast; paintAll(); return; }
+      if (t.hasAttribute("data-gc-later")) { st.showLater = !st.showLater; paintAll(); return; }
       if (t.dataset.gcRoster) {
         st.error = "";
-        if (st.open === t.dataset.gcRoster) { st.open = null; st.roster = null; paint(); return; }
+        if (st.open === t.dataset.gcRoster) { st.open = null; st.roster = null; paintAll(); return; }
         st.open = t.dataset.gcRoster;
         st.roster = null;
-        paint();
+        paintAll();
         await withRoster(LevelUp.classRoster(st.open));
         return;
       }
@@ -292,9 +329,15 @@ window.LevelUpClasses = (() => {
       }
     };
 
+    painters.get(key).add(paint);
     paint();
     if (!st.list || Date.now() - st.loadedAt > 30000) load();
   }
 
-  return { mount };
+  // For the coach panel: the coach's classes as they are loaded, a way to open one, and a call when they change
+  const list = (key = "coach") => states.get(key)?.list || null;
+  const show = (id, key = "coach") => states.get(key)?.show?.(id);
+  const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+
+  return { mount, list, show, onChange, SOON_DAYS };
 })();
