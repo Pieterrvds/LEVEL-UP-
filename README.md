@@ -196,6 +196,30 @@ Every lesson has a place. The standard one is the big room (`app_config` `defaul
   the confirmation and the reminder for the player. When a coach changes the place of hours that were booked
   already, those players get "📍 New place for your session".
 
+### Active or away
+A coach has a **switch at the top of his own page**, before "Share my card": **Active** (players can book him) or
+**Away for now** (holiday, ill …). `trainers.available`, set with `set_trainer_available` by the coach himself or the
+admin. While he is away:
+- nobody can book him: his hours leave the booking board and the phone list (`trainerHours` returns nothing), "Book …"
+  does nothing, and the server refuses a booking too (`_book`). Sessions and classes that are planned stay.
+- a **light** shows it wherever he is named (`LevelUp.coachLight`): green = active, grey = away. On his photo on his
+  page, on his team card (with the word), on his face on the training cards he gives, and next to his name in the
+  filter of the booking board. A training whose coaches are all away says "Away for now" instead of the book button.
+- his own week still shows his hours, with the note that nobody can book them now; his coach panel says he is away.
+
+### What the coaches change: the admin always hears it
+Every change a coach makes is one line in `coach_log` and a notification for the admins (`_coach_changed`): new,
+changed or removed hours (with what, when and where), a new, changed or cancelled group class, a moved session, a new
+kind of training to approve, and switching between active and away. Admin → Team → **Changes** lists the latest
+ones, the Team tab and that view count what is new, and the Team view shows a bar "n changes by your coaches"
+(`admin_coach_log`); lines go after a month. The admin's own changes are not logged.
+
+The other way round works too: when the **admin** changes something for a coach (his hours, a group class, a moved
+session, active or away), that coach gets the notification "LEVEL-UP changed your schedule" with what changed
+(`_coach_changed` again, the admin's branch). A trainer who is put on a class as a second trainer hears it too
+(`_tell_co`). And a **trainer application** tells the admins at once ("New trainer application", it opens
+Admin → Overview), and the applicant hears the answer (`_application_push`).
+
 ### Kinds of training, and the admin's approval of a new one
 A coach doesn't only say *when*, but also *what* he gives:
 - **1:1 hours carry what is given** (`trainer_hours.activity`): the form asks "What do you give?" with every
@@ -229,12 +253,32 @@ there (CrossFit, Calisthenics, HIIT, Muay Thai, Triathlon, Cycling; their standa
 to the standard one) and **Hide the card / Show the card again** (`class_kinds.hidden`). The group trainings have the
 same panel below the group classes. `admin_class_kind` stores it; the home page reads it through `class_kinds()`.
 
-### Admin → Team: the schedule of the whole team
-The admin's Team tab is the coach's "My hours" for every trainer (`renderTeam` in `admin.js`, the week is the shared
-`week-plan.js`): the **team week** with, per day, each trainer's 1:1 hours (and what is given in them) and the group
-classes, a filter per trainer, and **＋ Plan something** that first asks for which trainer. Below it two tiles:
-**Personal training** (the opening hours planner and list) and **Group classes** (plan, who's coming, change, cancel,
-and the cards of the home page). The separate "Group classes" tab is gone; `admin.html#classes` still opens it here.
+### Admin → Team: the whole team in one place
+The admin's Team tab (`renderTeam` in `admin.js`) has a bar with five views (`TEAM_VIEWS`, `showTeamKind`); new kinds
+of training that wait for approval stay on top of all of them.
+- **Team** (opens first): one card per trainer (`renderTeamMembers`). On it: the **Active / Away switch** (the admin
+  can set it for any trainer), his numbers and occupancy, his **1:1 lessons** (per kind: the hours he gives it in and
+  the place when it is not the standard one) and his **group classes** (per name: how many are planned, the next one,
+  who gives it with him). Per lesson: **Hours** or **Classes** (jumps to that view on that trainer or class),
+  **Photo & text** (opens the home-page card of that lesson in place: text, photo, hide), and **Delete**. Delete on a
+  1:1 lesson removes the hours that trainer gives it in (booked sessions must be moved first); delete on a group
+  training (`admin_class_kind_delete`) cancels every coming class of that name for the whole team (players hear it,
+  paid places are refunded), deletes its group chat and takes its card off the home page. Finished classes stay for
+  the finances. His standard cards (CrossFit, Calisthenics …) are chips below his 1:1 lessons. At the bottom:
+  ＋ 1:1 hours, ＋ Group class, ＋ Day off for that trainer.
+- **→ Group class** next to a block of 1:1 hours turns it into a group class: the class form opens filled in (name,
+  trainer, day, hour, weekly, place), the admin sets places and price, and when the class is planned the 1:1 hours
+  are removed (`fromHours` in `classes.js`). The home-page card and the booking board follow by themselves.
+- **Several trainers on one class:** "Also with" in the admin's class form (`class_sessions.co_trainers`, only the
+  admin can set it). A co-trainer has the class in his own list and week, can see who is coming and finish it, is in
+  its group chat and stands on its card; players see "Maxim & Filip". The trainer fee goes to the lead trainer.
+- **Week:** the team week (shared `week-plan.js`) with, per day, each trainer's 1:1 hours and the group classes, a
+  filter per trainer, and **＋ Plan something** that first asks for which trainer.
+- **1:1 hours:** the opening hours planner and list, and "Personal trainings on the home page".
+- **Group classes:** plan, who's coming, change, cancel, and "Group trainings on the home page".
+- **Changes:** what the coaches changed themselves (see above), newest first, new lines marked. Opening it resets
+  the counter; the notification the admin gets links to it (`admin.html#changes`).
+The separate "Group classes" tab is gone; `admin.html#classes` still opens that view here.
 
 ## Group classes
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every

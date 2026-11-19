@@ -76,7 +76,9 @@ document.addEventListener("click", (event) => {
 
   const coach = (id) => LevelUp.trainerById(id);
   const names = (ids) => ids.map((id) => coach(id)?.short).filter(Boolean);
-  const faces = (ids) => ids.map((id) => coach(id)).filter(Boolean).map((t) => `<img data-coach="${esc(t.id)}" src="${esc(t.img)}" alt="" loading="lazy">`).join("");
+  // a coach's face with his light: green = takes bookings, grey = away for now
+  const faces = (ids) => ids.map((id) => coach(id)).filter(Boolean).map((t) => `<span class="coach-face ${LevelUp.trainerAvailable(t.id) ? "" : "away"}"><img data-coach="${esc(t.id)}" src="${esc(t.img)}" alt="" loading="lazy">${LevelUp.coachLight(t.id)}</span>`).join("");
+  const ready = (ids) => ids.filter((id) => LevelUp.trainerAvailable(id)); // the coaches of a card who take bookings now
   const when = (c) => `${c.day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${c.time}`;
 
   // Everything that can be on a card: the group trainings first
@@ -96,7 +98,7 @@ document.addEventListener("click", (event) => {
     const groups = kinds.filter((k) => k.hasClasses !== false && !k.hidden).map((k) => {
       const look = GROUP_LOOKS.find(([re]) => re.test(k.title));
       const sessions = upcoming.filter((c) => key(c.title) === k.key).sort((a, b) => a.start - b.start);
-      const trainers = [...new Set([...sessions.map((c) => c.trainerId), ...(k.trainers || [])])].filter((id) => coach(id));
+      const trainers = [...new Set([...sessions.flatMap((c) => LevelUp.classCoaches(c)), ...(k.trainers || [])])].filter((id) => coach(id));
       return { id: `g:${k.key}`, group: true, title: k.title, badge: "Group", img: k.photoUrl || look?.[1] || GROUP_DEFAULT[0],
         pos: k.photoUrl ? "" : look?.[3] || "", about: k.description || look?.[2] || GROUP_DEFAULT[1], ownText: Boolean(k.description), trainers, sessions };
     });
@@ -127,7 +129,8 @@ document.addEventListener("click", (event) => {
           <div class="class-actions">
             ${x.group
               ? `<button type="button" class="btn btn-small btn-primary" data-training-open="${esc(x.id)}">${next ? "Sign up ▶" : "More info ▶"}</button>`
-              : `<a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${esc(x.trainer)}">Book this training ▶</a>`}
+              : ready(x.trainers).length ? `<a href="#schedule" class="btn btn-small btn-primary" data-book-trainer="${esc(ready(x.trainers).includes(x.trainer) ? x.trainer : ready(x.trainers)[0])}">Book this training ▶</a>`
+              : `<span class="coach-away-note">⏸ <span>Away for now</span></span>`}
             <span class="class-more" aria-hidden="true">More info ›</span>
           </div>
         </div>
@@ -208,7 +211,8 @@ document.addEventListener("click", (event) => {
             <li><span><b>${esc(when(c))}</b><small>${c.taken}/${c.capacity} · ${esc(c.location)}</small></span>
               <button type="button" class="btn btn-small ${c.mine ? "btn-ghost" : "btn-primary"}" data-training-class="${esc(c.id)}">${c.mine ? "You're in ✓" : c.taken >= c.capacity ? "Waitlist ▶" : "Sign up ▶"}</button></li>`).join("")}</ul>`
             : `<p class="muted">No date planned right now. New dates show here and on the schedule, and you get a notification.</p>`}`
-          : `<div class="btn-row"><a href="#schedule" class="btn btn-primary" data-book-trainer="${esc(x.trainer)}" data-training-close>Book this training ▶</a></div>`}
+          : ready(x.trainers).length ? `<div class="btn-row"><a href="#schedule" class="btn btn-primary" data-book-trainer="${esc(ready(x.trainers).includes(x.trainer) ? x.trainer : ready(x.trainers)[0])}" data-training-close>Book this training ▶</a></div>`
+          : `<p class="coach-away-note">⏸ <span>Away for now</span></p>`}
       </div>`;
   }
   function open(id) {

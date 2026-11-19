@@ -258,7 +258,8 @@ function renderApplication(player) {
     return `
       <section class="panel panel-wide application-panel pending">
         <div class="panel-head"><h2>Trainer application</h2><span class="status-chip pending">Pending review</span></div>
-        <p>Thanks for applying as <strong>${esc(app.role || "personal trainer")}</strong>. Pieter reviews your application and you'll get an email. Until then you can use LEVEL-UP as a player.</p>
+        <p><span>You applied as</span> <strong data-no-i18n>${esc(app.role || "personal trainer")}</strong>.</p>
+        <p>Pieter reviews your application and you'll hear from him. Until then you can use LEVEL-UP as a player.</p>
       </section>`;
   }
   if (app?.status === "rejected") {
@@ -365,7 +366,7 @@ function renderPacks(player) {
           <button type="button" class="pack-option" data-pack-size="${o.size}">
             <span class="price-tag">${o.size} sessions</span>
             <strong>${euro(o.price)}</strong>
-            <span>${euro(o.price / o.size)} per session · save ${euro(single * o.size - o.price)}</span>
+            <span>${euro(o.price / o.size)} per session${single * o.size > o.price ? ` · save ${euro(single * o.size - o.price)}` : ""}</span>
             ${giftName(o.gift) ? `<span class="pack-gift">🎁 + free ${esc(giftName(o.gift))}</span>` : ""}
           </button>`).join("")}
         </div>`}
@@ -563,6 +564,7 @@ function renderCoachPanel() {
         <span class="muted" data-no-i18n>${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
         <a class="btn btn-small btn-ghost coach-team-chat" href="chat.html?coach=team">💬 Team chat</a>
       </div>
+      ${LevelUp.trainerAvailable(LevelUp.getPlayer().trainerId) ? "" : `<p class="coach-away-bar">⏸ <span><b>You are away.</b> Players can't book you. Switch yourself back on at the top of this page.</span></p>`}
       <div class="coach-overview" id="coachOverview">${coachOverviewHtml(d)}</div>
       ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}
       <div class="coach-tabs" id="coachTabs" role="tablist" aria-label="Coach panel">${coachTabsHtml(d)}</div>

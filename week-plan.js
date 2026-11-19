@@ -20,7 +20,7 @@ window.LevelUpWeek = (() => {
   // The open hours of a day as blocks: [9, 10, 11, 17] -> 09:00–12:00 and 17:00–18:00, split where what is given changes
   function blocks(trainerId, key) {
     const out = [];
-    LevelUp.trainerHours(trainerId, key).forEach((h) => {
+    LevelUp.trainerHours(trainerId, key, { raw: true }).forEach((h) => {
       const activity = LevelUp.hourActivity?.(trainerId, key, h) || "";
       const place = LevelUp.hourPlace(trainerId, key, h);
       const last = out[out.length - 1];
@@ -44,7 +44,7 @@ window.LevelUpWeek = (() => {
     const today = LevelUp.dateKey();
     const hours = LevelUp.getOpeningHours() || [];
     const busy = opts.bookings().filter((b) => BUSY.includes(b.status));
-    const classes = (opts.classes() || []).filter((c) => c.status === "scheduled" && ids.includes(c.trainerId));
+    const classes = (opts.classes() || []).filter((c) => c.status === "scheduled" && LevelUp.classCoaches(c).some((id) => ids.includes(id)));
     const who = (t) => team ? `<span class="mw-who" data-no-i18n>${esc(t.short)}</span>` : "";
     const WAIT = `<span class="mw-wait" title="Waiting for approval">⏳</span>`;
     let waiting = false; // something in this week is a new kind of training that the admin still has to approve
@@ -72,7 +72,7 @@ window.LevelUpWeek = (() => {
         const t = LevelUp.trainerById(c.trainerId);
         items.push(`
           <button type="button" class="mw-item group${c.pending ? " wait" : ""}" data-week-class="${c.id}" style="--c:${t?.chartColor || t?.color || "#888"}">
-            <span class="mw-kind">Group</span><b class="mw-time">${c.time}</b>${t ? who(t) : ""}${c.pending ? WAIT : ""}<small>${c.taken}/${c.capacity}</small><span class="mw-text" data-no-i18n>${esc(c.title)}${placeHtml(c.location)}</span>
+            <span class="mw-kind">Group</span><b class="mw-time">${c.time}</b>${t ? who(t) : ""}${team && (c.coTrainers || []).length ? `<span class="mw-who" data-no-i18n>+${c.coTrainers.length}</span>` : ""}${c.pending ? WAIT : ""}<small>${c.taken}/${c.capacity}</small><span class="mw-text" data-no-i18n>${esc(c.title)}${placeHtml(c.location)}</span>
           </button>`);
       });
       return `
@@ -98,6 +98,7 @@ window.LevelUpWeek = (() => {
         ${opts.trainers.map((id) => { const t = LevelUp.trainerById(id); return `<button type="button" data-week-filter="${id}" aria-pressed="${view.filter === id}"><span class="dot" style="--c:${t.chartColor || t.color}" aria-hidden="true"></span>${esc(t.short)}</button>`; }).join("")}
       </div>` : ""}
       <p class="muted small-text mw-help">${opts.help || "What players can book with you. Tap ＋ on a day to add something, tap a group class to see who is coming."}</p>
+      ${ids.filter((id) => !LevelUp.trainerAvailable(id)).map((id) => `<p class="mw-away">⏸ <b data-no-i18n>${esc(LevelUp.trainerById(id).short)}</b> <span>${team ? "is away: players can't book these hours now." : "You are away: players can't book these hours now."}</span></p>`).join("")}
       <ul class="mw-days${team ? " mw-team" : ""}">${rows}</ul>
       ${waiting ? `<p class="muted small-text mw-wait-note">⏳ <span>${team ? "A new kind of training that waits for your approval: players don't see it yet." : "A new kind of training: players see it once the admin has approved it."}</span></p>` : ""}`;
   }

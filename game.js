@@ -961,6 +961,21 @@ const LevelUp = (() => {
     return trainingKinds;
   }
 
+  // The trainers of a class: the one who leads it first, then who gives it with him. And their first names as text.
+  const classCoaches = (c) => [c.trainerId, ...(c.coTrainers || [])].filter((id, i, all) => id && all.indexOf(id) === i);
+  const coachNames = (ids) => ids.map((id) => trainerById(id)?.short).filter(Boolean).join(", ").replace(/, ([^,]*)$/, " & $1");
+  // Admin: delete a whole group training (its coming classes are cancelled, its chat and its card go)
+  async function adminClassKindDelete(key, reason = "") {
+    let r;
+    try { r = await call("admin_class_kind_delete", { p_key: key, p_reason: reason }); }
+    catch (err) { throw OLD_DB.test(err.message || "") ? new Error("Deleting a group training needs the latest supabase/schema.sql.") : err; }
+    processRefunds();
+    await afterClassChange();
+    return r;
+  }
+  // Admin: what the coaches changed lately ({ unread, items }); seen = mark them as read
+  const adminCoachLog = (seen = false) => call("admin_coach_log", { p_seen: seen });
+
   async function afterClassChange() {
     await Promise.all([refreshPlayer({ announce: true }), document.getElementById("weekBoard") ? loadClasses() : null, loadSlots(),
       document.getElementById("classGrid") || document.getElementById("adminKinds") ? loadClassKinds() : null]);
@@ -1151,6 +1166,7 @@ const LevelUp = (() => {
         const known = TRAINERS.find((t) => t.id === r.id);
         if (known) {
           known.linked = Boolean(r.linked);
+          known.available = r.available !== false; // false: the coach set himself away
           known.defaultImg = known.defaultImg || known.img;
           known.img = r.avatar_url || known.defaultImg; // the photo the coach put on their own page wins
           return;
@@ -1169,6 +1185,7 @@ const LevelUp = (() => {
           availability: {},
           stats: { sessions: 0, clients: 0 },
           linked: Boolean(r.linked),
+          available: r.available !== false,
           dynamic: true
         });
       });
@@ -1407,9 +1424,11 @@ const LevelUp = (() => {
   // fallback hours) minus anything else in the trainer's calendar
   // Opening hours from the admin dashboard (trainer_hours). While they haven't loaded
   // (older database), the hours in TRAINERS are used instead.
-  function trainerHours(trainerId, key) {
+  // raw: the hours as they are set, also while the coach is away (for his own week and the admin's)
+  function trainerHours(trainerId, key, { raw = false } = {}) {
     const trainer = trainerById(trainerId);
     if (!trainer) return [];
+    if (!raw && trainer.available === false) return []; // away: nothing to book
     const hours = new Set();
     const addRange = (a, b) => { for (let h = a; h < b; h++) hours.add(h); };
     if (openingHours) {
@@ -1438,6 +1457,23 @@ const LevelUp = (() => {
     const weekday = parseDate(key).getDay();
     const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && r.activity && hour >= r.start && hour < r.end;
     return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && r.weekday === weekday))?.activity || "";
+  }
+
+  // Active or away: a coach who is away takes no new bookings. The light shows it wherever a coach is named.
+  const trainerAvailable = (trainerId) => trainerById(trainerId)?.available !== false;
+  const coachLight = (trainerId, withText = false) => {
+    const on = trainerAvailable(trainerId);
+    return `<span class="coach-light ${on ? "on" : "off"}" title="${on ? "Active: takes bookings" : "Away for now"}">${withText ? `<b>${on ? "Active" : "Away for now"}</b>` : ""}</span>`;
+  };
+  async function setTrainerAvailable(trainerId, on) {
+    try {
+      await call("set_trainer_available", { p_trainer: trainerId, p_on: Boolean(on) });
+    } catch (err) {
+      if (OLD_DB.test(err.message || "")) throw new Error("This switch needs the latest supabase/schema.sql.");
+      throw err;
+    }
+    await loadTrainerList();
+    emit();
   }
 
   // Where: the standard place, and the place of one open hour (hours on that date win over the weekly ones)
@@ -2035,7 +2071,7 @@ const LevelUp = (() => {
     return result;
   }
 
-  const euro = (n) => `€${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const euro = (n) => `${Number(n || 0) < 0 ? "-" : ""}€${Math.abs(Number(n || 0)).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; // -€15, not €-15
 
   async function respondBooking(id, accept) {
     const booking = await call("respond_booking", { p_id: id, p_accept: Boolean(accept) });
@@ -4562,7 +4598,7 @@ const LevelUp = (() => {
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
-    trainerById, trainerHours, hourActivity, hourPlace, defaultPlace, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, trainerAvailable, coachLight, setTrainerAvailable, hourActivity, hourPlace, defaultPlace, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
@@ -4581,7 +4617,7 @@ const LevelUp = (() => {
     setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
-    PERSONAL_TRAININGS, BUILTIN_TRAININGS, kindKey, getTrainingKinds: () => trainingKinds, loadTrainingKinds, kindChoices, kindKnown, proposeKind, adminKindDecide,
+    PERSONAL_TRAININGS, BUILTIN_TRAININGS, kindKey, classCoaches, coachNames, adminClassKindDelete, adminCoachLog, getTrainingKinds: () => trainingKinds, loadTrainingKinds, kindChoices, kindKnown, proposeKind, adminKindDecide,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven,

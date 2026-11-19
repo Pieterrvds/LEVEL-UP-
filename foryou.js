@@ -501,7 +501,8 @@
       <div class="fy-next" style="--c:${esc(t?.color || "")}">
         ${t?.img ? `<img src="${esc(t.img)}" alt="">` : `<span class="fy-ico" aria-hidden="true">📅</span>`}
         <div><b>${esc(dayWord(next.at))} · ${String(b.hour).padStart(2, "0")}:00</b>
-        <span>${T(b.kind === "duo" ? "Duo session with {0}" : "1:1 with {0}", esc(t?.short || ""))} · ${T("1 hour")} · <strong class="fy-plus">+${LevelUp.SESSION_XP} XP</strong>${state ? ` · ${esc(state)}` : ""}</span></div></div>
+        <span>${b.what && b.what !== "Personal training" ? `${esc(b.what)} · ` : ""}${T(b.kind === "duo" ? "Duo session with {0}" : "1:1 with {0}", esc(t?.short || ""))} · ${T("1 hour")} · <strong class="fy-plus">+${LevelUp.SESSION_XP} XP</strong>${state ? ` · ${esc(state)}` : ""}</span>
+        ${b.place ? `<span class="fy-where">📍 ${esc(b.place)}</span>` : ""}</div></div>
       <div class="fy-acts">
         <a class="btn btn-small btn-primary" ${tabLink("overview")}>${T("View session")}</a>
         ${t && t.linked !== false && player.trainerId !== t.id ? `<button type="button" class="btn btn-small btn-ghost" data-chat-trainer="${esc(t.id)}">💬 ${T("Chat with {0}", esc(t.short))}</button>` : ""}

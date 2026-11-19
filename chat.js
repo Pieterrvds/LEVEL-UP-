@@ -189,7 +189,9 @@ function clearSearch() {
 function startHtml() {
   const player = LevelUp.getPlayer();
   const have = new Set((state.threads || []).filter((t) => t.side === "client").map((t) => t.trainerId));
-  const coaches = LevelUp.TRAINERS.filter((t) => t.linked !== false && t.id !== player?.trainerId && !have.has(t.id));
+  const booked = new Set((player?.bookings || []).map((b) => b.trainerId)); // the coach you booked comes first
+  const coaches = LevelUp.TRAINERS.filter((t) => t.linked !== false && t.id !== player?.trainerId && !have.has(t.id))
+    .sort((a, b) => Number(booked.has(b.id)) - Number(booked.has(a.id)));
   const coachSide = LevelUp.isTrainer() && !(state.threads || []).some((t) => t.side === "trainer");
   if (!coaches.length && !coachSide && state.threads.length) return "";
   return `

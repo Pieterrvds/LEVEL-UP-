@@ -130,6 +130,7 @@
     const likes = Number(me ? me.likes : d.likes) || 0;
     const tier = prog ? RANKS.indexOf(prog.rank) : 0;
     document.title = `${d.name} | LEVEL-UP`;
+    const away = Boolean(d.trainerId) && !LevelUp.trainerAvailable(d.trainerId); // a coach who takes no bookings for now
     const chips = [
       d.place ? `<span>🏆 #${d.place} on the high scores</span>` : "",
       d.streak ? `<span>🔥 ${d.streak}-week streak</span>` : "",
@@ -143,6 +144,7 @@
         <div class="container mp-hero-in">
           <div class="mp-avatar-wrap">
             <span class="mp-avatar ${photo ? "has-photo" : ""}">${photo ? `<img src="${esc(photo)}" alt="">` : esc(first.charAt(0).toUpperCase())}</span>
+            ${d.trainerId ? LevelUp.coachLight(d.trainerId) : ""}
             ${me ? `<label class="avatar-edit-btn" title="${me.avatarUrl ? "Change your photo" : "Add your photo"}">
               <span aria-hidden="true">📷</span><span class="sr-only">${me.avatarUrl ? "Change your profile photo" : "Add a profile photo"}</span>
               <input type="file" accept="image/*" data-avatar-input hidden>
@@ -157,8 +159,13 @@
             ${chips ? `<p class="mp-chips">${chips}</p>` : ""}
           </div>
           <div class="mp-actions">
+            ${me && d.trainerId ? `
+              <button type="button" class="coach-switch ${away ? "off" : "on"}" role="switch" aria-checked="${!away}" data-coach-available>
+                <span class="cs-track" aria-hidden="true"><i></i></span>
+                <span class="cs-text"><b>${away ? "Away for now" : "Active"}</b><small>${away ? "Players can't book you" : "Players can book you"}</small></span>
+              </button>` : ""}
             ${me ? `<button type="button" class="btn btn-ghost" data-share-card>Share my card</button>` : `
-              ${d.trainerId ? `<a class="btn btn-primary" href="#book">Book ${esc(first)} ▸</a>` : ""}
+              ${d.trainerId ? (away ? `<span class="coach-away-note">⏸ <span>Away for now</span></span>` : `<a class="btn btn-primary" href="#book">Book ${esc(first)} ▸</a>`) : ""}
               ${d.linked === false || d.mascot ? "" : `<button type="button" class="btn ${d.trainerId ? "btn-ghost" : "btn-primary"}" data-mp-chat>💬 Chat</button>`}
               ${d.canLike || (!LevelUp.getPlayer() && d.trainerId) ? `<button type="button" class="btn btn-ghost mp-like ${d.liked ? "liked" : ""}" data-mp-like aria-pressed="${Boolean(d.liked)}"><span aria-hidden="true">♥</span> ${d.liked ? "Liked" : "Like"}${likes ? ` · ${likes}` : ""}</button>` : ""}`}
           </div>
@@ -185,6 +192,18 @@
         label.classList.remove("busy");
         LevelUp.toast({ title: "Photo not saved", text: err.message, icon: "!" });
       }
+    });
+    hero.querySelector("[data-coach-available]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const on = button.getAttribute("aria-checked") !== "true"; // the new state
+      if (!on && !confirm("Set yourself away? Players can't book you until you switch back on. Sessions that are planned stay.")) return;
+      button.disabled = true;
+      try {
+        await LevelUp.setTrainerAvailable(LevelUp.getPlayer().trainerId, on);
+        renderHero(); // the switch and the light follow
+        LevelUp.toast(on ? { title: "You are active", text: "Players can book you again", icon: "▶", tone: "green" } : { title: "You are away", text: "No new bookings until you switch back on", icon: "⏸" });
+      } catch (err) { LevelUp.toast({ title: "Not changed", text: err.message, icon: "!" }); }
+      button.disabled = false;
     });
     hero.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;

@@ -500,3 +500,11 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .coach-row .coach-actions { display: flex; flex-wrap: nowrap; gap: 8px; }
   .coach-row .coach-actions .btn { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
 }
+
+/* Class form: more trainers on one class, and 1:1 hours that become a class */
+.gc-co { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.gc-co legend { padding: 0 6px; font-size: 0.8rem; color: var(--muted); }
+.gc-co label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.gc-co small { flex-basis: 100%; }
+.gc-from-hours { margin: 0; padding: 8px 12px; font-size: 0.9rem; background: color-mix(in srgb, var(--gold) 12%, transparent); border: 1px solid var(--gold); border-radius: 10px; }
+.gc-co label[hidden] { display: none; }

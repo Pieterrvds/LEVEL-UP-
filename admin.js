@@ -19,7 +19,8 @@ const state = {
   tabFromLink: false,
   folds: {}, // long panels that open on a click (reviews, messages): key -> open
   fin: { mode: "month", offset: 0, statementMonth: null },
-  teamKind: "solo" // Team tab: the 1:1 hours ("solo") or the group classes ("group") below the team week
+  teamKind: "members", // Team tab: "members" (everyone and what they give), "week", "solo" (1:1 hours), "group" (classes) or "log"
+  teamCard: "" // Team tab: the lesson whose card (photo and text) is open, as "<trainer>|<key>"
 };
 let data = null;
 const tips = new Map();
@@ -196,23 +197,17 @@ async function render() {
     </div>
 
     <div data-pane="team">
-    <section class="panel admin-panel" id="teamPlan">
-      <div class="panel-head"><h2>Team schedule</h2><span class="muted">Who gives what, when, 1:1 or in a group. Change or cancel anything here.</span></div>
-      <div id="kindRequests"></div>
-      <div id="teamWeek"></div>
-      <h3 class="panel-sub hk-title">Set up</h3>
-      <div class="hours-kind" id="teamKind" role="tablist" aria-label="Set up"></div>
-    </section>
+    <section class="panel admin-panel" id="teamTop" hidden><div id="kindRequests"></div></section>
+    <div class="coach-tabs team-tabs" id="teamKind" role="tablist" aria-label="Team"></div>
+    <p class="muted team-hint" id="teamHint"></p>
 
+    <section class="panel admin-panel" id="teamMembers" data-team-pane="members"></section>
+    <section class="panel admin-panel" id="teamPlan" data-team-pane="week"><div id="teamWeek"></div></section>
     <section class="panel admin-panel" id="hoursPanel" data-team-pane="solo"></section>
     <section class="panel admin-panel" id="adminKindsSolo" data-team-pane="solo"></section>
     <section class="panel admin-panel gc-wrap" id="adminClasses" data-team-pane="group"></section>
     <section class="panel admin-panel" id="adminKinds" data-team-pane="group"></section>
-
-    <section class="panel admin-panel">
-      <div class="panel-head"><h2>Trainers</h2><span class="muted">Occupancy = booked hours of all open hours in the next ${LevelUp.BOOKING_WEEKS_AHEAD} weeks</span></div>
-      <div class="trainer-admin-grid" id="trainerCards"></div>
-    </section>
+    <section class="panel admin-panel" id="teamLog" data-team-pane="log"></section>
     </div>
 
     <div data-pane="room" id="adminRoom"></div>
@@ -270,6 +265,7 @@ async function render() {
     state.tabFromLink = true;
     state.tab = LevelUp.tabFromHash(root, ADMIN_TABS.map((t) => t.id)) || state.tab;
     if (location.hash === "#classes") { state.tab = "team"; state.teamKind = "group"; } // old links to the Group classes tab
+    if (location.hash === "#changes") { state.tab = "team"; state.teamKind = "log"; } // the notification "a coach changed something"
   }
   LevelUp.showPageTab(root, state.tab);
   renderApplications();
@@ -282,7 +278,6 @@ async function render() {
   renderPacks();
   renderRewards();
   renderCharts();
-  renderTrainerCards();
   renderHours();
   renderBookings();
   renderMembers();
@@ -348,19 +343,50 @@ root.addEventListener("click", async (event) => {
   } catch (err) { btn.disabled = false; alert(err.message); }
 });
 
-// ---------- Team: the week of every trainer (1:1 hours and group classes), and one place to plan, change and cancel ----------
+// ---------- Team: everyone on the team and what they give, the week, the 1:1 hours, the group classes, and what the coaches changed ----------
 const teamClasses = () => LevelUpClasses.list("admin") || data.classes || [];
-function teamKindHtml() {
+const TEAM_VIEWS = [
+  { id: "members", label: "Team", hint: "Every trainer: active or away, his 1:1 lessons and his group classes. Open a card to change its photo and text." },
+  { id: "week", label: "Week", hint: "The week of the whole team. Tap ＋ on a day to plan something, tap a class to change or cancel it." },
+  { id: "solo", label: "1:1 hours", hint: "The hours players can book each trainer, what is given in them and where. Below: the 1:1 cards on the home page." },
+  { id: "group", label: "Group classes", hint: "Plan, change or cancel a class, see who is coming, put several trainers on it. Below: the group cards on the home page." },
+  { id: "log", label: "Changes", hint: "What the coaches changed themselves. You also get a notification each time." }
+];
+let coachLog = { unread: 0, items: [], at: 0, loading: false, off: false };
+function teamTabsHtml() {
   const list = teamClasses();
-  const soon = list.filter((c) => c.status === "scheduled" && !c.canFinish).length;
-  const todo = list.filter((c) => c.canFinish).length;
-  const tile = (id, tag, label, note) => `
-    <button type="button" role="tab" class="hk-tile" data-team-kind="${id}" aria-selected="${state.teamKind === id}">
-      <b><span class="kind-tag">${tag}</span> <span>${label}</span></b><small>${note}</small>
-    </button>`;
-  return `
-    ${tile("solo", "1:1", "Personal training", "The hours players can book each trainer, and what is given in them")}
-    ${tile("group", "Group", "Group classes", `${soon ? `${soon} planned` : "None planned"}${todo ? ` · ${todo} to finish` : ""}`)}`;
+  const count = {
+    group: list.filter((c) => c.canFinish).length + list.reduce((n, c) => n + (c.refunds?.length || 0), 0),
+    log: coachLog.unread
+  };
+  return TEAM_VIEWS.filter((v) => v.id !== "log" || !coachLog.off).map((v) => `
+    <button type="button" role="tab" data-team-kind="${v.id}" aria-selected="${state.teamKind === v.id}">${v.label}${count[v.id] ? ` <span class="count-chip">${count[v.id]}</span>` : ""}</button>`).join("");
+}
+// Plan something for a trainer: a group class (the class form) or 1:1 hours (the hours form)
+function teamPlan(what, { date, trainerId } = {}) {
+  if (what === "class") {
+    showTeamKind("group");
+    LevelUpClasses.create({ date: date || undefined, trainerId }, "admin");
+    focusClassForm();
+    return;
+  }
+  state.hoursList = true; // the list has the form with every field; the planner is one tap away
+  showTeamKind("solo");
+  LevelUpHours.start("admin", { type: what, date: date || "", weekday: date ? LevelUp.parseDate(date).getDay() : undefined, trainerId });
+}
+function focusClassForm() {
+  setTimeout(() => { const form = document.querySelector("#adminClasses form.gc-form:not(.gc-edit)"); form?.scrollIntoView({ block: "start", behavior: "smooth" }); form?.elements.title?.focus({ preventScroll: true }); }, 60);
+}
+function teamOpenHours(trainerId) {
+  state.hoursList = true; // the list, on that trainer's card
+  showTeamKind("solo");
+  LevelUpHours.show("admin", trainerId);
+  document.getElementById("hoursPanel").scrollIntoView({ block: "start", behavior: "smooth" });
+}
+function teamOpenClass(id) {
+  showTeamKind("group");
+  LevelUpClasses.show(id, "admin");
+  setTimeout(() => document.querySelector(`#adminClasses [data-gc="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
 }
 function renderTeam() {
   const week = document.getElementById("teamWeek");
@@ -373,44 +399,247 @@ function renderTeam() {
     help: "The 1:1 hours and the group classes of every trainer. Tap ＋ on a day to plan something, tap a group class to see who is coming, change or cancel it.",
     bookings: () => data.bookings,
     classes: teamClasses,
-    onClass: (id) => {
-      showTeamKind("group");
-      LevelUpClasses.show(id, "admin");
-      setTimeout(() => document.querySelector(`#adminClasses [data-gc="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
-    },
-    onSolo: (trainerId) => {
-      state.hoursList = true; // the list, on that trainer's card
-      showTeamKind("solo");
-      LevelUpHours.show("admin", trainerId);
-      document.getElementById("hoursPanel").scrollIntoView({ block: "start", behavior: "smooth" });
-    },
-    onPlan: (what, { date, trainerId }) => {
-      if (what === "class") {
-        showTeamKind("group");
-        LevelUpClasses.create({ date: date || undefined, trainerId }, "admin");
-        setTimeout(() => { const form = document.querySelector("#adminClasses form.gc-form:not(.gc-edit)"); form?.scrollIntoView({ block: "start", behavior: "smooth" }); form?.elements.title?.focus({ preventScroll: true }); }, 60);
-        return;
-      }
-      state.hoursList = true; // the list has the form with every field; the planner is one tap away
-      showTeamKind("solo");
-      LevelUpHours.start("admin", { type: what, date: date || "", weekday: date ? LevelUp.parseDate(date).getDay() : undefined, trainerId });
-    }
+    onClass: teamOpenClass,
+    onSolo: teamOpenHours,
+    onPlan: teamPlan
   });
-  document.getElementById("teamKind").innerHTML = teamKindHtml();
-  document.getElementById("kindRequests").innerHTML = kindRequestsHtml();
+  const requests = kindRequestsHtml();
+  document.getElementById("kindRequests").innerHTML = requests;
+  document.getElementById("teamTop").hidden = !requests;
+  renderTeamMembers();
+  renderTeamLog();
   showTeamKind(state.teamKind, false);
+  if (!coachLog.loading && Date.now() - coachLog.at > 20000) loadCoachLog(state.tab === "team" && state.teamKind === "log");
 }
-// Show the 1:1 hours or the group classes below the team week
+// One of the views of the Team tab
 function showTeamKind(kind, draw = true) {
+  if (!TEAM_VIEWS.some((v) => v.id === kind)) kind = "members";
   state.teamKind = kind;
   root.querySelectorAll("[data-team-pane]").forEach((el) => { el.hidden = el.dataset.teamPane !== kind; });
-  root.querySelectorAll("#teamKind [data-team-kind]").forEach((el) => el.setAttribute("aria-selected", String(el.dataset.teamKind === kind)));
+  const tabs = document.getElementById("teamKind");
+  if (tabs) tabs.innerHTML = teamTabsHtml();
+  const hint = document.getElementById("teamHint");
+  if (hint) hint.textContent = TEAM_VIEWS.find((v) => v.id === kind).hint;
   if (draw && kind === "solo") renderHours();
+  if (draw && kind === "week") LevelUpWeek.refresh("team"); // it measures nothing, but a class may have changed meanwhile
+  if (draw && kind === "log") { renderTeamLog(); if (coachLog.unread) loadCoachLog(true); }
 }
-LevelUpClasses.onChange((key) => { // a class was planned, changed or cancelled: the week and the counter follow
+LevelUpClasses.onChange((key) => { // a class was planned, changed or cancelled: the week, the counters and the team follow
   if (key !== "admin" || !document.getElementById("teamWeek")) return;
   LevelUpWeek.refresh("team");
-  document.getElementById("teamKind").innerHTML = teamKindHtml();
+  document.getElementById("teamKind").innerHTML = teamTabsHtml();
+  renderTeamMembers();
+});
+
+// What the coaches changed. seen = the admin is looking at the list: the counter goes back to zero.
+async function loadCoachLog(seen = false) {
+  coachLog.loading = true;
+  try {
+    const res = await LevelUp.adminCoachLog(seen);
+    coachLog = { unread: seen ? 0 : res.unread || 0, items: res.items || [], at: Date.now(), loading: false, off: false };
+  } catch (err) {
+    coachLog = { ...coachLog, at: Date.now(), loading: false, off: true }; // a database without the log: the view stays away
+  }
+  const tabs = document.getElementById("teamKind");
+  if (tabs) tabs.innerHTML = teamTabsHtml();
+  renderTeamLog();
+  renderTeamMembers();
+  const top = root.querySelector('[data-page-tab="team"]'); // the counter on the Team tab itself
+  if (top) {
+    const n = adminTabs().find((t) => t.id === "team").badge;
+    top.querySelector(".tab-badge")?.remove();
+    if (n) top.insertAdjacentHTML("beforeend", `<span class="tab-badge">${n}</span>`);
+  }
+}
+function renderTeamLog() {
+  const el = document.getElementById("teamLog");
+  if (!el) return;
+  const when = (iso) => { const d = new Date(iso); return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`; };
+  el.innerHTML = `
+    <div class="panel-head"><h2>Changes by the coaches</h2><span class="muted">Hours, group classes, moved sessions, new kinds of training, active or away. The last 30 days.</span></div>
+    ${coachLog.items.length ? `<ul class="coach-log">${coachLog.items.map((l) => {
+      const t = LevelUp.trainerById(l.trainerId);
+      return `
+      <li class="${l.unread ? "unread" : ""}" style="--c:${t?.chartColor || "var(--line)"}">
+        ${t ? `<img src="${t.img}" alt="">` : `<span class="cl-noimg"></span>`}
+        <div><p><b>${esc(t?.short || l.trainerId || "Coach")}</b> · ${esc(l.title)} ${l.unread ? `<span class="status-chip pending">New</span>` : ""}</p>
+          ${l.detail ? `<p class="muted small">${esc(l.detail)}</p>` : ""}
+          <p class="muted small cl-when">${when(l.at)}</p></div>
+      </li>`; }).join("")}</ul>` : `<p class="coach-empty">No changes by the coaches yet. When a coach changes his hours or a class, you see it here and you get a notification.</p>`}`;
+}
+
+// The team, one card per trainer: active or away, his numbers, his 1:1 lessons with their hours and his group classes.
+// Every lesson has its card (photo and text on the home page) one tap away.
+function hoursLine(h) {
+  const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const hh = (n) => `${String(n).padStart(2, "0")}:00`;
+  const day = h.date ? LevelUp.parseDate(h.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : `Every ${DAY[h.weekday]}`;
+  return `${day} <span class="nw">${hh(h.start)}–${hh(h.end)}</span>${h.location ? ` · 📍 ${esc(LevelUp.shortPlace(h.location))}` : ""}`;
+}
+function memberLessons(t, cards) {
+  const today = LevelUp.dateKey();
+  const key = LevelUp.kindKey;
+  const rows = (LevelUp.getOpeningHours() || []).filter((h) => h.trainerId === t.id && h.kind === "open" && (!h.date || h.date >= today))
+    .sort((a, b) => (a.date ? 1 : 0) - (b.date ? 1 : 0) || String(a.date || "").localeCompare(String(b.date || "")) || ((a.weekday + 6) % 7) - ((b.weekday + 6) % 7) || a.start - b.start);
+  const solo = [];
+  rows.forEach((h) => {
+    const title = h.activity || "Personal training";
+    let item = solo.find((x) => x.key === key(title));
+    if (!item) {
+      item = { key: key(title), title, hours: [], pending: false, card: h.activity ? cards.solo.find((c) => c.key === key(title)) : null };
+      solo.push(item);
+    }
+    item.hours.push(h);
+    if (h.pending) item.pending = true;
+  });
+  const group = [];
+  teamClasses().filter((c) => c.status === "scheduled" && LevelUp.classCoaches(c).includes(t.id)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).forEach((c) => {
+    let item = group.find((x) => x.key === key(c.title));
+    if (!item) { item = { key: key(c.title), title: c.title, classes: [], card: cards.group.find((k) => k.key === key(c.title)) || cards.solo.find((k) => k.key === key(c.title)) }; group.push(item); }
+    item.classes.push(c);
+  });
+  return { solo, group };
+}
+function lessonHtml(t, item, kind) {
+  const card = item.card;
+  const id = `${t.id}|${item.key}`;
+  const open = state.teamCard === id && card;
+  const img = card?.photoUrl || card?.stdImg || "";
+  const next = kind === "group" ? item.classes.find((c) => !c.canFinish) || item.classes[0] : null;
+  const withWho = next ? LevelUp.classCoaches(next).filter((x) => x !== t.id) : [];
+  return `
+    <li class="tm-lesson ${open ? "open" : ""}" data-tm-lesson="${esc(id)}">
+      <div class="tm-photo">${img ? `<img src="${esc(img)}" alt="">` : `<span>${kind === "group" ? "Standard photo" : "1:1"}</span>`}</div>
+      <div class="tm-what">
+        <p class="tm-title"><b>${esc(item.title)}</b> <span class="kind-tag">${kind === "group" ? "Group" : "1:1"}</span>${item.pending ? ` <span class="status-chip pending">⏳ To approve</span>` : ""}${card?.hidden ? ` <span class="status-chip declined">Card hidden</span>` : ""}</p>
+        ${kind === "solo" ? `<ul class="tm-hours">${item.hours.map((h) => `
+          <li><span>${hoursLine(h)}</span><button type="button" class="link-btn" data-team-to-group="${esc(String(h.id))}" title="Turn these 1:1 hours into a group class">→ Group class</button></li>`).join("")}</ul>` : `
+        <p class="muted small">${item.classes.length === 1 ? "1 class planned" : `${item.classes.length} classes planned`} · next: <span class="nw">${fmtDate(next.date)} ${esc(next.time)}</span> · ${next.taken}/${next.capacity} in${withWho.length ? ` · with ${esc(LevelUp.coachNames(withWho))}` : ""}${next.location && next.location !== LevelUp.defaultPlace() ? ` · 📍 ${esc(LevelUp.shortPlace(next.location))}` : ""}</p>`}
+      </div>
+      <div class="tm-actions">
+        ${kind === "solo" ? `<button type="button" class="btn btn-small btn-ghost" data-team-hours="${t.id}">Hours</button>` : `<button type="button" class="btn btn-small btn-ghost" data-team-class="${esc(next.id)}">Classes</button>`}
+        ${card ? `<button type="button" class="btn btn-small btn-ghost" data-team-card="${esc(id)}" aria-expanded="${Boolean(open)}">Photo &amp; text</button>` : ""}
+        ${kind === "group" ? `<button type="button" class="btn btn-small btn-ghost tm-danger" data-team-delete="${esc(item.key)}" data-title="${esc(item.title)}">Delete</button>`
+          : `<button type="button" class="btn btn-small btn-ghost tm-danger" data-team-drop="${esc(id)}" data-title="${esc(item.title)}">Delete</button>`}
+      </div>
+      ${open ? `<ul class="kind-list tm-card">${kindRowHtml(card)}</ul>` : ""}
+    </li>`;
+}
+function renderTeamMembers() {
+  const el = document.getElementById("teamMembers");
+  if (!el) return;
+  if (el.querySelector("textarea:focus")) return; // don't redraw while typing
+  const cards = kindCards();
+  const unread = coachLog.unread;
+  el.innerHTML = `
+    <div class="panel-head"><h2>Your team</h2><span class="muted">${TRAINERS.filter((t) => LevelUp.trainerAvailable(t.id)).length} of ${TRAINERS.length} active</span></div>
+    ${unread ? `<button type="button" class="tm-news" data-team-kind="log">🔔 <span><b>${unread === 1 ? "1 change" : `${unread} changes`} by your coaches</b> since you last looked</span><span class="tm-news-go">See ›</span></button>` : ""}
+    <div class="tm-grid">${TRAINERS.map((t) => {
+      const s = LevelUp.trainerStats(t.id);
+      const occ = occupancy(t);
+      const mine = data.bookings.filter((b) => b.trainerId === t.id);
+      const next = mine.find(isUpcoming);
+      const on = LevelUp.trainerAvailable(t.id);
+      const { solo, group } = memberLessons(t, cards);
+      // his standard cards on the home page (CrossFit, Calisthenics …) that have no lesson line of their own above
+      const own = LevelUp.PERSONAL_TRAININGS.filter((p) => p.trainer === t.id).map((p) => cards.solo.find((c) => c.key === LevelUp.kindKey(p.title)))
+        .filter((c) => c && !solo.concat(group).some((x) => x.key === c.key && x.card));
+      const extra = own.find((c) => `${t.id}|${c.key}` === state.teamCard);
+      return `
+      <article class="tm-card-wrap trainer-admin ${on ? "" : "tm-away"}" style="--c:${t.chartColor}" data-tm="${t.id}">
+        <div class="trainer-admin-head">
+          <span class="coach-face"><img src="${t.img}" alt="">${LevelUp.coachLight(t.id)}</span>
+          <div>
+            <h3>${esc(t.name)}</h3>
+            <p class="muted">${esc(t.role)}</p>
+            <span class="rank-badge" data-tier="${RANKS.indexOf(s.rank)}">LVL ${s.level} · ${s.rank.title}</span>
+          </div>
+          <button type="button" class="coach-switch ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-team-available="${t.id}" title="Active: players can book. Away: no new bookings, what is planned stays.">
+            <span class="cs-track"><i></i></span><span class="cs-text"><b>${on ? "Active" : "Away"}</b></span></button>
+        </div>
+        <div class="trainer-admin-stats">
+          <div><span class="kpi-label">Sessions</span><strong>${s.sessions}</strong></div>
+          <div><span class="kpi-label">Players</span><strong>${s.clients}</strong></div>
+          <div><span class="kpi-label">Upcoming</span><strong>${mine.filter(isUpcoming).length}</strong></div>
+        </div>
+        <div class="meter-row" title="Booked hours of all open hours in the next ${LevelUp.BOOKING_WEEKS_AHEAD} weeks">
+          <span class="kpi-label">Occupancy</span>
+          <span class="meter" aria-hidden="true"><i style="width:${occ.pct.toFixed(1)}%"></i></span>
+          <span class="meter-value">${occ.booked}/${occ.open} h · ${Math.round(occ.pct)}%</span>
+        </div>
+        <p class="muted trainer-next">${next ? `Next: ${slotLabel(next)} with ${esc(next.name)}` : "No upcoming sessions"}</p>
+
+        <h4 class="tm-sub">1:1 lessons <span class="muted">${solo.length ? "" : "· none yet"}</span></h4>
+        ${solo.length ? `<ul class="tm-lessons">${solo.map((x) => lessonHtml(t, x, "solo")).join("")}</ul>` : ""}
+        ${own.length ? `<p class="tm-own"><span class="muted small">His 1:1 cards on the home page:</span> ${own.map((c) => `<button type="button" class="tm-chip ${c.hidden ? "off" : ""}" data-team-card="${esc(`${t.id}|${c.key}`)}" aria-expanded="${extra === c}">${esc(c.title)}${c.hidden ? " (hidden)" : ""}</button>`).join("")}</p>` : ""}
+        ${extra ? `<ul class="kind-list tm-card">${kindRowHtml(extra)}</ul>` : ""}
+        <h4 class="tm-sub">Group classes <span class="muted">${group.length ? "" : "· none planned"}</span></h4>
+        ${group.length ? `<ul class="tm-lessons">${group.map((x) => lessonHtml(t, x, "group")).join("")}</ul>` : ""}
+        <div class="btn-row tm-plan">
+          <button type="button" class="btn btn-small btn-ghost" data-team-plan="weekly" data-trainer="${t.id}">＋ 1:1 hours</button>
+          <button type="button" class="btn btn-small btn-ghost" data-team-plan="class" data-trainer="${t.id}">＋ Group class</button>
+          <button type="button" class="btn btn-small btn-ghost" data-team-plan="closed" data-trainer="${t.id}">＋ Day off</button>
+        </div>
+      </article>`;
+    }).join("")}</div>
+    <p class="form-error" role="alert">${esc(kindsError)}</p>`;
+}
+root.addEventListener("click", async (event) => {
+  const el = event.target.closest("[data-team-available], [data-team-hours], [data-team-class], [data-team-card], [data-team-plan], [data-team-to-group], [data-team-delete], [data-team-drop]");
+  if (!el) return;
+  const d = el.dataset;
+  if (d.teamHours) return teamOpenHours(d.teamHours);
+  if (d.teamClass) return teamOpenClass(d.teamClass);
+  if (d.teamPlan) return teamPlan(d.teamPlan, { trainerId: d.trainer });
+  if (d.teamCard) { state.teamCard = state.teamCard === d.teamCard ? "" : d.teamCard; renderTeamMembers(); return; }
+  if (d.teamToGroup) {
+    const h = (LevelUp.getOpeningHours() || []).find((x) => String(x.id) === d.teamToGroup);
+    if (!h) return;
+    let date = h.date;
+    if (!date) { const day = new Date(); do { day.setDate(day.getDate() + 1); } while (day.getDay() !== h.weekday); date = LevelUp.dateKey(day); }
+    showTeamKind("group");
+    LevelUpClasses.create({ fromHours: h.id, fromLabel: hoursLine(h).replace(/<[^>]+>/g, ""), title: h.activity || "", trainerId: h.trainerId, date, time: `${String(h.start).padStart(2, "0")}:00`,
+      repeatWeeks: h.date ? 1 : 8, location: h.location || "" }, "admin");
+    focusClassForm();
+    return;
+  }
+  if (d.teamAvailable) {
+    const t = LevelUp.trainerById(d.teamAvailable);
+    const on = !LevelUp.trainerAvailable(t.id);
+    if (!on && !confirm(`Set ${t.short} to away? Players can't book ${t.short} until you (or ${t.short}) switch it back on. What is planned stays.`)) return;
+    el.disabled = true;
+    try {
+      await LevelUp.setTrainerAvailable(t.id, on);
+      LevelUp.toast(on ? { title: `${t.short} is active`, text: "Players can book again", icon: "🟢", tone: "green" } : { title: `${t.short} is away`, text: "No new bookings for now", icon: "⏸" });
+    } catch (err) { el.disabled = false; alert(err.message); }
+    renderTeamMembers();
+    return;
+  }
+  if (d.teamDrop) { // a 1:1 lesson of one trainer goes: all the hours he gives it in
+    const [trainerId, key] = d.teamDrop.split("|");
+    const t = LevelUp.trainerById(trainerId);
+    const today = LevelUp.dateKey();
+    const rows = (LevelUp.getOpeningHours() || []).filter((h) => h.trainerId === trainerId && h.kind === "open" && (!h.date || h.date >= today) && LevelUp.kindKey(h.activity || "Personal training") === key);
+    if (!rows.length || !confirm(`Delete the 1:1 lesson "${d.title}" of ${t.short}?\n\n${rows.length === 1 ? "His hours for it are" : `His ${rows.length} blocks of hours for it are`} removed, so players can no longer book it with him. Sessions that are already booked must be moved or cancelled first.`)) return;
+    el.disabled = true;
+    try {
+      for (const h of rows) await LevelUp.deleteOpeningHours(h.id);
+      LevelUp.toast({ title: `${d.title} removed`, text: `${t.short} no longer gives it 1:1`, icon: "🗑" });
+    } catch (err) { alert(err.message); }
+    renderTeamMembers();
+    return;
+  }
+  if (d.teamDelete) {
+    const n = teamClasses().filter((c) => c.status === "scheduled" && LevelUp.kindKey(c.title) === d.teamDelete).length;
+    const reason = prompt(`Delete "${d.title}" for the whole team?\n\n• ${n === 1 ? "1 planned class is" : `${n} planned classes are`} cancelled; who signed up gets a message and paid places are refunded\n• its group chat is deleted\n• its card leaves the home page\n\nWhy (shown to the players, may stay empty):`, "");
+    if (reason === null) return;
+    el.disabled = true;
+    try {
+      const res = await LevelUp.adminClassKindDelete(d.teamDelete, reason);
+      await LevelUpClasses.reload("admin");
+      LevelUp.toast({ title: `${d.title} deleted`, text: `${res?.cancelled || 0} classes cancelled, chat and card removed`, icon: "🗑" });
+    } catch (err) { el.disabled = false; alert(err.message); }
+  }
 });
 
 // ---------- Group trainings on the home page: one card per kind of class, with your own text and photo ----------
@@ -457,6 +686,7 @@ function renderKinds() {
   if (!box || !soloBox) return;
   if (!kindsLoaded) { kindsLoaded = true; LevelUp.loadClassKinds().then(renderKinds); }
   if (root.querySelector(".kind-form textarea:focus")) return; // don't redraw while typing
+  renderTeamMembers();
   const { solo, group } = kindCards();
   soloBox.innerHTML = `
     <div class="panel-head"><h2>Personal trainings on the home page</h2></div>
@@ -530,7 +760,7 @@ function adminTabs() {
   const badge = {
     overview: data.applications.filter((a) => a.status === "pending").length + data.reviews.filter((r) => r.status === "pending").length,
     bookings: data.rawBookings.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length,
-    team: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0) + pendingKinds().length, // classes to finish or to refund, new trainings to approve
+    team: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0) + pendingKinds().length + coachLog.unread, // classes to finish or to refund, new trainings to approve, changes by the coaches
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
       + data.rawBookings.filter((b) => b.refundStatus === "manual").length,
@@ -1331,39 +1561,6 @@ function occupancy(trainer) {
   return { open, booked, pct: open ? (booked / open) * 100 : 0 };
 }
 
-function renderTrainerCards() {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  document.getElementById("trainerCards").innerHTML = TRAINERS.map((t) => {
-    const s = LevelUp.trainerStats(t.id);
-    const occ = occupancy(t);
-    const own = data.bookings.filter((b) => b.trainerId === t.id);
-    const next = own.find(isUpcoming);
-    const hours = LevelUp.weeklyHoursText(t.id) || "no weekly hours";
-    return `
-      <article class="trainer-admin" style="--c:${t.chartColor}">
-        <div class="trainer-admin-head">
-          <img src="${t.img}" alt="">
-          <div>
-            <h3>${esc(t.name)}</h3>
-            <p class="muted">${esc(t.role)} · ${hours}</p>
-            <span class="rank-badge" data-tier="${RANKS.indexOf(s.rank)}">LVL ${s.level} · ${s.rank.title}</span>
-          </div>
-        </div>
-        <div class="trainer-admin-stats">
-          <div><span class="kpi-label">Sessions</span><strong>${s.sessions}</strong></div>
-          <div><span class="kpi-label">Players</span><strong>${s.clients}</strong></div>
-          <div><span class="kpi-label">Upcoming</span><strong>${own.filter(isUpcoming).length}</strong></div>
-        </div>
-        <div class="meter-row">
-          <span class="kpi-label">Occupancy</span>
-          <span class="meter" aria-hidden="true"><i style="width:${occ.pct.toFixed(1)}%"></i></span>
-          <span class="meter-value">${occ.booked}/${occ.open} h · ${Math.round(occ.pct)}%</span>
-        </div>
-        <p class="muted trainer-next">${next ? `Next: ${slotLabel(next)} with ${esc(next.name)}` : "No upcoming sessions"}</p>
-      </article>`;
-  }).join("");
-}
-
 // ---------- Opening hours (shared editor in hours-editor.js) ----------
 function renderHours() {
   const el = document.getElementById("hoursPanel");
@@ -1576,7 +1773,12 @@ root.addEventListener("click", (event) => {
     return;
   }
   const teamKind = event.target.closest("[data-team-kind]");
-  if (teamKind) { showTeamKind(teamKind.dataset.teamKind); return; }
+  if (teamKind) {
+    showTeamKind(teamKind.dataset.teamKind);
+    const bar = document.getElementById("teamKind"); // the bar sticks: bring the top of the new view below it
+    if (document.getElementById("teamHint").getBoundingClientRect().top < bar.getBoundingClientRect().bottom) bar.scrollIntoView({ block: "start" });
+    return;
+  }
   if (event.target.closest("[data-hours-planner]")) {
     state.hoursList = false;
     renderHours();

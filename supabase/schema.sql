@@ -98,6 +98,8 @@ create table if not exists public.trainers (
 -- A trainer's account (by email): coaching XP goes to that account, so the
 -- level on the team card and in the profile is the same
 alter table public.trainers add column if not exists email text;
+-- A coach can set himself away (holiday, ill …): no new 1:1 bookings until he switches back on. What is planned stays.
+alter table public.trainers add column if not exists available boolean not null default true;
 alter table public.trainers add column if not exists role text;
 alter table public.trainers add column if not exists bio text;
 alter table public.trainers add column if not exists specialties text;
@@ -751,6 +753,8 @@ create table if not exists public.class_signups (
   unique (class_id, user_id)
 );
 create index if not exists class_signups_user_idx on public.class_signups (user_id);
+-- More than one trainer can give a class: trainer_id leads it (and gets the fee), co_trainers give it with him
+alter table public.class_sessions add column if not exists co_trainers text[] not null default '{}';
 create index if not exists class_signups_class_idx on public.class_signups (class_id, status, updated_at);
 
 -- ---------------------------------------------------------
@@ -1379,6 +1383,7 @@ begin
   perform public._expire_requests();
   select * into t from public.trainers where id = p_trainer and active;
   if not found then raise exception 'This trainer is not available.'; end if;
+  if not t.available then raise exception '% is away for now and takes no new bookings.', split_part(t.name, ' ', 1); end if;
   if p_hour < 0 or p_hour > 23 then raise exception 'Invalid time.'; end if;
   if p_kind not in ('solo', 'duo') then raise exception 'Invalid session type.'; end if;
   if p_kind = 'duo' and trim(coalesce(p_partner, '')) = '' then raise exception 'Enter the name of the person you train with.'; end if;
@@ -1721,13 +1726,15 @@ begin
       if why is not null then raise exception 'That moment is not possible: %.', why; end if;
       update public.bookings set moved_from = was, day = p_day, hour = p_hour, reminder_pushed_at = null where id = b.id;
       perform public._push(b.user_id, '📅 Session moved',
-        trainer || ' · ' || was || ' → ' || public._slot_label(p_day, p_hour)
-          || case when b.series_id is not null then ' · this week only' else '' end, 'profile.html#overview', 'move-' || b.id);
+        public._slot_what(b.trainer_id, p_day, p_hour) || ' · ' || trainer || ' · ' || was || ' → ' || public._slot_label(p_day, p_hour)
+          || case when b.series_id is not null then ' · this week only' else '' end
+          || ' · 📍 ' || public._slot_place(b.trainer_id, p_day, p_hour), 'profile.html#overview', 'move-' || b.id);
     end if;
   exception when unique_violation then
     raise exception 'That moment is already taken.';
   end;
   select * into b from public.bookings where id = p_id;
+  perform public._coach_changed(b.trainer_id, 'Session moved', (select name from public.profiles where id = b.user_id) || ' · ' || public._slot_label(b.day, b.hour));
   return public._booking_json(b);
 end $$;
 
@@ -3153,12 +3160,13 @@ end $$;
 -- Every active trainer for the website (never emails)
 -- avatar_url: the profile photo of the coach's own account. One photo per coach: the one they put on their page
 -- is also the one on their coach card, in the calendar and in the chat (the site falls back to the card's own photo).
-drop function if exists public.trainer_list(); -- the columns changed (avatar_url)
+drop function if exists public.trainer_list(); -- the columns changed (avatar_url, available)
 create or replace function public.trainer_list()
-returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean, avatar_url text)
+returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean, avatar_url text, available boolean)
 language sql stable security definer set search_path = public as $$
   select t.id, t.name, t.role, t.bio, t.specialties, t.color, t.chart_color, t.email is not null,
-         (select p.avatar_url from public.profiles p where t.email is not null and lower(p.email) = lower(t.email) limit 1)
+         (select p.avatar_url from public.profiles p where t.email is not null and lower(p.email) = lower(t.email) limit 1),
+         t.available
   from public.trainers t where t.active order by t.created_at, t.id;
 $$;
 
@@ -3392,6 +3400,7 @@ begin
         'profile.html#overview', 'place-' || b.id);
     end loop;
   end if;
+  perform public._coach_changed(p_trainer, case when p_id is null then 'New hours' else 'Hours changed' end, public._hours_line(h));
   return to_jsonb(h) || jsonb_build_object('pending', not public._kind_ok(h.activity));
 end $$;
 
@@ -3400,13 +3409,16 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   t text;
   before uuid[];
+  h public.trainer_hours;
 begin
-  select trainer_id into t from public.trainer_hours where id = p_id;
+  select * into h from public.trainer_hours where id = p_id;
+  t := h.trainer_id;
   if t is null then raise exception 'These hours no longer exist.'; end if;
   before := public._covered_bookings(t);
   delete from public.trainer_hours where id = p_id and public._can_coach(trainer_id);
   if not found then raise exception 'These hours no longer exist.'; end if;
   perform public._check_booked_hours(t, before);
+  perform public._coach_changed(t, 'Hours removed', public._hours_line(h));
 end $$;
 
 -- ---------------------------------------------------------
@@ -3823,6 +3835,124 @@ returns text language sql immutable as $$
 $$;
 
 -- Booking changes -> messages for the player or the trainer
+-- ---------------------------------------------------------
+-- What the coaches change: a line per change for the admin (Admin → Team), with a notification
+-- ---------------------------------------------------------
+create table if not exists public.coach_log (
+  id bigserial primary key,
+  trainer_id text references public.trainers (id) on delete cascade,
+  user_id uuid references public.profiles (id) on delete set null,
+  title text not null,
+  detail text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table public.coach_log enable row level security;
+revoke all on public.coach_log from anon, authenticated;
+
+-- Called wherever a coach changes his hours, a class, his place or whether he takes clients. The admin's own
+-- changes are not logged: he knows those.
+create or replace function public._coach_changed(p_trainer text, p_title text, p_detail text default '')
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  admin_id uuid;
+  who text := coalesce((select split_part(name, ' ', 1) from public.trainers where id = p_trainer), 'A coach');
+  nid bigint;
+  tu uuid;
+begin
+  if auth.uid() is null then return; end if;
+  if public.is_admin() then -- the admin changed something for a coach: that coach hears it (not for the admin's own card)
+    tu := public._trainer_user(p_trainer);
+    if tu is not null and tu <> auth.uid() then
+      perform public._push(tu, '🗓️ LEVEL-UP changed your schedule', p_title || case when coalesce(p_detail, '') <> '' then ' · ' || p_detail else '' end,
+        'profile.html#coach', 'adm-' || p_trainer || '-' || md5(p_title));
+    end if;
+    return;
+  end if;
+  insert into public.coach_log (trainer_id, user_id, title, detail)
+  values (p_trainer, auth.uid(), left(p_title, 80), left(coalesce(p_detail, ''), 300)) returning id into nid;
+  for admin_id in select p.id from public.profiles p
+      where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) loop
+    perform public._push(admin_id, who || ': ' || p_title, coalesce(p_detail, ''), 'admin.html#changes', 'coach-' || nid);
+  end loop;
+end $$;
+-- Hours as one line: "every Tuesday 18:00–20:00 · Boxing · 📍 Big room", "Thu 03 Dec · day off"
+create or replace function public._hours_line(h public.trainer_hours)
+returns text language sql stable security definer set search_path = public as $$
+  select case when h.day is not null then to_char(h.day, 'Dy DD Mon')
+              else 'every ' || (array['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'])[h.weekday + 1] end
+      || case when h.kind = 'closed' and h.start_hour = 0 and h.end_hour = 24 then ' · day off'
+              else ' ' || lpad(h.start_hour::text, 2, '0') || ':00–' || lpad(h.end_hour::text, 2, '0') || ':00'
+                   || case when h.kind = 'closed' then ' · closed'
+                           else ' · ' || coalesce(nullif(h.activity, ''), 'Personal training') || ' · 📍 ' || coalesce(nullif(h.location, ''), public._default_place()) end end;
+$$;
+revoke execute on function public._coach_changed(text, text, text) from public, anon, authenticated;
+
+-- Trainer applications: the admins hear of a new one, the applicant hears the answer
+create or replace function public._application_push()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  admin_id uuid;
+  who text;
+begin
+  if new.status = 'pending' and (tg_op = 'INSERT' or old.status is distinct from 'pending') then
+    select coalesce(nullif(btrim(p.name), ''), 'Someone') into who from public.profiles p where p.id = new.user_id;
+    for admin_id in select p.id from public.profiles p
+        where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) loop
+      perform public._push(admin_id, '🧑‍🏫 New trainer application', coalesce(who, 'Someone') || coalesce(' · ' || nullif(new.role_title, ''), ''),
+        'admin.html#applications', 'application-' || new.user_id);
+    end loop;
+  elsif tg_op = 'UPDATE' and old.status = 'pending' and new.status = 'approved' then
+    perform public._push(new.user_id, '✅ You are a coach on LEVEL-UP', 'Your application is approved. Open your coach panel to set your hours.',
+      'profile.html#coach', 'application-' || new.user_id);
+  elsif tg_op = 'UPDATE' and old.status = 'pending' and new.status = 'rejected' then
+    perform public._push(new.user_id, 'Your trainer application', 'It was not approved this time. You can update it and apply again in your profile.',
+      'profile.html', 'application-' || new.user_id);
+  end if;
+  return new;
+end $$;
+revoke execute on function public._application_push() from public, anon, authenticated;
+drop trigger if exists application_push on public.trainer_applications;
+create trigger application_push after insert or update of status on public.trainer_applications
+  for each row execute function public._application_push();
+revoke execute on function public._hours_line(public.trainer_hours) from public, anon, authenticated;
+
+-- A coach (or the admin for him) switches between "active: taking clients" and "away"
+create or replace function public.set_trainer_available(p_trainer text, p_on boolean)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not public._can_coach(p_trainer) then raise exception 'Only the coach or an admin can change this.'; end if;
+  update public.trainers set available = coalesce(p_on, true) where id = p_trainer and available is distinct from coalesce(p_on, true);
+  if found then
+    perform public._coach_changed(p_trainer, case when coalesce(p_on, true) then '▶ Active again' else '⏸ Away for now' end,
+      case when coalesce(p_on, true) then 'Players can book again.' else 'No new bookings until switched back on. What is planned stays.' end);
+  end if;
+  return coalesce(p_on, true);
+end $$;
+revoke execute on function public.set_trainer_available(text, boolean) from public, anon;
+grant execute on function public.set_trainer_available(text, boolean) to authenticated;
+
+-- The admin: the latest changes by the coaches, and how many are new since he last looked
+create or replace function public.admin_coach_log(p_seen boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare seen bigint := coalesce(nullif(public._config('coach_log_seen'), '')::bigint, 0);
+        newest bigint;
+        out jsonb;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select coalesce(max(id), 0) into newest from public.coach_log;
+  select jsonb_build_object('unread', (select count(*) from public.coach_log where id > seen),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'trainerId', l.trainer_id, 'title', l.title, 'detail', l.detail,
+                                'at', l.created_at, 'unread', l.id > seen) order by l.id desc)
+                       from (select * from public.coach_log order by id desc limit 40) l), '[]'::jsonb)) into out;
+  if p_seen then
+    insert into public.app_config (key, value) values ('coach_log_seen', newest::text)
+    on conflict (key) do update set value = excluded.value;
+  end if;
+  return out;
+end $$;
+revoke execute on function public.admin_coach_log(boolean) from public, anon;
+grant execute on function public.admin_coach_log(boolean) to authenticated;
+
 create or replace function public._push_booking_event()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
@@ -4452,12 +4582,7 @@ begin
   insert into public.class_kinds (key, title, status, proposed_by, proposed_trainer, proposed_at)
   values (k, btrim(p_name), st, auth.uid(), p_trainer, now()) on conflict do nothing;
   if st = 'pending' then
-    for admin_id in select p.id from public.profiles p
-        where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) loop
-      perform public._push(admin_id, '🆕 New kind of training to approve',
-        btrim(p_name) || coalesce(' · ' || (select split_part(name, ' ', 1) from public.trainers where id = p_trainer), ''),
-        'admin.html#team', 'kind-' || k);
-    end loop;
+    perform public._coach_changed(p_trainer, '🆕 New kind of training to approve', btrim(p_name));
   end if;
   return st;
 end $$;
@@ -4549,7 +4674,7 @@ begin
       perform public._broadcast('class',
         '📣 ' || c.title || ' · ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
         case when c.note <> '' then c.note || ' · ' else '' end
-          || 'With ' || (select split_part(name, ' ', 1) from public.trainers where id = c.trainer_id)
+          || 'With ' || public._class_coaches(c)
           || case when c.series_id is not null then ' · every week' else '' end || ' · Sign up in the app',
         'index.html#schedule', 'class-' || c.id, c.starts_at);
     end loop;
@@ -4577,7 +4702,8 @@ begin
              'hasClasses', x.n > 0, 'soloTrainers', s.solo, 'hidden', k.hidden) order by x.next_at nulls last, k.title)
     from public.class_kinds k
     cross join lateral (
-      select coalesce(jsonb_agg(distinct c.trainer_id), '[]'::jsonb) as trainers,
+      select coalesce((select jsonb_agg(distinct tr) from public.class_sessions c2 cross join lateral unnest(array[c2.trainer_id] || c2.co_trainers) tr
+                       where public._group_key(c2.title) = k.key and c2.status <> 'cancelled' and c2.starts_at > now() - interval '30 days'), '[]'::jsonb) as trainers,
              min(c.starts_at) filter (where c.status = 'scheduled' and c.starts_at > now()) as next_at,
              count(*) filter (where c.status = 'scheduled' and c.starts_at > now()) as upcoming,
              count(*) as n
@@ -4702,6 +4828,11 @@ returns setof uuid language sql stable security definer set search_path = public
   where p_key <> '@coaches' and public._group_key(c.title) = p_key and c.status <> 'cancelled'
     and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
     and public._trainer_user(c.trainer_id) is not null
+  union
+  select public._trainer_user(co) from public.class_sessions c cross join lateral unnest(c.co_trainers) co
+  where p_key <> '@coaches' and public._group_key(c.title) = p_key and c.status <> 'cancelled'
+    and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
+    and public._trainer_user(co) is not null
   union
   select public._trainer_user(t.id) from public.trainers t
   where p_key = '@coaches' and t.active and public._trainer_user(t.id) is not null
@@ -5112,10 +5243,45 @@ grant execute on function public.admin_grant_xp(uuid, integer, text) to authenti
 -- ---------------------------------------------------------
 
 -- "Wed 11 Nov 19:00" in Brussels time (pushes and payment descriptions)
+-- The trainers who give a class with the one who leads it: the ids in p -> 'coTrainers' that are real, without the lead
+create or replace function public._co_list(p jsonb, p_lead text)
+returns text[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct x), '{}'::text[])
+  from jsonb_array_elements_text(case when jsonb_typeof(p -> 'coTrainers') = 'array' then p -> 'coTrainers' else '[]'::jsonb end) x
+  where x <> p_lead and exists (select 1 from public.trainers t where t.id = x and t.active);
+$$;
+revoke execute on function public._co_list(jsonb, text) from public, anon, authenticated;
+
 create or replace function public._class_label(c public.class_sessions)
 returns text language sql stable as $$
   select to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI');
 $$;
+-- The first names of everyone who gives a class: "Lars & Filip" (the lead first)
+create or replace function public._class_coaches(c public.class_sessions)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce(string_agg(split_part(t.name, ' ', 1), ' & ' order by u.n), '')
+  from unnest(array[c.trainer_id] || c.co_trainers) with ordinality u(id, n) join public.trainers t on t.id = u.id;
+$$;
+revoke execute on function public._class_coaches(public.class_sessions) from public, anon, authenticated;
+-- A trainer who is put on a class next to the lead hears it
+create or replace function public._tell_co(c public.class_sessions, p_who text[], p_weekly boolean default false)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  co text;
+  u uuid;
+begin
+  foreach co in array coalesce(p_who, '{}'::text[]) loop
+    u := public._trainer_user(co);
+    if u is not null and u is distinct from auth.uid() then
+      perform public._push(u, '👥 You give a group class',
+        c.title || ' · ' || public._class_label(c) || case when p_weekly then ' · every week' else '' end
+          || ' · with ' || (select split_part(name, ' ', 1) from public.trainers where id = c.trainer_id)
+          || ' · 📍 ' || coalesce(nullif(c.location, ''), public._default_place()),
+        'profile.html#coach', 'co-' || c.id);
+    end if;
+  end loop;
+end $$;
+revoke execute on function public._tell_co(public.class_sessions, text[], boolean) from public, anon, authenticated;
 
 -- Places taken: booked, present, no-show, and (for a few minutes) waiting for an online payment
 create or replace function public._class_taken(p_class uuid)
@@ -5128,7 +5294,9 @@ $$;
 create or replace function public._can_lead(p_class uuid)
 returns boolean language plpgsql stable security definer set search_path = public as $$
 begin
-  return coalesce((select public._can_coach(c.trainer_id) from public.class_sessions c where c.id = p_class), false);
+  -- the trainer who leads it, a trainer who gives it with him, or an admin
+  return coalesce((select public._can_coach(c.trainer_id) or public._my_trainer() = any (c.co_trainers)
+                   from public.class_sessions c where c.id = p_class), false);
 end $$;
 
 -- A class as the website shows it, with the counts and (for p_user) their own place
@@ -5142,7 +5310,7 @@ begin
     select * into me from public.class_signups where class_id = c.id and user_id = p_user;
   end if;
   return jsonb_build_object(
-    'id', c.id, 'title', c.title, 'trainerId', c.trainer_id,
+    'id', c.id, 'title', c.title, 'trainerId', c.trainer_id, 'coTrainers', to_jsonb(c.co_trainers),
     'startsAt', c.starts_at, 'endsAt', ends, 'minutes', c.minutes,
     'date', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD'),
     'time', to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
@@ -5380,25 +5548,31 @@ begin
         skipped := skipped + 1; continue;
       end if;
     end if;
-    insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by, uses_room)
-    values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid, room)
+    insert into public.class_sessions (title, trainer_id, starts_at, minutes, capacity, price, trainer_fee, xp, location, note, series_id, created_by, uses_room, co_trainers)
+    values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid, room,
+            case when admin then public._co_list(p, trainer) else '{}'::text[] end) -- more trainers on one class: the admin decides
     returning * into c;
     insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
     perform public._kind_register(ttl, trainer); -- a new kind of class from a coach waits for the admin
     made := made || jsonb_build_array(public._class_json(c, uid));
     if first.id is null then first := c; end if;
   end loop;
+  if first.id is not null then perform public._tell_co(first, first.co_trainers, jsonb_array_length(made) > 1); end if;
   -- Tell everyone (one message, also for a weekly series): the name, when, the trainer's own words
   if first.id is not null and coalesce((p ->> 'announce')::boolean, true) and public._kind_ok(ttl) then
     reached := public._broadcast('class',
       '📣 ' || ttl || ' · ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
       case when remark <> '' then remark || ' · ' else '' end
-        || 'With ' || (select split_part(name, ' ', 1) from public.trainers where id = trainer)
+        || 'With ' || public._class_coaches(first)
         || case when jsonb_array_length(made) > 1 then ' · every week' else '' end || ' · Sign up in the app',
       'index.html#schedule', 'class-' || first.id, first.starts_at);
   end if;
   if first.id is not null and coalesce((p ->> 'announce')::boolean, true) and not public._kind_ok(ttl) then
     update public.class_sessions set announce_wait = true where id = first.id; -- announced when the admin approves this new kind
+  end if;
+  if first.id is not null then
+    perform public._coach_changed(trainer, 'New group class', ttl || ' · ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon HH24:MI')
+      || case when jsonb_array_length(made) > 1 then ' · every week (' || jsonb_array_length(made) || '×)' else '' end || ' · 📍 ' || loc);
   end if;
   return jsonb_build_object('created', made, 'skipped', skipped, 'announced', reached, 'pending', not public._kind_ok(ttl));
 end $$;
@@ -5436,6 +5610,8 @@ begin
     n := n + 1;
   end loop;
   if n = 0 then raise exception 'This class can no longer be cancelled.'; end if;
+  perform public._coach_changed(first.trainer_id, 'Group class cancelled', first.title || ' · ' || public._class_label(first)
+    || case when n > 1 then ' · ' || n || ' classes' else '' end || case when why <> '' then ' · ' || why else '' end);
   return jsonb_build_object('cancelled', n);
 end $$;
 
@@ -5461,6 +5637,7 @@ declare
   start timestamptz;
   taken integer;
   changed text := '';
+  was_co text[] := '{}';
   g record;
   room boolean;
   blocker text;
@@ -5513,8 +5690,10 @@ begin
     changed := changed || case when changed <> '' then ' · ' else '' end || 'Now with ' || (select split_part(name, ' ', 1) from public.trainers where id = trainer);
   end if;
   if ttl <> c.title and changed = '' then changed := 'Now called ' || ttl; end if;
+  was_co := c.co_trainers;
   update public.class_sessions set title = ttl, trainer_id = trainer, starts_at = start, minutes = mins, capacity = cap,
     price = cost, trainer_fee = fee, location = loc, note = remark, uses_room = room,
+    co_trainers = case when admin and p ? 'coTrainers' then public._co_list(p, trainer) else array_remove(co_trainers, trainer) end,
     reminder_pushed_at = case when start <> c.starts_at then null else reminder_pushed_at end
   where id = c.id returning * into c;
   insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
@@ -5527,8 +5706,33 @@ begin
       perform public._push(g.user_id, 'Class changed: ' || ttl, changed, 'profile.html#classes', 'class-' || c.id || '-changed');
     end loop;
   end if;
+  perform public._tell_co(c, array(select unnest(c.co_trainers) except select unnest(was_co)));
+  perform public._coach_changed(c.trainer_id, 'Group class changed', ttl || ' · ' || public._class_label(c) || case when changed <> '' then ' · ' || changed else '' end);
   return public._class_json(c, uid);
 end $$;
+
+-- The admin deletes a whole group training: every class of that name that is still to come is cancelled (who signed
+-- up hears it, paid places are refunded as with any cancelled class), its group chat goes, and so does its card,
+-- unless a trainer still gives it 1:1. Finished classes stay: the finances need them.
+create or replace function public.admin_class_kind_delete(p_key text, p_reason text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c record;
+  n integer := 0;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if coalesce(p_key, '') in ('', '@coaches') then raise exception 'Training not found.'; end if;
+  for c in select id from public.class_sessions where status = 'scheduled' and starts_at > now() and public._group_key(title) = p_key order by starts_at loop
+    perform public.class_cancel_class(c.id, p_reason, false);
+    n := n + 1;
+  end loop;
+  delete from public.chat_threads where group_key = p_key;
+  delete from public.class_kinds k where k.key = p_key
+    and not exists (select 1 from public.trainer_hours h where h.activity <> '' and public._group_key(h.activity) = p_key);
+  return jsonb_build_object('cancelled', n);
+end $$;
+revoke execute on function public.admin_class_kind_delete(text, text) from public, anon;
+grant execute on function public.admin_class_kind_delete(text, text) to authenticated;
 
 -- The class list for the trainer or an admin: everyone signed up and on the waitlist, with payment and health flags
 create or replace function public.class_roster(p_class uuid)
@@ -5644,7 +5848,7 @@ begin
                    from public.class_signups g join public.profiles p on p.id = g.user_id
                    where g.class_id = c.id and g.refund_status = 'manual'), '[]'::jsonb) else '[]'::jsonb end) order by c.starts_at)
     from public.class_sessions c
-    where (admin or c.trainer_id = mine)
+    where (admin or c.trainer_id = mine or mine = any (c.co_trainers))
       -- a coach's list goes two weeks back (tidy_days); a class that still has to be finished stays. The admin
       -- gets what he asks for: the finances need every finished class.
       and (c.starts_at >= now() - make_interval(days => case when admin then least(greatest(coalesce(p_days, 35), 1), 800)
@@ -6356,6 +6560,7 @@ begin
   get diagnostics n_chats = row_count;
   delete from public.trainer_hours where day is not null and day < today - public._tidy_days();
   get diagnostics n_hours = row_count;
+  delete from public.coach_log where created_at < now() - interval '30 days'; -- the admin's list of what coaches changed: a month
   return jsonb_build_object('classes', n_classes, 'chats', n_chats, 'hours', n_hours);
 end $$;
 revoke execute on function public._tidy_days() from public, anon, authenticated;

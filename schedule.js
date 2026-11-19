@@ -47,7 +47,7 @@ function boardHours(days, trainers) {
 
 // ---------- Group classes on the board ----------
 // The trainer filter applies to classes too; a trainer's own 1:1 hour during their class is hidden
-const shownClasses = (key) => LevelUp.classesOn(key).filter((c) => activeTrainer === "all" || c.trainerId === activeTrainer);
+const shownClasses = (key) => LevelUp.classesOn(key).filter((c) => activeTrainer === "all" || LevelUp.classCoaches(c).includes(activeTrainer));
 const classHour = (trainerId, key, hour) => LevelUp.findBooking(trainerId, key, hour)?.status === "class";
 const classOpenPlaces = (c) => Math.max(0, c.capacity - c.taken);
 function classState(c) {
@@ -71,7 +71,7 @@ function classButton(c, cls = "slot") {
   const st = classState(c);
   return `
     <button type="button" class="${cls} class-slot ${st}" style="--c:${t?.color || "#7cff6b"};--fill:${Math.min(100, (c.taken / c.capacity) * 100).toFixed(0)}%"
-      data-class="${c.id}" aria-label="${esc(c.title)} with ${esc(t?.short || "")}, ${c.time}, ${c.taken} of ${c.capacity} places, ${classBadge(c)}">
+      data-class="${c.id}" aria-label="${esc(c.title)} with ${esc(LevelUp.coachNames(LevelUp.classCoaches(c)))}, ${c.time}, ${c.taken} of ${c.capacity} places, ${classBadge(c)}">
       <span class="slot-time">${c.time}</span>
       <span class="slot-name">👥 ${esc(c.title)}</span>
       <span class="slot-state">${classBadge(c)}</span>
@@ -101,10 +101,10 @@ function renderFilter() {
   // The coach's photo with a ring in their colour (the colour of their hours on the board) and their name;
   // on phones the photo is bigger and the name sits under it
   trainerFilter.innerHTML = tabs.map((t) => `
-    <button type="button" role="tab" data-trainer="${t.id}" aria-selected="${t.id === activeTrainer}"
+    <button type="button" role="tab" data-trainer="${t.id}" aria-selected="${t.id === activeTrainer}" class="${t.id !== "all" && !LevelUp.trainerAvailable(t.id) ? "coach-away" : ""}"
       ${t.color ? `style="--c:${t.color}"` : ""}>
       <span class="filter-face" aria-hidden="true">${t.img ? `<img src="${t.img}" alt="">` : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.6-3.6 3-5.4 6-5.4s5.4 1.8 6 5.4M15 14.6c2.6 0 4.6 1.4 5.2 4.4"/></svg>`}</span>
-      <span class="filter-name">${esc(t.id === "all" ? "All" : t.short)}</span><span class="filter-name-long">${esc(t.short)}</span>
+      <span class="filter-name">${esc(t.id === "all" ? "All" : t.short)}</span><span class="filter-name-long">${esc(t.short)}</span>${t.id === "all" ? "" : LevelUp.coachLight(t.id)}
     </button>`).join("");
 }
 
@@ -815,7 +815,7 @@ function renderClassDialog(message = "") {
       ${t?.img ? `<img src="${t.img}" alt="" data-coach="${t.id}">` : ""}
       <div>
         <p class="booking-trainer-name">${esc(c.title)}</p>
-        <p class="muted">Group class with ${esc(t?.short || "")}</p>
+        <p class="muted">Group class with <span data-no-i18n>${esc(LevelUp.coachNames(LevelUp.classCoaches(c)))}</span></p>
       </div>
     </div>
     <p class="booking-when">${dateText} · ${c.time}–${endText}</p>
@@ -1018,6 +1018,7 @@ function availabilityText(trainer) {
     const hours = LevelUp.trainerHours(trainer.id, dateKey(d));
     if (hours.length && !perDay.has(d.getDay())) perDay.set(d.getDay(), [hours[0], hours[hours.length - 1] + 1]);
   }
+  if (!LevelUp.trainerAvailable(trainer.id)) return "Away for now";
   if (!perDay.size) return "Open hours coming soon";
   return [...perDay.entries()]
     .sort((a, b) => ((a[0] + 6) % 7) - ((b[0] + 6) % 7))
@@ -1040,7 +1041,24 @@ function freeSpotsThisWeek(trainerId) {
 function renderTeamSpots() {
   document.querySelectorAll("[data-team-spots]").forEach((el) => {
     if (!LevelUp.isReady()) { el.hidden = true; return; }
-    const n = freeSpotsThisWeek(el.dataset.teamSpots);
+    const id = el.dataset.teamSpots;
+    const away = !LevelUp.trainerAvailable(id);
+    // the light on the card: green = takes bookings, grey = away for now (then no booking either)
+    const card = el.closest(".team-card");
+    if (card) {
+      card.classList.toggle("coach-away", away);
+      let light = card.querySelector(".team-light");
+      if (!light) { light = document.createElement("span"); light.className = "team-light"; el.parentElement.appendChild(light); }
+      light.innerHTML = LevelUp.coachLight(id, true);
+      const book = card.querySelector("[data-book-trainer]");
+      if (book) { // away: the button stays but leads nowhere (the tap explains why)
+        book.classList.toggle("disabled", away); book.setAttribute("aria-disabled", String(away));
+        if (away) book.removeAttribute("href"); else book.setAttribute("href", "#schedule");
+      }
+    }
+    el.classList.toggle("away", away);
+    if (away) { el.hidden = true; return; } // the light on the card already says "Away for now"
+    const n = freeSpotsThisWeek(id);
     el.hidden = false;
     el.classList.toggle("full", n === 0);
     el.classList.toggle("few", n > 0 && n <= 3);
@@ -1065,6 +1083,11 @@ function renderTrainerStats() {
 document.addEventListener("click", (event) => {
   const link = event.target.closest("[data-book-trainer]");
   if (!link) return;
+  if (!LevelUp.trainerAvailable(link.dataset.bookTrainer)) { // away: nothing to book
+    event.preventDefault();
+    LevelUp.toast({ title: "Away for now", text: `${LevelUp.trainerById(link.dataset.bookTrainer)?.short || "This coach"} takes no bookings at the moment. Pick another coach.`, icon: "⏸" });
+    return;
+  }
   activeTrainer = link.dataset.bookTrainer;
   weekPicked = false; // "Book Filip": jump to Filip's first week with open hours
   renderFilter();

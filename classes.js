@@ -75,7 +75,7 @@ window.LevelUpClasses = (() => {
             <div class="gc-when"><b>${esc(dayText(c))}</b><span>${c.time}</span></div>
             <div class="gc-main">
               <p class="gc-title">${esc(c.title)} ${status}</p>
-              <p class="muted small">${admin ? `${esc(t?.short || c.trainerId)} · ` : ""}${c.minutes} min · ${esc(c.location)}${c.price > 0 ? ` · ${euro(c.price)}` : " · free"}</p>
+              <p class="muted small">${admin || (c.coTrainers || []).length ? `<span data-no-i18n>${esc(LevelUp.coachNames(LevelUp.classCoaches(c)) || c.trainerId)}</span> · ` : ""}${c.minutes} min · ${esc(c.location)}${c.price > 0 ? ` · ${euro(c.price)}` : " · free"}</p>
               <div class="gc-meter" style="--fill:${fill}%"><span class="gc-bar" aria-hidden="true"><i></i></span>
                 <span><b>${c.taken}</b>/${c.capacity} signed up${c.waitlist ? ` · ${c.waitlist} waitlist` : ""}${c.status === "done" ? ` · ${c.present} present` : ""}${c.unpaid ? ` · <span class="gc-warn">${c.unpaid} to pay (${euro(c.unpaidTotal)})</span>` : ""}</span>
               </div>
@@ -142,13 +142,19 @@ window.LevelUpClasses = (() => {
       const mine = player?.trainerId;
       const trainers = LevelUp.TRAINERS.filter((t) => admin || t.id === mine);
       const picked = c ? c.trainerId : st.draft?.trainerId || mine;
+      const co = c ? c.coTrainers || [] : [];
+      const d = c ? {} : st.draft || {}; // a new class can start filled in (a day in the week, or 1:1 hours that become a class)
       const durations = [...new Set([45, 60, 75, 90, 120, c?.minutes || 60])].sort((a, b) => a - b);
       return `
         <form class="gc-form ${c ? "gc-edit" : ""}" id="gcForm-${key}" ${c ? `data-gc-edit-form="${c.id}"` : ""}>
           <div class="field-row">
-            <label>Class<input name="title" list="gcPresets" maxlength="40" required placeholder="e.g. HIIT" value="${esc(c?.title || "")}"></label>
+            <label>Class<input name="title" list="gcPresets" maxlength="40" required placeholder="e.g. HIIT" value="${esc(c?.title || d.title || "")}"></label>
             ${admin ? `<label>Trainer<select name="trainerId">${trainers.map((t) => `<option value="${t.id}" ${t.id === picked ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>` : ""}
           </div>
+          ${admin && trainers.length > 1 && (!(st.list || []).length || st.list.some((x) => "coTrainers" in x)) ? `<fieldset class="gc-co"><legend>Also with (optional)</legend>
+            ${trainers.map((t) => `<label><input type="checkbox" name="coTrainers" value="${t.id}" ${co.includes(t.id) ? "checked" : ""}> <span data-no-i18n>${esc(t.short)}</span></label>`).join("")}
+            <small class="muted">More trainers on one class. The trainer above leads it and gets the fee.</small></fieldset>` : ""}
+          ${d.fromHours ? `<p class="gc-from-hours">↪ <span>These 1:1 hours${d.fromLabel ? ` (<span data-no-i18n>${esc(d.fromLabel)}</span>)` : ""} become a group class: the hours themselves are removed when you plan it.</span></p>` : ""}
           <datalist id="gcPresets">${[...new Set([...LevelUp.kindChoices().filter((k) => !k.pending).map((k) => k.title), ...PRESETS])].map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
           ${c ? "" : `<div class="new-kind gc-new-kind" data-gc-newkind hidden>
             <p class="new-kind-title">A new kind of training</p>
@@ -160,13 +166,13 @@ window.LevelUpClasses = (() => {
           </div>`}
           <div class="field-row four">
             <label>Date<input type="date" name="date" required value="${c ? c.date : st.draft?.date || tomorrow()}" min="${c && c.date < LevelUp.dateKey() ? c.date : LevelUp.dateKey()}"></label>
-            <label>Start<input type="time" name="time" required value="${c ? c.time : "19:00"}" step="900"></label>
+            <label>Start<input type="time" name="time" required value="${c ? c.time : d.time || "19:00"}" step="900"></label>
             <label>Duration<select name="minutes">${durations.map((m) => `<option value="${m}" ${m === (c?.minutes || 60) ? "selected" : ""}>${m} min</option>`).join("")}</select></label>
             <label>Places<input type="number" name="capacity" min="${c ? Math.max(2, c.taken) : 2}" max="60" value="${c ? c.capacity : pricing.classCapacity}" required></label>
           </div>
           <div class="field-row">
-            ${c ? "" : `<label>Repeat<select name="repeatWeeks">${[[1, "Once"], [4, "Every week · 4 weeks"], [8, "Every week · 8 weeks"], [12, "Every week · 12 weeks"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>`}
-            <label>Where?<input name="location" maxlength="80" list="gcPlaces-${key}" value="${esc(c ? c.location : LevelUp.defaultPlace())}"></label>
+            ${c ? "" : `<label>Repeat<select name="repeatWeeks">${[[1, "Once"], [4, "Every week · 4 weeks"], [8, "Every week · 8 weeks"], [12, "Every week · 12 weeks"]].map(([v, l]) => `<option value="${v}" ${Number(d.repeatWeeks) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`}
+            <label>Where?<input name="location" maxlength="80" list="gcPlaces-${key}" value="${esc(c ? c.location : d.location || LevelUp.defaultPlace())}"></label>
             <datalist id="gcPlaces-${key}">${[...new Set([LevelUp.defaultPlace(), ...(st.list || []).map((x) => x.location).filter(Boolean)])].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
           </div>
           ${admin ? `<div class="field-row">
@@ -230,6 +236,10 @@ window.LevelUpClasses = (() => {
         const sync = () => { if (fresh) fresh.hidden = !LevelUp.getTrainingKinds() || form.elements.title.value.trim().length < 2 || LevelUp.kindKnown(form.elements.title.value); };
         form.elements.title.addEventListener("input", sync);
         sync();
+        // "Also with": the trainer who leads the class can't be ticked as a second one
+        const lead = form.elements.trainerId;
+        const co = () => form.querySelectorAll("[name=coTrainers]").forEach((box) => { box.disabled = box.value === lead.value; if (box.disabled) box.checked = false; box.closest("label").hidden = box.disabled; });
+        if (lead && form.querySelector("[name=coTrainers]")) { lead.addEventListener("change", co); co(); }
       });
     }
 
@@ -240,7 +250,8 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        await LevelUp.classUpdate(form.dataset.gcEditForm, { ...Object.fromEntries(new FormData(form)), usesRoom: form.elements.usesRoom.checked });
+        await LevelUp.classUpdate(form.dataset.gcEditForm, { ...Object.fromEntries(new FormData(form)), usesRoom: form.elements.usesRoom.checked,
+          ...(admin ? { coTrainers: new FormData(form).getAll("coTrainers") } : {}) });
         LevelUp.toast({ title: "Class changed", text: "Who signed up got a message if the day, hour or place changed", icon: "✎", tone: "green" });
         st.editing = null;
         await load();
@@ -259,7 +270,8 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        const fields = Object.fromEntries([...new FormData(form)].filter(([k]) => !["newPhoto", "newAbout"].includes(k)));
+        const fields = Object.fromEntries([...new FormData(form)].filter(([k]) => !["newPhoto", "newAbout", "coTrainers"].includes(k)));
+        if (admin) fields.coTrainers = new FormData(form).getAll("coTrainers");
         const fresh = form.querySelector("[data-gc-newkind]");
         if (fresh && !fresh.hidden && (form.elements.newPhoto.files[0] || form.elements.newAbout.value.trim())) {
           await LevelUp.proposeKind(fields.title, fields.trainerId || player?.trainerId, { description: form.elements.newAbout.value, file: form.elements.newPhoto.files[0] || null });
@@ -272,6 +284,10 @@ window.LevelUpClasses = (() => {
           text: r.skipped ? `${r.skipped} week${r.skipped === 1 ? "" : "s"} skipped (clash or too soon)`
             : r.announced != null ? `Everyone got the news · ${r.announced} notification${r.announced === 1 ? "" : "s"} sent` : "Players can sign up now", icon: "👥", tone: "green" });
         LevelUp.loadPricing();
+        if (n && st.draft?.fromHours) { // the 1:1 hours this class came from go
+          try { await LevelUp.deleteOpeningHours(st.draft.fromHours); }
+          catch (err) { alert(`The class is planned, but the 1:1 hours could not be removed: ${err.message}`); }
+        }
         st.creating = false;
         st.draft = null;
         await load();
@@ -365,7 +381,8 @@ window.LevelUpClasses = (() => {
   const list = (key = "coach") => states.get(key)?.list || null;
   const show = (id, key = "coach") => states.get(key)?.show?.(id);
   const create = (draft, key = "coach") => states.get(key)?.create?.(draft);
+  const reload = (key = "coach") => states.get(key)?.reload?.(); // something changed the classes from outside the list
   const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 
-  return { mount, list, show, create, onChange, SOON_DAYS };
+  return { mount, list, show, create, reload, onChange, SOON_DAYS };
 })();
