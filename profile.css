@@ -368,9 +368,48 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .mw-body { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .mw-item { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; width: 100%; min-height: 34px; padding: 4px 9px; text-align: left; font: 600 0.85rem/1.3 var(--sans); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--tier-1); border-radius: 8px; cursor: pointer; }
 .mw-item:hover { border-color: var(--text); border-left-color: var(--tier-1); }
-.mw-item .ag-kind { flex: none; background: var(--bg); }
+.mw-kind { flex: none; padding: 1px 7px; font: 700 0.68rem/1.6 var(--sans); color: var(--tier-1); background: var(--bg); border-radius: 6px; }
 .mw-item.group, .mw-item.group:hover { border-left-color: var(--gold); }
-.mw-item.group .ag-kind { color: var(--gold); }
+.mw-item.group .mw-kind { color: var(--gold); }
+.mw-who { font-weight: 700; }
+.mw-text i { font-style: normal; font-weight: 500; color: var(--muted); }
+.mw-team .mw-item, .mw-team .mw-item:hover, .mw-team .mw-item.group, .mw-team .mw-item.group:hover { border-left-color: var(--c); } /* the team: a colour per trainer */
+.mw-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mw-filter button { display: inline-flex; align-items: center; padding: 6px 12px; font: 600 0.85rem var(--sans); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 99px; cursor: pointer; }
+.mw-filter button[aria-pressed="true"] { color: var(--text); background: var(--inset); border-color: var(--text); }
+.mw-filter .dot { width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
+.plan-who { margin: 0 0 4px; }
+.mw-item.wait { border-style: dashed; opacity: 0.85; }
+.mw-wait { flex: none; }
+.mw-wait-note { margin: -14px 0 18px; }
+.hours-wait { font-style: normal; }
+.new-kind { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 12px; border: 1px dashed var(--gold); border-radius: 10px; }
+.new-kind[hidden] { display: none; }
+.new-kind > label, .new-kind .field-row label { display: grid; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+.new-kind > .wide, .new-kind > p, .new-kind > .field-row { grid-column: 1 / -1; margin: 0; }
+.new-kind input[type="file"] { max-width: 100%; font-size: 0.8rem; }
+.new-kind-title { font-weight: 700; color: var(--gold); }
+.gc-new-kind { margin: 10px 0; }
+.hours-form-grid .new-kind { flex: 1 1 100%; }
+.pl-kind-note { margin: 4px 0 0; }
+@media (max-width: 560px) { .new-kind { grid-template-columns: 1fr; } }
+/* Admin → Team: new kinds of training that wait for approval */
+.kind-req-list { list-style: none; display: grid; gap: 10px; margin: 0 0 22px; padding: 0; }
+.kind-req { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px; background: var(--inset); border: 1px solid var(--gold); border-radius: 12px; }
+.kind-req-photo { width: 96px; height: 72px; display: grid; place-items: center; overflow: hidden; font-size: 0.75rem; color: var(--muted); background: var(--panel-2); border-radius: 8px; }
+.kind-req-photo img { width: 100%; height: 100%; object-fit: cover; }
+.kind-req p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.kind-req-title { font-size: 1.05rem; }
+.kind-req .btn-row { display: grid; gap: 6px; }
+@media (max-width: 760px) {
+  .kind-req { grid-template-columns: 72px minmax(0, 1fr); }
+  .kind-req-photo { width: 72px; height: 56px; }
+  .kind-req .btn-row { grid-column: 1 / -1; grid-template-columns: 1fr 1fr 1fr; }
+  .kind-req .btn-row .btn { padding-inline: 6px; }
+}
+.plan-dialog .form-error:empty { display: none; }
+.hours-what { font-style: normal; font-weight: 500; opacity: 0.8; }
+[data-team-pane][hidden] { display: none; }
 .mw-item.off { color: var(--muted); border-left-color: var(--muted); }
 .mw-item small { flex: none; margin-left: auto; font-size: 0.76rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .mw-text { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
@@ -387,7 +426,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
   .mw-body { flex-direction: column; flex-wrap: nowrap; }
   .mw-add { width: 100%; height: 32px; }
   .mw-item { gap: 2px 4px; padding-inline: 6px; }
-  .mw-item .ag-kind { padding-inline: 5px; font-size: 0.62rem; }
+  .mw-kind { padding-inline: 5px; font-size: 0.62rem; }
 }
 
 .hk-title { margin: 0 0 8px; }

@@ -5,7 +5,7 @@
 
 window.LevelUpClasses = (() => {
   const { esc, euro } = LevelUp;
-  const PRESETS = ["CrossFit WOD", "HIIT", "Hyrox", "Bootcamp", "Calisthenics", "Mobility", "Social run club", "Spinning", "Muay Thai"];
+  const PRESETS = ["CrossFit WOD", "HIIT", "Hyrox", "Bootcamp", "Calisthenics", "Mobility", "Social run club", "Spinning", "Muay Thai", "Boxing", "Yoga", "Pilates", "Dance"];
   const STATUS = {
     booked: ["Signed up", "confirmed"], awaiting_payment: ["Paying online…", "pending"], waitlist: ["Waitlist", "pending"],
     attended: ["Present", "completed"], no_show: ["No-show", "declined"], late_cancel: ["Late sign-out", "declined"]
@@ -67,7 +67,8 @@ window.LevelUpClasses = (() => {
       const fill = Math.min(100, (c.taken / c.capacity) * 100).toFixed(0);
       const status = c.status === "cancelled" ? `<span class="status-chip declined">Cancelled</span>`
         : c.status === "done" ? `<span class="status-chip completed">Finished</span>`
-        : c.canFinish ? `<span class="status-chip pending">To finish</span>` : "";
+        : c.canFinish ? `<span class="status-chip pending">To finish</span>`
+        : c.pending ? `<span class="status-chip pending" title="Players see this class once the admin has approved this new kind of training">⏳ Waiting for approval</span>` : "";
       return `
         <li class="gc-card ${open ? "open" : ""} ${st.editing === c.id ? "gc-editing" : ""} ${c.status}" style="--c:${t?.color || "#7cff6b"}" data-gc="${c.id}">
           <div class="gc-top">
@@ -140,7 +141,7 @@ window.LevelUpClasses = (() => {
     function formHtml(c = null) {
       const mine = player?.trainerId;
       const trainers = LevelUp.TRAINERS.filter((t) => admin || t.id === mine);
-      const picked = c ? c.trainerId : mine;
+      const picked = c ? c.trainerId : st.draft?.trainerId || mine;
       const durations = [...new Set([45, 60, 75, 90, 120, c?.minutes || 60])].sort((a, b) => a - b);
       return `
         <form class="gc-form ${c ? "gc-edit" : ""}" id="gcForm-${key}" ${c ? `data-gc-edit-form="${c.id}"` : ""}>
@@ -148,7 +149,15 @@ window.LevelUpClasses = (() => {
             <label>Class<input name="title" list="gcPresets" maxlength="40" required placeholder="e.g. HIIT" value="${esc(c?.title || "")}"></label>
             ${admin ? `<label>Trainer<select name="trainerId">${trainers.map((t) => `<option value="${t.id}" ${t.id === picked ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>` : ""}
           </div>
-          <datalist id="gcPresets">${PRESETS.map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
+          <datalist id="gcPresets">${[...new Set([...LevelUp.kindChoices().filter((k) => !k.pending).map((k) => k.title), ...PRESETS])].map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
+          ${c ? "" : `<div class="new-kind gc-new-kind" data-gc-newkind hidden>
+            <p class="new-kind-title">A new kind of training</p>
+            <div class="field-row">
+              <label>Photo for its card (optional)<input type="file" name="newPhoto" accept="image/*"></label>
+              <label>In short (optional)<input type="text" name="newAbout" maxlength="300" placeholder="What can players expect?"></label>
+            </div>
+            <p class="muted small">${admin ? `It gets its own card under "Choose your training".` : `The admin checks a new kind of training first. Players see the class and its card once it is approved.`}</p>
+          </div>`}
           <div class="field-row four">
             <label>Date<input type="date" name="date" required value="${c ? c.date : st.draft?.date || tomorrow()}" min="${c && c.date < LevelUp.dateKey() ? c.date : LevelUp.dateKey()}"></label>
             <label>Start<input type="time" name="time" required value="${c ? c.time : "19:00"}" step="900"></label>
@@ -213,7 +222,14 @@ window.LevelUpClasses = (() => {
           ${openMoney.length ? `<p class="gc-sub">Money still open</p><ul class="gc-list">${openMoney.map(classCard).join("")}</ul>` : ""}
           ${past.length ? `<button type="button" class="btn btn-ghost btn-small history-btn" data-gc-past aria-expanded="${st.showPast}">${st.showPast ? "Hide past classes ▲" : `Past classes · ${past.length} ▼`}</button>
             ${st.showPast ? `<ul class="gc-list">${past.map(classCard).join("")}</ul>` : ""}` : ""}`}`;
-      el.querySelectorAll("form.gc-form").forEach((form) => form.addEventListener("submit", form.dataset.gcEditForm ? onEdit : onCreate));
+      el.querySelectorAll("form.gc-form").forEach((form) => {
+        form.addEventListener("submit", form.dataset.gcEditForm ? onEdit : onCreate);
+        // a name that isn't a training yet: room for a photo and a few words for its card
+        const fresh = form.querySelector("[data-gc-newkind]");
+        const sync = () => { if (fresh) fresh.hidden = !LevelUp.getTrainingKinds() || form.elements.title.value.trim().length < 2 || LevelUp.kindKnown(form.elements.title.value); };
+        form.elements.title.addEventListener("input", sync);
+        sync();
+      });
     }
 
     async function onEdit(event) {
@@ -242,9 +258,16 @@ window.LevelUpClasses = (() => {
       btn.disabled = true;
       st.error = "";
       try {
-        const r = await LevelUp.classCreate({ ...Object.fromEntries(new FormData(form)), announce: form.elements.announce.checked, usesRoom: form.elements.usesRoom.checked });
+        const fields = Object.fromEntries([...new FormData(form)].filter(([k]) => !["newPhoto", "newAbout"].includes(k)));
+        const fresh = form.querySelector("[data-gc-newkind]");
+        if (fresh && !fresh.hidden && (form.elements.newPhoto.files[0] || form.elements.newAbout.value.trim())) {
+          await LevelUp.proposeKind(fields.title, fields.trainerId || player?.trainerId, { description: form.elements.newAbout.value, file: form.elements.newPhoto.files[0] || null });
+        }
+        const r = await LevelUp.classCreate({ ...fields, announce: form.elements.announce.checked, usesRoom: form.elements.usesRoom.checked });
         const n = r.created.length;
-        LevelUp.toast({ title: n === 1 ? "Class planned" : `${n} classes planned`,
+        LevelUp.loadTrainingKinds();
+        if (r.pending && n) LevelUp.toast({ title: "Sent for approval", text: "Players see the class once the admin has approved this new kind of training", icon: "⏳" });
+        else LevelUp.toast({ title: n === 1 ? "Class planned" : `${n} classes planned`,
           text: r.skipped ? `${r.skipped} week${r.skipped === 1 ? "" : "s"} skipped (clash or too soon)`
             : r.announced != null ? `Everyone got the news · ${r.announced} notification${r.announced === 1 ? "" : "s"} sent` : "Players can sign up now", icon: "👥", tone: "green" });
         LevelUp.loadPricing();

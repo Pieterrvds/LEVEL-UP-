@@ -886,6 +886,57 @@ const LevelUp = (() => {
     if (old && old.startsWith(`${player.id}/`)) sb.storage.from("avatars").remove([old]).catch(() => {});
   }
 
+  // ---------- Kinds of training for a trainer and the admin: what can be given 1:1 or in a group ----------
+  // The trainings that have a card on the home page from the start (script.js); the others come from the server.
+  const BUILTIN_TRAININGS = ["CrossFit", "Calisthenics", "HIIT", "Muay Thai", "Triathlon", "Cycling"];
+  const kindKey = (title) => String(title || "").trim().replace(/\s+/g, " ").toLowerCase();
+  let trainingKinds = null; // null: not loaded, or a database that doesn't know them yet
+  async function loadTrainingKinds() {
+    try { trainingKinds = (await call("training_kinds")) || []; } catch (err) { trainingKinds = null; console.error("Loading the kinds of training failed:", err); }
+    return trainingKinds;
+  }
+  // The names a trainer can pick: every approved training, and their own that still wait for the admin
+  function kindChoices() {
+    const seen = new Set(["personal training"]);
+    const out = [];
+    const add = (title, pending = false) => { const k = kindKey(title); if (!k || seen.has(k)) return; seen.add(k); out.push({ key: k, title, pending }); };
+    (trainingKinds || []).filter((k) => k.status === "approved").forEach((k) => add(k.title));
+    BUILTIN_TRAININGS.forEach((x) => add(x));
+    out.sort((a, b) => a.title.localeCompare(b.title));
+    (trainingKinds || []).filter((k) => k.status === "pending").forEach((k) => add(k.title, true));
+    return out;
+  }
+  const kindKnown = (title) => kindKey(title) === "" || kindKey(title) === "personal training" || kindChoices().some((k) => k.key === kindKey(title));
+  // A new kind of training with its photo and a few words. From a coach it waits for the admin's approval.
+  async function proposeKind(title, trainerId, { description = "", file = null } = {}) {
+    if (!player || !sb) throw new Error("Log in first.");
+    let path = null;
+    const p = {};
+    if (description.trim()) p.description = description.trim();
+    if (file) {
+      const blob = await fitPhoto(file);
+      path = `${player.id}/k${Date.now()}.jpg`;
+      const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
+      if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
+      p.photoUrl = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    }
+    try {
+      const r = await call("kind_propose", { p_title: title, p_trainer: trainerId, p });
+      await loadTrainingKinds();
+      return r;
+    } catch (err) {
+      if (path) sb.storage.from("avatars").remove([path]).catch(() => {});
+      if (/could not find the function|schema cache/i.test(err.message || "")) throw new Error("A new kind of training needs the latest supabase/schema.sql.");
+      throw err;
+    }
+  }
+  async function adminKindDecide(key, approve, title = null, reason = "") {
+    trainingKinds = (await call("admin_kind_decide", { p_key: key, p_approve: approve, p_title: title, p_reason: reason })) || [];
+    await Promise.all([loadOpeningHours(), loadClassKinds()]);
+    emit();
+    return trainingKinds;
+  }
+
   async function afterClassChange() {
     await Promise.all([refreshPlayer({ announce: true }), document.getElementById("weekBoard") ? loadClasses() : null, loadSlots(),
       document.getElementById("classGrid") || document.getElementById("adminKinds") ? loadClassKinds() : null]);
@@ -1339,7 +1390,7 @@ const LevelUp = (() => {
     if (openingHours) {
       const weekday = parseDate(key).getDay();
       openingHours.forEach((r) => {
-        if (r.trainerId !== trainerId || r.kind !== "open") return;
+        if (r.trainerId !== trainerId || r.kind !== "open" || r.pending) return; // pending: a kind of training that waits for the admin
         if (r.weekday === weekday || r.date === key) addRange(r.start, r.end);
       });
     } else if (!calendar.hasAvailability[trainerId]) {
@@ -1356,12 +1407,20 @@ const LevelUp = (() => {
     return [...hours].filter((h) => !blocked || !blocked.has(h)).sort((a, b) => a - b);
   }
 
+  // What is given in an open hour (boxing, yoga …), when the hours carry a label; a block on that date wins over the weekly one
+  function hourActivity(trainerId, key, hour) {
+    if (!openingHours) return "";
+    const weekday = parseDate(key).getDay();
+    const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && r.activity && hour >= r.start && hour < r.end;
+    return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && r.weekday === weekday))?.activity || "";
+  }
+
   // Weekly hours of a trainer as text, e.g. "Wed 19:00–21:00, Sat 17:00–20:00"
   function weeklyHoursText(trainerId) {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const order = [1, 2, 3, 4, 5, 6, 0];
     const rows = openingHours
-      ? openingHours.filter((r) => r.trainerId === trainerId && r.weekday !== null && r.kind === "open")
+      ? openingHours.filter((r) => r.trainerId === trainerId && r.weekday !== null && r.kind === "open" && !r.pending)
       : Object.entries(trainerById(trainerId)?.availability || {}).map(([d, [a, b]]) => ({ weekday: Number(d), start: a, end: b }));
     return rows.sort((a, b) => order.indexOf(a.weekday) - order.indexOf(b.weekday) || a.start - b.start)
       .map((r) => `${days[r.weekday]} ${pad(r.start)}:00–${pad(r.end)}:00`).join(", ");
@@ -1377,11 +1436,20 @@ const LevelUp = (() => {
     }
   }
 
-  async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "" }) {
-    await call("save_trainer_hours", {
-      p_id: id, p_trainer: trainerId, p_weekday: weekday, p_day: date,
-      p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note
-    });
+  // activity: what is given in the hours (boxing, yoga …). It is only sent when filled in, so a database
+  // that doesn't know the field yet keeps working for plain hours.
+  async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "", activity = "" }) {
+    const what = kind === "closed" ? "" : String(activity || "").trim();
+    try {
+      await call("save_trainer_hours", {
+        p_id: id, p_trainer: trainerId, p_weekday: weekday, p_day: date,
+        p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note, ...(what ? { p_activity: what } : {})
+      });
+    } catch (err) {
+      if (what && /could not find the function|schema cache/i.test(err.message || "")) throw new Error("Saving what you give needs the latest supabase/schema.sql. Leave that field empty for now.");
+      throw err;
+    }
+    if (what && (document.getElementById("classGrid") || document.getElementById("adminKinds"))) await loadClassKinds(); // the cards follow what is given 1:1
     await loadOpeningHours();
     emit();
   }
@@ -4454,7 +4522,7 @@ const LevelUp = (() => {
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
-    trainerById, trainerHours, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, hourActivity, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
@@ -4473,6 +4541,7 @@ const LevelUp = (() => {
     setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
+    BUILTIN_TRAININGS, kindKey, getTrainingKinds: () => trainingKinds, loadTrainingKinds, kindChoices, kindKnown, proposeKind, adminKindDecide,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven,

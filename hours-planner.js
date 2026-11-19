@@ -82,7 +82,7 @@ window.LevelUpPlanner = (() => {
           const locked = LevelUpHours.lost(opts.bookings(), t.id, rows().filter((x) => x.id !== r.id)).length;
           return `<div class="pl-bar${locked ? " locked" : ""}" data-id="${r.id}" style="--c:${t.chartColor || t.color};${pos(r)}" title="${esc(t.short)} · ${hh(r.start)}–${hh(r.end)}${locked ? " · booked hours are locked" : ""}">
             ${weekly ? `<span class="pl-grip top" data-grip="top"></span>` : ""}
-            <span class="pl-bar-label"><b>${esc(t.short)}</b> ${hh(r.start)}–${hh(r.end)}${locked ? " 🔒" : ""}</span>
+            <span class="pl-bar-label"><b>${esc(t.short)}</b> ${hh(r.start)}–${hh(r.end)}${r.activity ? ` · ${esc(r.activity)}` : ""}${r.pending ? " ⏳" : ""}${locked ? " 🔒" : ""}</span>
             ${weekly ? `<span class="pl-grip bottom" data-grip="bottom"></span>` : ""}
           </div>`;
         }).join("");
@@ -90,7 +90,7 @@ window.LevelUpPlanner = (() => {
           html += own.filter((r) => r.date === key).map((r) => `
             <div class="pl-bar ${r.kind === "closed" ? "closed" : "extra"}" data-id="${r.id}" style="--c:${t.chartColor || t.color};${pos({ start: Math.max(r.start, range.from), end: Math.min(r.end, range.to) })}"
               title="${esc(t.short)} · ${r.kind === "closed" ? "closed" : "extra hours"} ${hh(r.start)}–${hh(r.end)}${r.note ? ` · ${esc(r.note)}` : ""}">
-              <span class="pl-bar-label"><b>${esc(t.short)}</b> ${r.kind === "closed" ? "closed" : "extra"}${r.note ? ` · ${esc(r.note)}` : ""}</span>
+              <span class="pl-bar-label"><b>${esc(t.short)}</b> ${r.kind === "closed" ? "closed" : "extra"}${r.activity ? ` · ${esc(r.activity)}` : ""}${r.note ? ` · ${esc(r.note)}` : ""}</span>
             </div>`).join("");
           html += opts.bookings().filter((b) => b.trainerId === t.id && b.date === key && LevelUpHours.isUpcoming(b)).map((b) => `
             <div class="pl-booking" style="--c:${t.chartColor || t.color};top:${(b.hour - range.from) * ROW + 4}px;left:calc(${(index / count) * 100}% + 6px);width:calc(${100 / count}% - 12px)"
@@ -157,6 +157,9 @@ window.LevelUpPlanner = (() => {
     pop.style.top = `${y - box.top + 8}px`;
   }
   const closePopover = () => { const pop = host?.querySelector(".pl-popover"); if (pop) pop.hidden = true; };
+  // the trainings to pick from; a new name from a coach waits for the admin's approval
+  const kindList = () => `<datalist id="plKinds">${LevelUp.kindChoices().filter((k) => !k.pending).map((k) => `<option value="${esc(k.title)}">`).join("")}</datalist>
+        ${LevelUp.isAdmin() ? "" : `<p class="muted small pl-kind-note">A new kind of training is checked by the admin first.</p>`}`;
   const hourOptions = (from, to, sel) => Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => `<option value="${h}" ${h === sel ? "selected" : ""}>${hh(h)}</option>`).join("");
 
   function editWeekly(r, x, y) {
@@ -169,6 +172,8 @@ window.LevelUpPlanner = (() => {
           <label>From<select name="start">${hourOptions(0, 23, r.start)}</select></label>
           <label>To<select name="end">${hourOptions(1, 24, r.end)}</select></label>
         </div>
+        <label class="pl-note">What is given? (empty = personal training)<input type="text" name="activity" maxlength="40" list="plKinds" placeholder="e.g. boxing, yoga, dance" value="${esc(r.activity || "")}"></label>
+        ${kindList()}
         <fieldset class="pl-copy"><legend>Copy these hours to</legend>
           ${DOW.filter((d) => d !== r.weekday).map((d) => `<label><input type="checkbox" name="copy" value="${d}"> ${LONG[d].slice(0, 3)}</label>`).join("")}
         </fieldset>
@@ -190,6 +195,8 @@ window.LevelUpPlanner = (() => {
           <label>From<select name="start">${hourOptions(0, 23, whole ? 0 : r.start)}</select></label>
           <label>To<select name="end">${hourOptions(1, 24, whole ? 24 : r.end)}</select></label>
         </div>
+        <label class="pl-note">What is given? (extra hours; empty = personal training)<input type="text" name="activity" maxlength="40" list="plKinds" placeholder="e.g. boxing, yoga, dance" value="${esc(r.activity || "")}"></label>
+        ${kindList()}
         <label class="pl-note">Note (only you and the trainer see it)<input type="text" name="note" maxlength="80" value="${esc(r.note || "")}"></label>
         <div class="btn-row">
           <button type="submit" class="btn btn-small btn-primary">Save</button>
@@ -203,18 +210,18 @@ window.LevelUpPlanner = (() => {
     const id = form.dataset.id || null;
     const old = rows().find((r) => r.id === id);
     if (form.dataset.plForm === "weekly") {
-      const entry = { id, trainerId: old.trainerId, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value) };
+      const entry = { id, trainerId: old.trainerId, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value), activity: f.activity.value.trim() };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(entry.trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       const copies = [...form.querySelectorAll("[name=copy]:checked")].map((c) => Number(c.value));
       closePopover();
       if (await save(entry)) {
-        for (const d of copies) await save({ trainerId: entry.trainerId, weekday: d, start: entry.start, end: entry.end });
+        for (const d of copies) await save({ trainerId: entry.trainerId, weekday: d, start: entry.start, end: entry.end, activity: entry.activity });
         LevelUp.toast({ title: "Hours saved", text: copies.length ? `Also copied to ${copies.length} other day${copies.length === 1 ? "" : "s"}` : "The schedule is updated", icon: "🕒", tone: "green" });
       }
     } else {
       const trainerId = old?.trainerId || form.dataset.trainer;
-      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim() };
+      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim(), activity: f.activity.value.trim() };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       closePopover();
@@ -340,7 +347,7 @@ window.LevelUpPlanner = (() => {
       return;
     }
     if (!d.next || (d.next.start === r.start && d.next.end === r.end && d.next.weekday === r.weekday)) { rerender(); return; }
-    const entry = { id: r.id, trainerId: r.trainerId, weekday: d.next.weekday, start: d.next.start, end: d.next.end };
+    const entry = { id: r.id, trainerId: r.trainerId, weekday: d.next.weekday, start: d.next.start, end: d.next.end, activity: r.activity || "" }; // a moved bar keeps what is given
     if (!check(r.trainerId, [...rows().filter((x) => x.id !== r.id), entry])) { rerender(); return; }
     if (!(await save(entry))) rerender();
   }

@@ -448,6 +448,8 @@ create table if not exists public.trainer_hours (
   check (kind = 'open' or day is not null)
 );
 create index if not exists trainer_hours_trainer_idx on public.trainer_hours (trainer_id);
+-- What is given in these 1:1 hours (boxing, yoga, dance …). Optional; players see it on the hour they book.
+alter table public.trainer_hours add column if not exists activity text not null default '';
 
 -- Health questionnaire (PAR-Q style), filled in before the first booking. Health data is
 -- sensitive: only the player, their trainers (for their bookings) and admins can see it.
@@ -3241,22 +3243,39 @@ do $$ begin
   end if;
 end $$;
 
--- For the schedule and the hours editors. Notes (can be private) only for the admin and the trainer themselves.
+-- Is this kind of training approved? (the name of a group class, or what is given in 1:1 hours)
+-- No name, or a name without a kind of its own, counts as approved. A kind a coach made up waits for the admin
+-- (class_kinds.status = 'pending'): until then players don't see its hours or its classes. plpgsql on purpose:
+-- class_kinds is made further down in this file.
+create or replace function public._kind_ok(p_name text)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  if btrim(coalesce(p_name, '')) = '' then return true; end if;
+  return not exists (select 1 from public.class_kinds k
+                     where k.key = lower(regexp_replace(btrim(p_name), '\s+', ' ', 'g')) and k.status <> 'approved');
+end $$;
+
+-- For the schedule and the hours editors. Notes (can be private) only for the admin and the trainer themselves;
+-- what is given in the hours (activity) is for everyone. Hours of a kind that waits for approval: only for
+-- the admin and that trainer ("pending").
 create or replace function public.trainer_hours_list()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
-                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind,
+                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'activity', h.activity,
+                    'pending', not public._kind_ok(h.activity),
                     'note', case when public._can_coach(h.trainer_id) then h.note else '' end)
                   order by h.trainer_id, h.weekday, h.day, h.start_hour), '[]'::jsonb)
   from public.trainer_hours h join public.trainers t on t.id = h.trainer_id
-  where t.active and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1);
+  where t.active and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1)
+    and (public._kind_ok(h.activity) or public._can_coach(h.trainer_id));
 $$;
 
 -- Is this hour open in the admin's hours (weekly or extra on that date, and not closed that date)?
 create or replace function public._hours_cover(p_trainer text, p_day date, p_hour integer)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.trainer_hours h where h.trainer_id = p_trainer and h.kind = 'open'
-                   and (h.weekday = extract(dow from p_day) or h.day = p_day) and p_hour >= h.start_hour and p_hour < h.end_hour)
+                   and (h.weekday = extract(dow from p_day) or h.day = p_day) and p_hour >= h.start_hour and p_hour < h.end_hour
+                   and public._kind_ok(h.activity))
      and not exists (select 1 from public.trainer_hours h where h.trainer_id = p_trainer and h.kind = 'closed'
                    and h.day = p_day and p_hour >= h.start_hour and p_hour < h.end_hour);
 $$;
@@ -3284,12 +3303,16 @@ end $$;
 
 -- Add or change a block of hours (admin, or the trainer for their own card).
 -- p_id null = new. Weekly: p_weekday set, p_day null. One date: p_day set, p_weekday null.
+-- p_activity: what is given in these hours (boxing, yoga …), empty for plain personal training.
+drop function if exists public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text);
 create or replace function public.save_trainer_hours(p_id uuid, p_trainer text, p_weekday integer, p_day date,
-                                                     p_start integer, p_end integer, p_kind text default 'open', p_note text default '')
+                                                     p_start integer, p_end integer, p_kind text default 'open', p_note text default '',
+                                                     p_activity text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   h public.trainer_hours;
   before uuid[] := public._covered_bookings(p_trainer);
+  what text := case when p_kind = 'closed' then '' else left(btrim(coalesce(p_activity, '')), 40) end;
 begin
   if auth.uid() is null or not public._can_coach(p_trainer) then raise exception 'Only an admin or the trainer can change these hours.'; end if;
   if not exists (select 1 from public.trainers where id = p_trainer) then raise exception 'Trainer not found.'; end if;
@@ -3299,17 +3322,18 @@ begin
   end if;
   if p_kind not in ('open', 'closed') or (p_kind = 'closed' and p_day is null) then raise exception 'Invalid type of hours.'; end if;
   if p_day is not null and p_day < (now() at time zone 'Europe/Brussels')::date then raise exception 'Pick today or a date in the future.'; end if;
+  perform public._kind_register(what, p_trainer); -- a new kind of training from a coach waits for the admin
   if p_id is null then
-    insert into public.trainer_hours (trainer_id, weekday, day, start_hour, end_hour, kind, note)
-    values (p_trainer, p_weekday, p_day, p_start, p_end, p_kind, left(coalesce(p_note, ''), 80)) returning * into h;
+    insert into public.trainer_hours (trainer_id, weekday, day, start_hour, end_hour, kind, note, activity)
+    values (p_trainer, p_weekday, p_day, p_start, p_end, p_kind, left(coalesce(p_note, ''), 80), what) returning * into h;
   else
     update public.trainer_hours set trainer_id = p_trainer, weekday = p_weekday, day = p_day, start_hour = p_start,
-           end_hour = p_end, kind = p_kind, note = left(coalesce(p_note, ''), 80)
+           end_hour = p_end, kind = p_kind, note = left(coalesce(p_note, ''), 80), activity = what
      where id = p_id and trainer_id = p_trainer and public._can_coach(trainer_id) returning * into h;
     if not found then raise exception 'These hours no longer exist.'; end if;
   end if;
   perform public._check_booked_hours(p_trainer, before);
-  return to_jsonb(h);
+  return to_jsonb(h) || jsonb_build_object('pending', not public._kind_ok(h.activity));
 end $$;
 
 create or replace function public.delete_trainer_hours(p_id uuid)
@@ -3621,7 +3645,7 @@ begin
     'packs', coalesce((select jsonb_agg(public._pack_json(sp) order by sp.created_at desc) from public.session_packs sp), '[]'::jsonb),
     'vouchers', coalesce((select jsonb_agg(public._voucher_json(v) order by v.earned_at desc) from public.reward_vouchers v), '[]'::jsonb),
     'hours', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
-                          'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'note', h.note) order by h.weekday, h.day, h.start_hour)
+                          'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'note', h.note, 'activity', h.activity) order by h.weekday, h.day, h.start_hour)
                        from public.trainer_hours h where h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date - 1), '[]'::jsonb)
   );
 end $$;
@@ -4334,14 +4358,143 @@ insert into public.class_kinds (key, title)
   from public.class_sessions c order by public._group_key(c.title), c.starts_at desc
 on conflict do nothing;
 
--- The kinds that are alive: a class of that name is planned, or was held in the last 30 days.
--- With the trainers who give it and when the next one is. Anyone can read it (home page).
+-- A kind is also what a trainer gives in 1:1 hours (trainer_hours.activity: "Boxing", "Yoga" …).
+-- A new kind made by a coach waits for the admin: status 'pending' until approved (admin_kind_decide).
+alter table public.class_kinds add column if not exists status text not null default 'approved';
+alter table public.class_kinds add column if not exists proposed_by uuid references public.profiles (id) on delete set null;
+alter table public.class_kinds add column if not exists proposed_trainer text;
+alter table public.class_kinds add column if not exists proposed_at timestamptz;
+alter table public.class_kinds drop constraint if exists class_kinds_status_check;
+alter table public.class_kinds add constraint class_kinds_status_check check (status in ('pending', 'approved'));
+
+-- Make the kind for a name when it doesn't exist yet. From the admin, or one of the trainings that already have
+-- a card on the home page: approved right away. From a coach: pending, and the admins get a notification.
+create or replace function public._kind_register(p_name text, p_trainer text)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  k text := public._group_key(p_name);
+  st text;
+  admin_id uuid;
+begin
+  if k = '' then return 'approved'; end if;
+  select status into st from public.class_kinds where key = k;
+  if found then return st; end if;
+  st := case when public.is_admin() or k in ('personal training', 'crossfit', 'calisthenics', 'hiit', 'muay thai', 'triathlon', 'cycling')
+             then 'approved' else 'pending' end;
+  insert into public.class_kinds (key, title, status, proposed_by, proposed_trainer, proposed_at)
+  values (k, btrim(p_name), st, auth.uid(), p_trainer, now()) on conflict do nothing;
+  if st = 'pending' then
+    for admin_id in select p.id from public.profiles p
+        where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ',')) loop
+      perform public._push(admin_id, '🆕 New kind of training to approve',
+        btrim(p_name) || coalesce(' · ' || (select split_part(name, ' ', 1) from public.trainers where id = p_trainer), ''),
+        'admin.html#team', 'kind-' || k);
+    end loop;
+  end if;
+  return st;
+end $$;
+
+-- A trainer (or the admin) adds a kind of training with a photo and a few words for its card. While it waits for
+-- approval the one who made it can still change these; afterwards only the admin (admin_class_kind).
+create or replace function public.kind_propose(p_title text, p_trainer text, p jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  ttl text := regexp_replace(btrim(coalesce(p_title, '')), '\s+', ' ', 'g');
+  k text := public._group_key(ttl);
+  about text := btrim(coalesce(p ->> 'description', ''));
+  photo text := nullif(btrim(coalesce(p ->> 'photoUrl', '')), '');
+  st text;
+begin
+  if auth.uid() is null or not public._can_coach(p_trainer) then raise exception 'Only a trainer or an admin can add a kind of training.'; end if;
+  if char_length(ttl) < 2 or char_length(ttl) > 40 then raise exception 'Give the training a name of 2 to 40 characters.'; end if;
+  if char_length(about) > 600 then raise exception 'Keep the text under 600 characters.'; end if;
+  if photo is not null and photo !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
+                                || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Invalid photo.';
+  end if;
+  st := public._kind_register(ttl, p_trainer);
+  update public.class_kinds set
+    description = case when p ? 'description' and about <> '' then about else description end,
+    photo_url = case when photo is not null then photo else photo_url end
+  where key = k and (public.is_admin() or (status = 'pending' and proposed_by = auth.uid()));
+  return jsonb_build_object('key', k, 'title', ttl, 'status', st);
+end $$;
+
+-- Every kind of training, for the forms of a trainer and the admin: the approved ones, and the ones that wait
+-- (the admin sees all of those, a trainer their own) with what was planned with them.
+create or replace function public.training_kinds()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  admin boolean := public.is_admin();
+  mine text := public._my_trainer();
+begin
+  if auth.uid() is null or (not admin and mine is null) then return '[]'::jsonb; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('key', k.key, 'title', k.title, 'status', k.status, 'description', k.description,
+        'photoUrl', k.photo_url, 'trainerId', k.proposed_trainer, 'proposedAt', k.proposed_at,
+        'hours', case when k.status = 'pending' then coalesce((
+            select jsonb_agg(jsonb_build_object('trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
+                     'start', h.start_hour, 'end', h.end_hour) order by h.weekday, h.day, h.start_hour)
+            from public.trainer_hours h where h.kind = 'open' and h.activity <> '' and public._group_key(h.activity) = k.key), '[]'::jsonb) else '[]'::jsonb end,
+        'classes', case when k.status = 'pending' then coalesce((
+            select jsonb_agg(jsonb_build_object('id', c.id, 'trainerId', c.trainer_id,
+                     'date', to_char(c.starts_at at time zone 'Europe/Brussels', 'YYYY-MM-DD'),
+                     'time', to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'), 'weekly', c.series_id is not null) order by c.starts_at)
+            from public.class_sessions c where c.status = 'scheduled' and c.starts_at > now() and public._group_key(c.title) = k.key), '[]'::jsonb) else '[]'::jsonb end)
+      order by k.status desc, k.title)
+    from public.class_kinds k
+    where k.status = 'approved' or admin or k.proposed_trainer = mine or k.proposed_by = auth.uid()), '[]'::jsonb);
+end $$;
+
+-- The admin approves a new kind of training (with another name if the coach's one isn't right) or declines it.
+-- Declined: the hours and the classes planned with it go away (nobody could see or book them) and the coach hears why.
+create or replace function public.admin_kind_decide(p_key text, p_approve boolean, p_title text default null, p_reason text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  k public.class_kinds;
+  ttl text := nullif(regexp_replace(btrim(coalesce(p_title, '')), '\s+', ' ', 'g'), '');
+  new_key text;
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  select * into k from public.class_kinds where key = p_key and status = 'pending' for update;
+  if not found then raise exception 'This training no longer waits for approval.'; end if;
+  if p_approve then
+    if ttl is not null and ttl <> k.title then
+      if char_length(ttl) < 2 or char_length(ttl) > 40 then raise exception 'Give the training a name of 2 to 40 characters.'; end if;
+      new_key := public._group_key(ttl);
+      if new_key <> k.key then
+        if exists (select 1 from public.class_kinds where key = new_key) then
+          raise exception 'There is already a training called %. Pick another name, or decline this one.', ttl;
+        end if;
+        update public.chat_threads set group_key = new_key, group_title = ttl
+         where group_key = k.key and not exists (select 1 from public.chat_threads x where x.group_key = new_key);
+      end if;
+      update public.class_sessions set title = ttl where public._group_key(title) = k.key;
+      update public.trainer_hours set activity = ttl where activity <> '' and public._group_key(activity) = k.key;
+      update public.class_kinds set key = coalesce(new_key, k.key), title = ttl where key = k.key;
+    end if;
+    update public.class_kinds set status = 'approved' where key = coalesce(new_key, k.key);
+    perform public._push(k.proposed_by, '✅ Approved: ' || coalesce(ttl, k.title), 'Players can see and book it now.', 'profile.html#coach', 'kind-' || k.key);
+  else
+    delete from public.trainer_hours where activity <> '' and public._group_key(activity) = k.key;
+    update public.class_sessions set status = 'cancelled', cancel_reason = 'Not approved'
+     where status = 'scheduled' and public._group_key(title) = k.key;
+    delete from public.class_kinds where key = k.key;
+    perform public._push(k.proposed_by, '✕ Not approved: ' || k.title,
+      coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'Ask the admin what to change.'), 'profile.html#coach', 'kind-' || k.key);
+  end if;
+  return public.training_kinds();
+end $$;
+
+-- The kinds that are alive: a class of that name is planned or was held in the last 30 days, or a trainer gives
+-- it 1:1 (soloTrainers). With the trainers who give it and when the next class is. Anyone can read it (home page).
 create or replace function public.class_kinds()
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 begin
   return coalesce((
     select jsonb_agg(jsonb_build_object('key', k.key, 'title', k.title, 'description', k.description, 'photoUrl', k.photo_url,
-             'trainers', x.trainers, 'next', x.next_at, 'upcoming', x.upcoming) order by x.next_at nulls last, k.title)
+             'trainers', x.trainers, 'next', x.next_at, 'upcoming', x.upcoming,
+             'hasClasses', x.n > 0, 'soloTrainers', s.solo) order by x.next_at nulls last, k.title)
     from public.class_kinds k
     cross join lateral (
       select coalesce(jsonb_agg(distinct c.trainer_id), '[]'::jsonb) as trainers,
@@ -4351,7 +4504,13 @@ begin
       from public.class_sessions c
       where public._group_key(c.title) = k.key and c.status <> 'cancelled' and c.starts_at > now() - interval '30 days'
     ) x
-    where x.n > 0), '[]'::jsonb);
+    cross join lateral (
+      select coalesce(jsonb_agg(distinct h.trainer_id), '[]'::jsonb) as solo
+      from public.trainer_hours h join public.trainers t on t.id = h.trainer_id and t.active
+      where h.kind = 'open' and h.activity <> '' and public._group_key(h.activity) = k.key
+        and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date)
+    ) s
+    where k.status = 'approved' and (x.n > 0 or jsonb_array_length(s.solo) > 0)), '[]'::jsonb);
 end $$;
 
 -- Admin: the text and the photo of a kind of group training (the photo is a file in the admin's own Storage folder)
@@ -4362,7 +4521,7 @@ declare
   photo text := nullif(btrim(coalesce(p ->> 'photoUrl', '')), '');
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
-  if not exists (select 1 from public.class_kinds where key = p_key) then raise exception 'Group training not found.'; end if;
+  if not exists (select 1 from public.class_kinds where key = p_key) then raise exception 'Training not found.'; end if;
   if p ? 'description' and char_length(about) > 600 then raise exception 'Keep the text under 600 characters.'; end if;
   if p ? 'photoUrl' and photo is not null and photo !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
                                 || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
@@ -4894,6 +5053,7 @@ begin
     'waitlist', (select count(*) from public.class_signups w where w.class_id = c.id and w.status = 'waitlist'),
     'price', c.price, 'xp', c.xp, 'location', c.location, 'note', c.note,
     'status', c.status, 'cancelReason', c.cancel_reason, 'seriesId', c.series_id, 'usesRoom', c.uses_room,
+    'pending', not public._kind_ok(c.title), -- a new kind of class from a coach: hidden from players until the admin approves
     'freeCancelUntil', c.starts_at - make_interval(hours => public._config('class_cancel_hours')::int),
     'chatId', (select th.id from public.chat_threads th where th.group_key = public._group_key(c.title)),
     'chatOpen', c.status <> 'cancelled' and now() < ends + make_interval(days => public._config('class_chat_days')::int),
@@ -4975,6 +5135,7 @@ begin
   return coalesce((select jsonb_agg(public._class_json(c, auth.uid()) order by c.starts_at)
     from public.class_sessions c
     where (c.starts_at at time zone 'Europe/Brussels')::date between p_from and least(p_to, p_from + 70)
+      and public._kind_ok(c.title)
       and (c.status <> 'cancelled'
            or exists (select 1 from public.class_signups g where g.class_id = c.id and g.user_id = auth.uid()))), '[]'::jsonb);
 end $$;
@@ -4994,6 +5155,7 @@ begin
   if not found then raise exception 'Group class not found.'; end if;
   if c.status = 'cancelled' then raise exception 'This group class was cancelled.'; end if;
   if c.status <> 'scheduled' or c.starts_at <= now() then raise exception 'This group class has already started.'; end if;
+  if not public._kind_ok(c.title) then raise exception 'This group class isn''t open for sign-ups yet.'; end if;
   if public._trainer_of(uid) = c.trainer_id then raise exception 'You lead this class.'; end if;
   if p_pay not in ('online', 'in_person') then raise exception 'Invalid payment method.'; end if;
   if p_pay = 'online' and public._config('online_payments') <> 'on' then
@@ -5125,12 +5287,12 @@ begin
     values (ttl, trainer, start, mins, cap, cost, fee, public._config('class_xp')::int, loc, remark, series, uid, room)
     returning * into c;
     insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
-    insert into public.class_kinds (key, title) values (public._group_key(ttl), ttl) on conflict do nothing;
+    perform public._kind_register(ttl, trainer); -- a new kind of class from a coach waits for the admin
     made := made || jsonb_build_array(public._class_json(c, uid));
     if first.id is null then first := c; end if;
   end loop;
   -- Tell everyone (one message, also for a weekly series): the name, when, the trainer's own words
-  if first.id is not null and coalesce((p ->> 'announce')::boolean, true) then
+  if first.id is not null and coalesce((p ->> 'announce')::boolean, true) and public._kind_ok(ttl) then
     reached := public._broadcast('class',
       '📣 ' || ttl || ' · ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(first.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
       case when remark <> '' then remark || ' · ' else '' end
@@ -5138,7 +5300,7 @@ begin
         || case when jsonb_array_length(made) > 1 then ' · every week' else '' end || ' · Sign up in the app',
       'index.html#schedule', 'class-' || first.id, first.starts_at);
   end if;
-  return jsonb_build_object('created', made, 'skipped', skipped, 'announced', reached);
+  return jsonb_build_object('created', made, 'skipped', skipped, 'announced', reached, 'pending', not public._kind_ok(ttl));
 end $$;
 
 -- Cancel a class (or it and the rest of its weekly series): everyone signed up is told, paid places are refunded
@@ -5256,7 +5418,7 @@ begin
     reminder_pushed_at = case when start <> c.starts_at then null else reminder_pushed_at end
   where id = c.id returning * into c;
   insert into public.chat_threads (group_key, group_title) values (public._group_key(ttl), ttl) on conflict do nothing;
-  insert into public.class_kinds (key, title) values (public._group_key(ttl), ttl) on conflict do nothing;
+  perform public._kind_register(ttl, trainer);
   -- the news item of this class follows its new name and hour
   update public.news set title = '📣 ' || ttl || ' · ' || to_char(start at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(start at time zone 'Europe/Brussels', 'HH24:MI'),
     expires_at = start where ref = 'class-' || c.id;
@@ -5561,9 +5723,9 @@ grant execute on function public.push_public_key() to anon, authenticated;
 revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
 revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
 revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;
-revoke execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) from public, anon;
+revoke execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text) from public, anon;
 revoke execute on function public.delete_trainer_hours(uuid) from public, anon;
-grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text) to authenticated;
+grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text) to authenticated;
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 revoke execute on function public._book(uuid, text, date, integer, text, text, text, text, uuid) from public, anon, authenticated;
@@ -5613,6 +5775,14 @@ revoke execute on function public.class_cancel_class(uuid, text, boolean) from p
 revoke execute on function public.admin_class_kind(text, jsonb) from public, anon;
 grant execute on function public.admin_class_kind(text, jsonb) to authenticated;
 grant execute on function public.class_kinds() to anon, authenticated;
+revoke execute on function public._kind_ok(text) from public, anon, authenticated;
+revoke execute on function public._kind_register(text, text) from public, anon, authenticated;
+revoke execute on function public.kind_propose(text, text, jsonb) from public, anon;
+revoke execute on function public.training_kinds() from public, anon;
+revoke execute on function public.admin_kind_decide(text, boolean, text, text) from public, anon;
+grant execute on function public.kind_propose(text, text, jsonb) to authenticated;
+grant execute on function public.training_kinds() to authenticated;
+grant execute on function public.admin_kind_decide(text, boolean, text, text) to authenticated;
 revoke execute on function public.class_update(uuid, jsonb) from public, anon;
 grant execute on function public.class_update(uuid, jsonb) to authenticated;
 revoke execute on function public.class_roster(uuid) from public, anon;

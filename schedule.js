@@ -203,13 +203,15 @@ function renderBoard() {
           const { state } = slotState(t, day.key, hour, now);
           if (state !== "past") openCount++;
           const label = { free: `Book ${t.short}`, requested: "Requested…", mine: "Confirmed ✓", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
+          const what = LevelUp.hourActivity(t.id, day.key, hour); // what this trainer gives in this hour (boxing, yoga …), when set
           return `
             <button type="button" class="slot ${state === "requested" ? "mine requested" : state}" style="--c:${t.color}"
               data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
               ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
-              aria-label="${esc(t.name)}, ${day.name} ${pad(hour)}:00, ${label}">
+              aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${day.name} ${pad(hour)}:00, ${label}">
               <span class="slot-time">${pad(hour)}:00</span>
               <span class="slot-name">${esc(t.short)}</span>
+              ${what ? `<span class="slot-what" data-no-i18n>${esc(what)}</span>` : `<span class="slot-what">Personal training</span>`}
               <span class="slot-state">${state === "free" ? `+${LevelUp.SESSION_XP} XP` : label}</span>
             </button>`;
         }).join("");
@@ -251,20 +253,23 @@ function renderWeekList(days, trainers, now, todayKey) {
   const blocks = days.map((day) => {
     const groups = (activeTrainer === "all" ? LevelUp.groupSessions(day.key) : []).filter((g) => g.end > now);
     const rows = trainers.map((t) => {
-      const chips = LevelUp.trainerHours(t.id, day.key).map((hour) => {
+      // one row per trainer and per kind of lesson: "Maxim · Boxing" with its hours
+      const byWhat = new Map();
+      LevelUp.trainerHours(t.id, day.key).forEach((hour) => {
         const { state } = slotState(t, day.key, hour, now);
-        if (state === "past" || classHour(t.id, day.key, hour)) return "";
+        if (state === "past" || classHour(t.id, day.key, hour)) return;
         const label = { free: `Book ${t.short}`, requested: "Requested", mine: "Confirmed", done: "Done", taken: "Booked" }[state];
-        return `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
+        const what = LevelUp.hourActivity(t.id, day.key, hour);
+        byWhat.set(what, (byWhat.get(what) || "") + `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
             data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
             ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
-            aria-label="${esc(t.name)}, ${day.name} ${pad(hour)}:00, ${label}">${pad(hour)}:00</button>`;
-      }).join("");
-      return chips ? `
+            aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${day.name} ${pad(hour)}:00, ${label}">${pad(hour)}:00</button>`);
+      });
+      return [...byWhat].map(([what, chips]) => `
         <div class="list-row" style="--c:${t.color}">
-          <span class="list-trainer"><img src="${t.img}" alt="" data-coach="${t.id}"><b>${esc(t.short)}</b></span>
+          <span class="list-trainer"><img src="${t.img}" alt="" data-coach="${t.id}"><b>${esc(t.short)}</b>${what ? `<small class="list-what" data-no-i18n>${esc(what)}</small>` : `<small class="list-what">Personal training</small>`}</span>
           <div class="list-times">${chips}</div>
-        </div>` : "";
+        </div>`).join("");
     }).join("");
     const groupRows = groups.map((g) => `
       <div class="list-row list-group">

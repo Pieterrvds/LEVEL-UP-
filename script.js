@@ -56,7 +56,8 @@ document.addEventListener("click", (event) => {
 
 // ===== Level 2: the trainings =====
 // First one card per kind of group training (from the server: made when a class with a new name is planned),
-// then the personal trainings below. Filters: group / personal, and per trainer. A tap on a card opens a
+// then the 1:1 trainings a coach added (approved by the admin) and the personal trainings below. A coach who
+// gives one of these 1:1 (set in their hours) is added to "Coached by" on its card. Filters: group / personal, and per trainer. A tap on a card opens a
 // window with more about that training; the button on the card goes straight to booking.
 (function trainings() {
   const grid = document.getElementById("classGrid");
@@ -101,14 +102,23 @@ document.addEventListener("click", (event) => {
   function items() {
     const upcoming = (LevelUp.getClasses() || []).filter((c) => c.status === "scheduled" && c.start > new Date());
     const key = (title) => String(title || "").trim().replace(/\s+/g, " ").toLowerCase();
-    const groups = (LevelUp.getClassKinds() || []).map((k) => {
+    const kinds = LevelUp.getClassKinds() || [];
+    const solo = (title) => (kinds.find((k) => k.key === key(title))?.soloTrainers || []).filter((id) => coach(id));
+    // a training a coach gives 1:1 that has no card of its own yet: one card, with the coach's photo if it has none
+    const extra = kinds.filter((k) => solo(k.title).length && k.key !== "personal training" && !PERSONAL.some((p) => key(p.title) === k.key)).map((k) => {
+      const look = GROUP_LOOKS.find(([re]) => re.test(k.title));
+      const trainers = solo(k.title);
+      return { id: `s:${k.key}`, own: true, title: k.title, badge: "1:1", img: k.photoUrl || look?.[1] || coach(trainers[0]).img, pos: k.photoUrl ? "" : look?.[3] || "",
+        about: k.description || "One hour 1:1 with your coach, at your level and at your pace.", ownText: Boolean(k.description), trainers, trainer: trainers[0] };
+    });
+    const groups = kinds.filter((k) => k.hasClasses !== false).map((k) => {
       const look = GROUP_LOOKS.find(([re]) => re.test(k.title));
       const sessions = upcoming.filter((c) => key(c.title) === k.key).sort((a, b) => a.start - b.start);
       const trainers = [...new Set([...sessions.map((c) => c.trainerId), ...(k.trainers || [])])].filter((id) => coach(id));
       return { id: `g:${k.key}`, group: true, title: k.title, badge: "Group", img: k.photoUrl || look?.[1] || GROUP_DEFAULT[0],
         pos: k.photoUrl ? "" : look?.[3] || "", about: k.description || look?.[2] || GROUP_DEFAULT[1], ownText: Boolean(k.description), trainers, sessions };
     });
-    return [...groups, ...PERSONAL.map((p) => ({ ...p, trainers: [p.trainer] }))];
+    return [...groups, ...extra, ...PERSONAL.map((p) => ({ ...p, trainers: [...new Set([p.trainer, ...solo(p.title)])] }))];
   }
   const shown = (list) => list.filter((x) => (state.kind === "all" || (state.kind === "group") === Boolean(x.group))
     && (state.trainer === "all" || x.trainers.includes(state.trainer)));
@@ -120,11 +130,12 @@ document.addEventListener("click", (event) => {
       <article class="class-card ${x.group ? "class-card-kind" : ""}" data-training="${esc(x.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(x.title)}: ${esc(tr("more info"))}">
         <div class="class-media" style="--img:url('${esc(x.img)}')${x.pos ? `; --pos:${x.pos}` : ""}">${x.group ? `<span class="class-flag">👥 Group class</span>` : ""}</div>
         <div class="class-body">
-          <div class="class-head"><h3 ${x.group ? "data-no-i18n" : ""}>${esc(x.title)}</h3><span class="badge">${esc(x.badge)}</span></div>
+          <div class="class-head"><h3 ${x.group || x.own ? "data-no-i18n" : ""}>${esc(x.title)}</h3><span class="badge">${esc(x.badge)}</span></div>
           ${x.group ? `<p class="class-next">${next
               ? `<b>Next</b> <span>${esc(when(next))}</span> <span class="class-places">${next.taken}/${next.capacity}</span>`
               : `<span>New dates coming soon</span>`}</p>`
-            : `<ul class="class-stats">${["STR", "END", "TEC"].map((label, i) => `<li><span>${label}</span><i class="pips" style="--v:${x.stats[i]}" aria-label="${x.stats[i]} of 5"></i></li>`).join("")}</ul>`}
+            : x.stats ? `<ul class="class-stats">${["STR", "END", "TEC"].map((label, i) => `<li><span>${label}</span><i class="pips" style="--v:${x.stats[i]}" aria-label="${x.stats[i]} of 5"></i></li>`).join("")}</ul>`
+            : `<p class="class-next"><span>Personal training · 1:1</span></p>`}
           ${who.length ? `<div class="class-coach"><span class="coach-faces">${faces(x.trainers)}</span><span>Coached by <strong data-no-i18n>${esc(who.join(", ").replace(/, ([^,]*)$/, " & $1"))}</strong></span></div>` : ""}
           <div class="class-actions">
             ${x.group
@@ -191,7 +202,7 @@ document.addEventListener("click", (event) => {
       <div class="training-photo" style="--img:url('${esc(x.img)}')${x.pos ? `; --pos:${x.pos}` : ""}"></div>
       <div class="training-body">
         <p class="section-kicker">${x.group ? "👥 Group class" : "Personal training · 1:1"}</p>
-        <h2 id="trainingTitle" ${x.group ? "data-no-i18n" : ""}>${esc(x.title)}</h2>
+        <h2 id="trainingTitle" ${x.group || x.own ? "data-no-i18n" : ""}>${esc(x.title)}</h2>
         <p class="training-about" ${x.ownText ? "data-no-i18n" : ""}>${esc(x.about)}</p>
         ${x.points ? `<ul class="training-points">${x.points.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
         ${x.stats ? `<ul class="class-stats training-stats">${[["STR", "Strength"], ["END", "Endurance"], ["TEC", "Technique"]].map(([, label], i) => `<li><span>${label}</span><i class="pips" style="--v:${x.stats[i]}" aria-label="${x.stats[i]} of 5"></i></li>`).join("")}</ul>` : ""}

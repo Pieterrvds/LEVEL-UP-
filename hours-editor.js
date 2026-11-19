@@ -18,6 +18,9 @@ window.LevelUpHours = (() => {
   const hourOptions = (from, to, selected) => Array.from({ length: to - from + 1 }, (_, i) => from + i)
     .map((h) => `<option value="${h}" ${h === selected ? "selected" : ""}>${hh(h)}</option>`).join("");
   const slotLabel = (b) => `${LevelUp.parseDate(b.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${hh(b.hour)}`;
+  // what is given in the hours, and a mark while a new kind of training waits for the admin
+  const what = (r) => `${r.activity ? ` <i class="hours-what" data-no-i18n>${esc(r.activity)}</i>` : ""}${r.pending ? ` <span class="hours-wait" title="Waiting for approval">⏳</span>` : ""}`;
+  const NEW_KIND = "__new";
   const isUpcoming = (b) => ["awaiting_payment", "pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
 
   const views = {};   // key -> { el, opts, trainerId, editId }
@@ -27,7 +30,7 @@ window.LevelUpHours = (() => {
   function covers(list, b) {
     const dow = LevelUp.parseDate(b.date).getDay();
     const inside = (r) => b.hour >= r.start && b.hour < r.end;
-    return list.some((r) => r.trainerId === b.trainerId && r.kind === "open" && (r.weekday === dow || r.date === b.date) && inside(r))
+    return list.some((r) => r.trainerId === b.trainerId && r.kind === "open" && !r.pending && (r.weekday === dow || r.date === b.date) && inside(r))
       && !list.some((r) => r.trainerId === b.trainerId && r.kind === "closed" && r.date === b.date && inside(r));
   }
   // Sessions that would lose their hours if `after` replaced the current hours
@@ -60,6 +63,10 @@ window.LevelUpHours = (() => {
     const type = editing ? (editing.date ? editing.kind : "weekly") : draft?.type || "weekly";
     const today = LevelUp.dateKey();
     const wholeDay = (r) => r.start === 0 && r.end === 24;
+    // what can be given in 1:1 hours: every approved training; a name that isn't in the list (any more) stays selectable
+    const given = editing?.activity || draft?.activity || "";
+    const kinds = LevelUp.kindChoices();
+    if (given && !kinds.some((k) => k.key === LevelUp.kindKey(given))) kinds.push({ key: LevelUp.kindKey(given), title: given, pending: Boolean(editing?.pending) });
 
     // What players can book in the next 14 days; booked hours marked
     const preview = [];
@@ -86,7 +93,7 @@ window.LevelUpHours = (() => {
             ${blocks.map((r) => {
               const locked = lostBookings(view, trainerId, rows().filter((x) => x.id !== r.id));
               return `<span class="hours-chip${r.id === view.editId ? " editing" : ""}${locked.length ? " locked" : ""}" style="--c:${t.chartColor}">
-                <button type="button" class="hours-chip-edit" data-hours-edit="${r.id}" title="${locked.length ? `Booked: ${esc(locked.map(slotLabel).join(", "))}` : "Change or move"}">${locked.length ? "🔒 " : ""}${hh(r.start)}–${hh(r.end)}</button>
+                <button type="button" class="hours-chip-edit" data-hours-edit="${r.id}" title="${locked.length ? `Booked: ${esc(locked.map(slotLabel).join(", "))}` : "Change or move"}">${locked.length ? "🔒 " : ""}${hh(r.start)}–${hh(r.end)}${what(r)}</button>
                 ${locked.length ? `<span class="hours-chip-lock" title="${plural(locked.length, "booking")} in these hours">${locked.length}</span>`
                   : `<button type="button" class="hours-chip-del" data-hours-delete="${r.id}" aria-label="Delete ${DAY_NAMES[d]} ${hh(r.start)}–${hh(r.end)}">✕</button>`}
               </span>`;
@@ -99,7 +106,7 @@ window.LevelUpHours = (() => {
       ${dated.length ? `<ul class="hours-dates">${dated.map((r) => `
         <li class="${r.kind}">
           <span><strong>${LevelUp.parseDate(r.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</strong>
-            · ${r.kind === "closed" ? (wholeDay(r) ? "Closed all day" : `Closed ${hh(r.start)}–${hh(r.end)}`) : `Extra ${hh(r.start)}–${hh(r.end)}`}
+            · ${r.kind === "closed" ? (wholeDay(r) ? "Closed all day" : `Closed ${hh(r.start)}–${hh(r.end)}`) : `Extra ${hh(r.start)}–${hh(r.end)}`}${what(r)}
             ${r.note ? `<span class="muted small">· ${esc(r.note)}</span>` : ""}${r.date < today ? ` <span class="muted small">(past)</span>` : ""}</span>
           <span class="hours-date-actions">
             <button type="button" class="btn btn-small btn-ghost" data-hours-edit="${r.id}">Change</button>
@@ -130,6 +137,19 @@ window.LevelUpHours = (() => {
           <label data-for="time">To
             <select name="end">${hourOptions(1, 24, editing && !wholeDay(editing) ? editing.end : 20)}</select>
           </label>
+          <label data-for="what">What do you give?
+            <select name="activity">
+              <option value="">Personal training</option>
+              ${kinds.map((k) => `<option value="${esc(k.title)}" ${k.key === LevelUp.kindKey(given) ? "selected" : ""} data-no-i18n>${esc(k.title)}${k.pending ? " ⏳" : ""}</option>`).join("")}
+              ${LevelUp.getTrainingKinds() ? `<option value="${NEW_KIND}">＋ A new kind of training…</option>` : ""}
+            </select>
+          </label>
+          <div data-for="newkind" class="wide new-kind">
+            <label>Name of the training<input type="text" name="newTitle" maxlength="40" placeholder="e.g. Boxing, Yoga, Swimming"></label>
+            <label>Photo for its card (optional)<input type="file" name="newPhoto" accept="image/*"></label>
+            <label class="wide">In short (optional)<input type="text" name="newAbout" maxlength="300" placeholder="What can players expect?"></label>
+            <p class="muted small">${LevelUp.isAdmin() ? `It gets its own card under "Choose your training".` : `The admin checks a new kind of training first. Players see these hours and the card once it is approved.`}</p>
+          </div>
           <label data-for="date" class="wide">Note (only you${ids.length > 1 ? " and the trainer" : " and the admin"} see it)
             <input type="text" name="note" maxlength="80" placeholder="e.g. holiday, competition" value="${esc(editing?.note || "")}">
           </label>
@@ -157,7 +177,8 @@ window.LevelUpHours = (() => {
     form.querySelectorAll("[data-for]").forEach((f) => {
       const k = f.dataset.for;
       f.hidden = (k === "weekly" && type !== "weekly") || (k === "date" && type === "weekly")
-        || (k === "closed" && type !== "closed") || (k === "time" && allDay);
+        || (k === "closed" && type !== "closed") || (k === "time" && allDay) || (k === "what" && type === "closed")
+        || (k === "newkind" && (type === "closed" || form.elements.activity.value !== NEW_KIND));
     });
   }
 
@@ -176,20 +197,29 @@ window.LevelUpHours = (() => {
       start: allDay ? 0 : Number(f.start.value),
       end: allDay ? 24 : Number(f.end.value),
       kind: type === "closed" ? "closed" : "open",
-      note: type === "weekly" ? "" : f.note.value.trim()
+      note: type === "weekly" ? "" : f.note.value.trim(),
+      activity: type === "closed" ? "" : f.activity.value.trim()
     };
+    const fresh = entry.activity === NEW_KIND; // a new kind of training: its name, and a photo and a few words for the card
+    if (fresh) entry.activity = f.newTitle.value.trim().replace(/\s+/g, " ");
     const error = form.querySelector(".hours-error");
     if (entry.date === "") { error.textContent = "Pick a date."; return; }
+    if (fresh && entry.activity.length < 2) { error.textContent = "Give the new training a name."; return; }
     if (entry.end <= entry.start) { error.textContent = "The end time must be after the start time."; return; }
     const after = [...rows().filter((r) => r.id !== view.editId), { ...entry, id: entry.id || "new" }];
     const lost = lostBookings(view, view.trainerId, after);
     if (lost.length) { error.textContent = lockedMessage(lost).replace(/\n+/g, " "); return; }
     form.querySelector('button[type="submit"]').disabled = true;
     try {
+      if (fresh) await LevelUp.proposeKind(entry.activity, view.trainerId, { description: f.newAbout.value, file: f.newPhoto.files[0] || null });
       await LevelUp.saveOpeningHours(entry);
+      if (entry.activity) await LevelUp.loadTrainingKinds();
+      const waits = (LevelUp.getTrainingKinds() || []).some((k) => k.status === "pending" && k.key === LevelUp.kindKey(entry.activity));
       view.editId = null;
       view.draft = null;
-      LevelUp.toast({ title: "Hours saved", text: `${LevelUp.trainerById(view.trainerId).short}: the schedule is updated`, icon: "🕒", tone: "green" });
+      LevelUp.toast(waits
+        ? { title: "Sent for approval", text: "Players see these hours once the admin has approved the new training", icon: "⏳" }
+        : { title: "Hours saved", text: `${LevelUp.trainerById(view.trainerId).short}: the schedule is updated`, icon: "🕒", tone: "green" });
       rerender(view);
     } catch (err) {
       error.textContent = err.message;
@@ -246,11 +276,20 @@ window.LevelUpHours = (() => {
     if (!view?.el) return;
     view.editId = null;
     view.draft = draft;
+    if (draft.trainerId && view.opts.trainers.includes(draft.trainerId)) view.trainerId = draft.trainerId;
     rerender(view);
     const form = view.el.querySelector("[data-hours-form]");
     form?.scrollIntoView({ block: "center", behavior: "smooth" });
     form?.classList.add("hours-form-new");
   }
 
-  return { render, start, lost, lockedMessage, isUpcoming, slotLabel };
+  // Show one trainer's card (the team week of the admin)
+  function show(key, trainerId) {
+    const view = views[key];
+    if (!view?.el || !view.opts.trainers.includes(trainerId)) return;
+    view.trainerId = trainerId; view.editId = null; view.draft = null;
+    rerender(view);
+  }
+
+  return { render, start, show, lost, lockedMessage, isUpcoming, slotLabel };
 })();

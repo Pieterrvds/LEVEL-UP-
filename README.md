@@ -170,7 +170,7 @@ What a trainer sees, built for a quick look on a phone and a full view on a comp
   the agenda and the week follow without a reload.
 
 ### My hours: 1:1 hours and group classes together
-The old tabs "Group classes" and "My hours" are one tab now (`myWeekHtml`, `hoursKindHtml`, `openPlan` in `profile.js`):
+The old tabs "Group classes" and "My hours" are one tab now (`renderMyWeek`, `hoursKindHtml`, `startPlan` in `profile.js`; the week itself is `week-plan.js`, shared with the admin):
 - **My week** on top: one real week (this week, next week … four weeks ahead), a row per day on a phone (days that
   are over hide) and seven columns on a computer. Each day shows the **1:1 hours** players can book (with how many
   are booked, or "Day off") and the **group classes** (hour, name, places taken). A tap on a class opens its list of
@@ -182,6 +182,33 @@ The old tabs "Group classes" and "My hours" are one tab now (`myWeekHtml`, `hour
   number planned). The first shows the hours editor (week planner on a computer, list on a phone), the second
   everything of the old Group classes tab: new class (once or weekly, with a note for the players), who's coming,
   tick off, change, cancel, chat, the next 14 days with later and past classes folded away.
+
+### Kinds of training, and the admin's approval of a new one
+A coach doesn't only say *when*, but also *what* he gives:
+- **1:1 hours carry what is given** (`trainer_hours.activity`): the form asks "What do you give?" with every
+  training to pick from ("Personal training" by default, then the trainings that have a card, then the coach's own
+  that still wait) and "＋ A new kind of training…" with a name, a **photo for the card** and a few words. The class
+  form shows the same photo and text fields as soon as the name of the class isn't a training yet.
+- **Players see which lesson it is** in "Book your trainer": on a computer under the trainer's name on each hour, on a
+  phone as a row per trainer and lesson ("Maxim · Boxing"). An hour without a kind says "Personal training".
+- **"Choose your training"**: a coach who gives a training 1:1 that already has a card joins its "Coached by"; a new
+  kind gets its own card (`s:<key>` in `script.js`) with its photo (the coach's own photo when it has none) and text.
+- **A new kind from a coach waits for the admin** (`class_kinds.status = 'pending'`, made by `_kind_register`): the
+  admins get a notification, and until it is approved players see nothing of it: not the card, not the hours
+  (`trainer_hours_list` leaves them out and `_hours_cover` refuses a booking), not the class (`class_list`,
+  `class_signup`), and the class is not announced. The coach sees it marked ⏳ in his week and on the class card.
+  A training that already has a card, and anything the admin makes himself, needs no approval.
+- **Admin → Team → "To approve"** shows each request with its photo, name, coach, text and what was planned with it.
+  **Approve**, **Other name…** (approves under a corrected name: the hours, classes and chat follow) or **Decline**
+  (with a reason for the coach: the hours and classes planned with it are removed). `admin_kind_decide` does it;
+  `training_kinds` lists the kinds for the forms; `kind_propose` stores the photo and the text of a new one.
+
+### Admin → Team: the schedule of the whole team
+The admin's Team tab is the coach's "My hours" for every trainer (`renderTeam` in `admin.js`, the week is the shared
+`week-plan.js`): the **team week** with, per day, each trainer's 1:1 hours (and what is given in them) and the group
+classes, a filter per trainer, and **＋ Plan something** that first asks for which trainer. Below it two tiles:
+**Personal training** (the opening hours planner and list) and **Group classes** (plan, who's coming, change, cancel,
+and the cards of the home page). The separate "Group classes" tab is gone; `admin.html#classes` still opens it here.
 
 ## Group classes
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every

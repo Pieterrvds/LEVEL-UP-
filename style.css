@@ -1464,6 +1464,9 @@ textarea { resize: vertical; min-height: 130px; }
 }
 .slot-time { display: none; font-family: var(--display); font-size: 0.5rem; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .slot-name { font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot:has(.slot-what) { gap: 0; }
+.slot:has(.slot-what) .slot-name { line-height: 1.25; }
+.slot-what { max-width: 100%; font-size: 0.7rem; line-height: 1.25; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* which 1:1 lesson it is */
 .slot-state { font-family: var(--display); font-size: 0.45rem; color: var(--c); white-space: nowrap; line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .slot.free:hover { background: var(--c); color: #000; transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 .slot.free:hover .slot-state { color: #000; }
@@ -2069,6 +2072,7 @@ textarea { resize: vertical; min-height: 130px; }
   .list-trainer { display: flex; align-items: center; gap: 8px; }
   .list-trainer img { width: 30px; height: 30px; object-fit: cover; object-position: 50% 20%; border-radius: 50%; border: 2px solid var(--c); }
   .list-trainer b { font-size: 0.85rem; color: var(--c, var(--text)); }
+  .list-what { min-width: 0; padding-left: 8px; font-size: 0.8rem; color: var(--muted); border-left: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* which 1:1 lesson */
   .list-times { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 
   /* time buttons */

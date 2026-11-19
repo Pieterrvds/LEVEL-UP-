@@ -18,7 +18,8 @@ const state = {
   tab: "overview", // open page tab (see ADMIN_TABS)
   tabFromLink: false,
   folds: {}, // long panels that open on a click (reviews, messages): key -> open
-  fin: { mode: "month", offset: 0, statementMonth: null }
+  fin: { mode: "month", offset: 0, statementMonth: null },
+  teamKind: "solo" // Team tab: the 1:1 hours ("solo") or the group classes ("group") below the team week
 };
 let data = null;
 const tips = new Map();
@@ -42,14 +43,15 @@ const slotLabel = (b) => {
 
 // ---------- Data ----------
 async function loadData() {
-  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop, room, orders] = await Promise.all([
+  const [{ players, bookings, applications, unlinkedTrainers, pricing, packs, vouchers, hours }, pushKey, reviews, classes, shop, room, orders] = await Promise.all([ // (the kinds of training load along)
     LevelUp.adminData(),
     LevelUp.pushServerReady(),
     LevelUp.adminReviews().catch(() => []),
     LevelUp.classManageList(800).catch(() => []),
     LevelUp.adminShop().catch(() => null),
     LevelUp.adminRoom().catch(() => null), // the room rentals, for the finances (null: database not updated yet)
-    LevelUp.adminOrders().catch(() => null) // the web shop's orders (null: database not updated yet)
+    LevelUp.adminOrders().catch(() => null), // the web shop's orders (null: database not updated yet)
+    LevelUp.loadTrainingKinds() // the kinds of training, with the new ones that wait for approval
   ]);
   // Finished group classes count in the finances as one line each: what the players were charged and the trainer's fee
   const classLines = classes.filter((c) => c.status === "done").map((c) => ({
@@ -194,16 +196,23 @@ async function render() {
     </div>
 
     <div data-pane="team">
-    <section class="panel admin-panel" id="hoursPanel"></section>
+    <section class="panel admin-panel" id="teamPlan">
+      <div class="panel-head"><h2>Team schedule</h2><span class="muted">Who gives what, when, 1:1 or in a group. Change or cancel anything here.</span></div>
+      <div id="kindRequests"></div>
+      <div id="teamWeek"></div>
+      <h3 class="panel-sub hk-title">Set up</h3>
+      <div class="hours-kind" id="teamKind" role="tablist" aria-label="Set up"></div>
+    </section>
+
+    <section class="panel admin-panel" id="hoursPanel" data-team-pane="solo"></section>
+    <section class="panel admin-panel gc-wrap" id="adminClasses" data-team-pane="group"></section>
+    <section class="panel admin-panel" id="adminKinds" data-team-pane="group"></section>
 
     <section class="panel admin-panel">
       <div class="panel-head"><h2>Trainers</h2><span class="muted">Occupancy = booked hours of all open hours in the next ${LevelUp.BOOKING_WEEKS_AHEAD} weeks</span></div>
       <div class="trainer-admin-grid" id="trainerCards"></div>
     </section>
     </div>
-
-    <section class="panel admin-panel gc-wrap" data-pane="classes" id="adminClasses"></section>
-    <section class="panel admin-panel" data-pane="classes" id="adminKinds"></section>
 
     <div data-pane="room" id="adminRoom"></div>
     <div data-pane="levelupy" id="adminLevelupy"></div>
@@ -259,6 +268,7 @@ async function render() {
   if (!state.tabFromLink) {
     state.tabFromLink = true;
     state.tab = LevelUp.tabFromHash(root, ADMIN_TABS.map((t) => t.id)) || state.tab;
+    if (location.hash === "#classes") { state.tab = "team"; state.teamKind = "group"; } // old links to the Group classes tab
   }
   LevelUp.showPageTab(root, state.tab);
   renderApplications();
@@ -281,7 +291,126 @@ async function render() {
   window.LevelUpRoom?.mount(document.getElementById("adminRoom"));
   window.LevelUpAssistantAdmin?.mount(document.getElementById("adminLevelupy"));
   renderKinds();
+  renderTeam();
 }
+
+// ---------- New kinds of training from the coaches: nothing of them shows to players until approved here ----------
+const pendingKinds = () => (LevelUp.getTrainingKinds() || []).filter((k) => k.status === "pending");
+function kindRequestsHtml() {
+  const list = pendingKinds();
+  if (!list.length) return "";
+  const DAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const hh = (h) => `${String(h).padStart(2, "0")}:00`;
+  const short = (key) => LevelUp.parseDate(key).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const who = (id) => LevelUp.trainerById(id)?.short || id;
+  return `
+    <h3 class="panel-sub">To approve <span class="count-chip">${list.length}</span></h3>
+    <p class="muted small-text">A coach made a new kind of training. Players don't see its card, its hours or its classes until you approve it.</p>
+    <ul class="kind-req-list">${list.map((k) => {
+      const hours = k.hours.map((h) => `${esc(who(h.trainerId))} · ${h.date ? short(h.date) : `every ${DAY[h.weekday]}`} ${hh(h.start)}–${hh(h.end)}`);
+      const first = k.classes[0];
+      const classes = first ? [`${esc(who(first.trainerId))} · ${short(first.date)} ${first.time}${k.classes.length > 1 ? ` (+${k.classes.length - 1} more${first.weekly ? ", weekly" : ""})` : ""}`] : [];
+      return `
+      <li class="kind-req" data-kind-req="${esc(k.key)}">
+        <div class="kind-req-photo">${k.photoUrl ? `<img src="${esc(k.photoUrl)}" alt="">` : `<span>No photo</span>`}</div>
+        <div>
+          <p class="kind-req-title"><b>${esc(k.title)}</b> ${k.hours.length ? `<span class="kind-tag">1:1</span>` : ""} ${k.classes.length ? `<span class="kind-tag">Group</span>` : ""} <span class="muted small">by ${esc(who(k.trainerId))}</span></p>
+          ${k.description ? `<p class="small">${esc(k.description)}</p>` : ""}
+          <p class="muted small">${[...hours, ...classes].join("<br>") || "Nothing planned with it yet."}</p>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn btn-small btn-primary" data-kind-approve="${esc(k.key)}">Approve</button>
+          <button type="button" class="btn btn-small btn-ghost" data-kind-rename="${esc(k.key)}">Other name…</button>
+          <button type="button" class="btn btn-small btn-ghost" data-kind-decline="${esc(k.key)}">Decline</button>
+        </div>
+      </li>`; }).join("")}</ul>`;
+}
+root.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-kind-approve], [data-kind-rename], [data-kind-decline]");
+  if (!btn) return;
+  const key = btn.dataset.kindApprove || btn.dataset.kindRename || btn.dataset.kindDecline;
+  const kind = pendingKinds().find((k) => k.key === key);
+  if (!kind) return;
+  let title = null, reason = "";
+  if (btn.dataset.kindRename) {
+    title = prompt("Approve with this name (on the card and in the schedule):", kind.title);
+    if (title === null || !title.trim()) return;
+  }
+  if (btn.dataset.kindDecline) {
+    reason = prompt(`Decline "${kind.title}"? What was planned with it is removed and the coach gets a message.\n\nWhy (shown to the coach):`, "");
+    if (reason === null) return;
+  }
+  btn.disabled = true;
+  try {
+    await LevelUp.adminKindDecide(key, !btn.dataset.kindDecline, title, reason);
+    LevelUp.toast(btn.dataset.kindDecline ? { title: "Declined", text: "The coach got a message", icon: "✕" } : { title: "Approved", text: `${title || kind.title} is live for players`, icon: "✓", tone: "green" });
+  } catch (err) { btn.disabled = false; alert(err.message); }
+});
+
+// ---------- Team: the week of every trainer (1:1 hours and group classes), and one place to plan, change and cancel ----------
+const teamClasses = () => LevelUpClasses.list("admin") || data.classes || [];
+function teamKindHtml() {
+  const list = teamClasses();
+  const soon = list.filter((c) => c.status === "scheduled" && !c.canFinish).length;
+  const todo = list.filter((c) => c.canFinish).length;
+  const tile = (id, tag, label, note) => `
+    <button type="button" role="tab" class="hk-tile" data-team-kind="${id}" aria-selected="${state.teamKind === id}">
+      <b><span class="kind-tag">${tag}</span> <span>${label}</span></b><small>${note}</small>
+    </button>`;
+  return `
+    ${tile("solo", "1:1", "Personal training", "The hours players can book each trainer, and what is given in them")}
+    ${tile("group", "Group", "Group classes", `${soon ? `${soon} planned` : "None planned"}${todo ? ` · ${todo} to finish` : ""}`)}`;
+}
+function renderTeam() {
+  const week = document.getElementById("teamWeek");
+  if (!week) return;
+  LevelUpWeek.render(week, {
+    key: "team",
+    trainers: TRAINERS.map((t) => t.id),
+    weeks: 8,
+    title: "Team week",
+    help: "The 1:1 hours and the group classes of every trainer. Tap ＋ on a day to plan something, tap a group class to see who is coming, change or cancel it.",
+    bookings: () => data.bookings,
+    classes: teamClasses,
+    onClass: (id) => {
+      showTeamKind("group");
+      LevelUpClasses.show(id, "admin");
+      setTimeout(() => document.querySelector(`#adminClasses [data-gc="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
+    },
+    onSolo: (trainerId) => {
+      state.hoursList = true; // the list, on that trainer's card
+      showTeamKind("solo");
+      LevelUpHours.show("admin", trainerId);
+      document.getElementById("hoursPanel").scrollIntoView({ block: "start", behavior: "smooth" });
+    },
+    onPlan: (what, { date, trainerId }) => {
+      if (what === "class") {
+        showTeamKind("group");
+        LevelUpClasses.create({ date: date || undefined, trainerId }, "admin");
+        setTimeout(() => { const form = document.querySelector("#adminClasses form.gc-form:not(.gc-edit)"); form?.scrollIntoView({ block: "start", behavior: "smooth" }); form?.elements.title?.focus({ preventScroll: true }); }, 60);
+        return;
+      }
+      state.hoursList = true; // the list has the form with every field; the planner is one tap away
+      showTeamKind("solo");
+      LevelUpHours.start("admin", { type: what, date: date || "", weekday: date ? LevelUp.parseDate(date).getDay() : undefined, trainerId });
+    }
+  });
+  document.getElementById("teamKind").innerHTML = teamKindHtml();
+  document.getElementById("kindRequests").innerHTML = kindRequestsHtml();
+  showTeamKind(state.teamKind, false);
+}
+// Show the 1:1 hours or the group classes below the team week
+function showTeamKind(kind, draw = true) {
+  state.teamKind = kind;
+  root.querySelectorAll("[data-team-pane]").forEach((el) => { el.hidden = el.dataset.teamPane !== kind; });
+  root.querySelectorAll("#teamKind [data-team-kind]").forEach((el) => el.setAttribute("aria-selected", String(el.dataset.teamKind === kind)));
+  if (draw && kind === "solo") renderHours();
+}
+LevelUpClasses.onChange((key) => { // a class was planned, changed or cancelled: the week and the counter follow
+  if (key !== "admin" || !document.getElementById("teamWeek")) return;
+  LevelUpWeek.refresh("team");
+  document.getElementById("teamKind").innerHTML = teamKindHtml();
+});
 
 // ---------- Group trainings on the home page: one card per kind of class, with your own text and photo ----------
 let kindsLoaded = false;
@@ -293,8 +422,8 @@ function renderKinds() {
   if (box.contains(document.activeElement) && document.activeElement.matches("textarea")) return; // don't redraw while typing
   const kinds = LevelUp.getClassKinds();
   box.innerHTML = `
-    <div class="panel-head"><h2>Group trainings on the home page</h2></div>
-    <p class="muted">Every kind of group class (by its name) gets its own card under "Choose your training", first in the row, as long as a class of that name is planned or was held in the last 30 days. Give each one a photo and a few lines; without them it gets a photo and text that fit its name.</p>
+    <div class="panel-head"><h2>Trainings on the home page</h2></div>
+    <p class="muted">Every kind of training gets its own card under "Choose your training": a group class (by its name) as long as one is planned or was held in the last 30 days, and what a trainer gives 1:1 as long as it is in their hours. Give each one a photo and a few lines; without them it gets a photo and text that fit its name.</p>
     ${kinds.length ? `<ul class="kind-list">${kinds.map((k) => `
       <li class="kind-row" data-kind="${esc(k.key)}">
         <div class="kind-photo">${k.photoUrl ? `<img src="${esc(k.photoUrl)}" alt="">` : `<span>Standard photo</span>`}</div>
@@ -349,7 +478,6 @@ root.addEventListener("click", async (event) => {
 const ADMIN_TABS = [
   { id: "overview", label: "Overview" },
   { id: "bookings", label: "Bookings" },
-  { id: "classes", label: "Group classes" },
   { id: "room", label: "Gym room" },
   { id: "finances", label: "Finances" },
   { id: "shop", label: "Shop" },
@@ -364,7 +492,7 @@ function adminTabs() {
   const badge = {
     overview: data.applications.filter((a) => a.status === "pending").length + data.reviews.filter((r) => r.status === "pending").length,
     bookings: data.rawBookings.filter((b) => b.status === "pending" && LevelUp.slotStart(b.date, b.hour) > now).length,
-    classes: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0),
+    team: data.classes.filter((c) => c.canFinish).length + data.classes.reduce((n, c) => n + (c.refunds?.length || 0), 0) + pendingKinds().length, // classes to finish or to refund, new trainings to approve
     finances: data.packs.filter((pk) => pk.status === "requested").length
       + data.vouchers.filter((v) => v.hoodie && !v.hoodieGivenAt).length
       + data.rawBookings.filter((b) => b.refundStatus === "manual").length,
@@ -1409,6 +1537,8 @@ root.addEventListener("click", (event) => {
     action.catch((err) => { btn.disabled = false; alert(err.message); });
     return;
   }
+  const teamKind = event.target.closest("[data-team-kind]");
+  if (teamKind) { showTeamKind(teamKind.dataset.teamKind); return; }
   if (event.target.closest("[data-hours-planner]")) {
     state.hoursList = false;
     renderHours();
