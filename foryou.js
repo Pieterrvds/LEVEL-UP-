@@ -736,8 +736,9 @@
       parts[name] = el;
       return el;
     };
-    host.append(card("coach", "fy-coach"), card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
-    parts.coach.hidden = true; // only a coach has it
+    host.append(card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
+    parts.coach = null; // only a coach gets this card, right under the greeting (see draw)
+    delete lastHtml.coach;
     built = true;
     startMascot();
   }
@@ -795,8 +796,14 @@
     }
     const data = LevelUp.getForYou();
     updateHello(player);
-    set("coach", coachHtml(player));
-    parts.coach.hidden = !lastHtml.coach;
+    const coachCard = coachHtml(player);
+    if (coachCard && !parts.coach) {
+      parts.coach = document.createElement("section");
+      parts.coach.className = "fy-card fy-coach";
+      parts.hello.after(parts.coach);
+    }
+    if (!coachCard && parts.coach) { parts.coach.remove(); parts.coach = null; delete lastHtml.coach; }
+    if (coachCard) set("coach", coachCard);
     set("next", nextHtml(player));
     set("streak", streakHtml(player));
     set("race", raceHtml(player, data));
