@@ -122,7 +122,7 @@
   "Group training": "Groepstraining",
   "Every training builds different stats: strength (STR), endurance (END) and technique (TEC). Train": "Elke training bouwt andere stats op: kracht (STR), uithouding (END) en techniek (TEC). Train",
   "1:1 with a coach": "1:1 met een coach",
-  "(€60 per hour) or join a": "(€60 per uur) of doe mee aan een",
+  "(€50 per hour) or join a": "(€50 per uur) of doe mee aan een",
   "group session": "groepssessie",
   ", both straight from the schedule.": ", allebei rechtstreeks via de planning.",
   "All-round": "All-round",

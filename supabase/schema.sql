@@ -33,8 +33,8 @@ insert into public.app_config (key, value) values
   ('session_xp', '75'),
   ('booking_notice_hours', '12'),
   ('booking_weeks_ahead', '4'),
-  ('session_price', '60'),       -- what a player pays per 1-hour session (euro)
-  ('trainer_fee', '40'),         -- the trainer's share per session; the rest goes to the venue
+  ('session_price', '50'),       -- what a player pays per 1-hour session (euro)
+  ('trainer_fee', '45'),         -- the trainer's share per session; the rest goes to the venue
   ('owner_trainer_id', 'pieter'), -- the owner's own trainer card keeps the full price
   ('free_cancel_hours', '24'),    -- players cancel for free up to this many hours before; later = charged in full
   ('reward_window_days', '7'),    -- trainers can reward / mark a no-show up to this many days after the session
@@ -43,7 +43,7 @@ insert into public.app_config (key, value) values
   ('intro_price', '30'),          -- a player's very first 1:1 session (the trainer still gets their full fee)
   ('duo_price', '80'),            -- one trainer, two people, one hour (total)
   ('duo_trainer_fee', '50'),      -- the trainer's share of a duo session
-  ('packs', '[{"size":5,"price":280},{"size":10,"price":540}]'), -- session packs: credits for 1:1 sessions
+  ('packs', '[{"size":5,"price":240},{"size":10,"price":470}]'), -- session packs: credits for 1:1 sessions
   ('online_payments', 'off'),     -- 'on' once the payments Edge Function and the Mollie key are set up
   ('health_form_months', '12'),   -- the health questionnaire is confirmed again after this many months
   ('loyalty_sessions', '20'),     -- every this many completed (paid) sessions earn a free 1:1 session
@@ -72,6 +72,18 @@ create or replace function public._config(p_key text)
 returns text language sql stable security definer set search_path = public as $$
   select value from public.app_config where key = p_key;
 $$;
+
+-- A 1:1 hour costs 50 instead of 60 and the trainer gets 45 (5 stays with the platform); the packs follow
+-- (5 for 240, 10 for 470). Only where the old standard values still stand: a price that was changed by hand is
+-- left alone, and so is every booking that was already made (its price is saved on the booking).
+update public.app_config set value = '50' where key = 'session_price' and value = '60';
+update public.app_config set value = '45' where key = 'trainer_fee' and value = '40';
+update public.app_config set value = (
+  select jsonb_agg(case when (e ->> 'size')::int = 5 and (e ->> 'price')::numeric = 280 then jsonb_set(e, '{price}', '240')
+                        when (e ->> 'size')::int = 10 and (e ->> 'price')::numeric = 540 then jsonb_set(e, '{price}', '470')
+                        else e end order by (e ->> 'size')::int)
+  from jsonb_array_elements(value::jsonb) e)::text
+where key = 'packs' and (value like '%280%' or value like '%540%');
 
 -- ---------------------------------------------------------
 -- Tables
@@ -6419,7 +6431,7 @@ declare
   me uuid := auth.uid();
   p public.profiles;
   today date := (now() at time zone 'Europe/Brussels')::date;
-  price1 numeric := coalesce(nullif(public._config('session_price'), '')::numeric, 60);
+  price1 numeric := coalesce(nullif(public._config('session_price'), '')::numeric, 50);
   owner_id text := public._config('owner_trainer_id');
   sessions jsonb; weekly jsonb; classes jsonb; due_sessions jsonb; due_classes jsonb; tab numeric; packs_due jsonb;
   credits integer; vouchers jsonb; done integer;

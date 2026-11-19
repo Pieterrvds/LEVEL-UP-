@@ -22,8 +22,8 @@ const LevelUp = (() => {
   // Keep these in sync with app_config in supabase/schema.sql
   const SESSION_XP = 75;
   const LOYALTY_SESSIONS = 20;    // every 20 completed sessions earn a free 1:1 session (app_config loyalty_sessions)
-  const SESSION_PRICE = 60;       // euro per 1-hour session (the server's app_config decides the real price)
-  const TRAINER_FEE = 40;         // the trainer's share; the rest goes to the venue
+  const SESSION_PRICE = 50;       // euro per 1-hour session (the server's app_config decides the real price)
+  const TRAINER_FEE = 45;         // the trainer's share; the rest goes to the venue
   const BOOKING_WEEKS_AHEAD = 4;
   const BOOKING_NOTICE_HOURS = 12;
   const FREE_CANCEL_HOURS = 24;   // later cancellations of a confirmed session are charged in full
@@ -582,7 +582,7 @@ const LevelUp = (() => {
   // Public price list (the server's app_config decides; these are the fallbacks)
   let pricing = {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
-    packs: [{ size: 5, price: 280 }, { size: 10, price: 540 }], trainers: {}, onlinePayments: false,
+    packs: [{ size: 5, price: 240 }, { size: 10, price: 470 }], trainers: {}, onlinePayments: false,
     classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: [],
     shipping: null // { on, fee, freeFrom }: sending web shop orders (null = the database doesn't know it yet)
   };

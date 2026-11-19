@@ -276,7 +276,7 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
 ## A first booking, step by step
 A visitor taps an hour and sees one window that carries them through: **1 Account → 2 Health check → 3 Request**
 (the row of steps at the top, `stepsHtml` in `schedule.js`; members who booked before don't get the steps).
-- The price a newcomer pays comes first ("€30 · your first session … · after that €60").
+- The price a newcomer pays comes first ("€30 · your first session … · after that €50").
 - "Create account" opens the account window: first name, e-mail, password. The choice "player or trainer" only shows
   after the small link "Are you a personal trainer? Apply as a coach".
 - **The chosen hour is kept** on the device (`localStorage` `levelup.slot`, three days). After the confirmation e-mail
@@ -581,10 +581,10 @@ The numbers are rows in `app_config`: `free_cancel_hours`, `reward_window_days`,
 ## Prices and payouts
 | What | Client pays | Trainer gets | Venue keeps |
 |---|---|---|---|
-| 1:1 session | €60 (or the trainer's own price) | €40 (or the trainer's own fee) | the rest |
-| First session (a player's very first booking) | €30 | full fee (€40) | €30 − fee (you cover the discount) |
+| 1:1 session | €50 (or the trainer's own price) | €45 (or the trainer's own fee) | the rest (€5) |
+| First session (a player's very first booking) | €30 | full fee (€45) | €30 − fee: you cover the discount (−€15) |
 | Duo (2 people, 1 trainer, 1 hour) | €80 in total | €50 | €30 |
-| Pack credit (5 for €280, 10 for €540) | €56 / €54 per session, paid up front | full fee (€40) | the rest |
+| Pack credit (5 for €240, 10 for €470) | €48 / €47 per session, paid up front | full fee (€45) | the rest (€3 / €2) |
 Sessions with Pieter (the owner) keep the full price. Price, fee, how the price was set (standard, intro, pack or duo)
 and the pack are saved on every booking, so later price changes never alter past sessions.
 - **Packs:** a player requests a pack in their profile (you get an email), you send payment details and press

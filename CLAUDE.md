@@ -55,6 +55,7 @@ Recent afgewerkt en live:
 - Uren instellen: "Wat geef je?" is verplicht. Een nieuw uur wordt pas opgeslagen als de coach (of de admin) kiest wat er gegeven wordt, ook bij het slepen in de weekplanner.
 - Opruimen: wat voorbij is en geen geld draagt, verdwijnt na 2 weken (`_tidy_old`, `tidy_days` in `app_config`): geannuleerde lessen zonder betaling, groepschats zonder les, voorbije extra uren en vrije dagen; de lijst voorbije lessen van een coach gaat 2 weken terug. Afgewerkte lessen en sessies, betalingen, XP en privégesprekken blijven altijd.
 - Klassement: de lijst onder het podium bevat alle spelers (tot 200) en scrolt binnen het bord.
+- Prijzen: een 1-op-1-uur kost €50 (was €60), de trainer krijgt €45 en €5 blijft bij het platform; eerste sessie €30 (de trainer krijgt dan toch €45, dus die korting draagt Pieter); pakketten 5 voor €240 en 10 voor €470. De waarden staan in `app_config`; `schema.sql` zet ze alleen om waar nog de oude standaard stond.
 - Instagram: de map `instagram/` bevat profielfoto, 9 posts, story-sjablonen, covers en `teksten.md`; `tools/instagram-posts.js` en `tools/shop-art.js` maken de beelden opnieuw.
 
 Wat Pieter zelf nog moet doen (vraag of het gebeurd is voor je erop bouwt):
