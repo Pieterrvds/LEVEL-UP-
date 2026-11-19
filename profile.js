@@ -407,10 +407,11 @@ function renderEarnings() {
 }
 
 // ---------- The coach panel ----------
-// One overview on top (what waits, today, the coming week, the money) and five parts below it, one at a time:
+// One overview on top (what waits, today, the coming week, the money) and four parts below it, one at a time:
 // To do (requests, sessions to settle, classes to finish) · Agenda (1:1 sessions and group classes together, per day)
-// · Group classes (plan and manage) · Earnings · My hours.
-const COACH_VIEWS = [["todo", "To do"], ["agenda", "Agenda"], ["classes", "Group classes"], ["earnings", "Earnings"], ["hours", "My hours"]];
+// · My hours (the week as players see it, and everything a coach plans: 1:1 hours and group classes) · Earnings.
+const COACH_VIEWS = [["todo", "To do"], ["agenda", "Agenda"], ["hours", "My hours"], ["earnings", "Earnings"]];
+const WEEKS_AHEAD = 4;  // "My week" goes this many weeks ahead (as far as the coach's classes are loaded)
 const AGENDA_DAYS = 14; // the agenda shows two weeks; later sessions fold away
 
 function coachData() {
@@ -579,13 +580,14 @@ function renderCoachPanel() {
 
       ${pane("agenda", `<div id="coachAgenda">${coachAgendaHtml(d)}</div>`)}
 
-      ${pane("classes", `<div class="gc-wrap" id="coachClasses"></div>`)}
+      ${pane("hours", `
+        <div class="my-week" id="myWeek">${myWeekHtml(d)}</div>
+        <h3 class="panel-sub hk-title">Set up</h3>
+        <div class="hours-kind" id="hoursKind" role="tablist" aria-label="Set up">${hoursKindHtml(d)}</div>
+        <div class="hours-kind-pane" data-hours-pane="solo" ${hoursKind() === "solo" ? "" : "hidden"}><div id="myHours"></div></div>
+        <div class="hours-kind-pane" data-hours-pane="group" ${hoursKind() === "group" ? "" : "hidden"}><div class="gc-wrap" id="coachClasses"></div></div>`)}
 
       ${pane("earnings", renderEarnings() || `<p class="muted">No earnings yet.</p>`)}
-
-      ${pane("hours", `
-        <p class="muted small-text my-hours-now">${esc(LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId) || "no weekly hours yet: players can't book you")}</p>
-        <div id="myHours"></div>`)}
     </section>`;
 }
 
@@ -597,6 +599,8 @@ function refreshCoachCounts() {
   overview.innerHTML = coachOverviewHtml(d);
   document.getElementById("coachTabs").innerHTML = coachTabsHtml(d);
   document.getElementById("coachAgenda").innerHTML = coachAgendaHtml(d);
+  document.getElementById("myWeek").innerHTML = myWeekHtml(d);
+  document.getElementById("hoursKind").innerHTML = hoursKindHtml(d);
   const empty = document.getElementById("coachTodoEmpty");
   if (empty) empty.hidden = d.todo > 0;
   showCoachView(coachView(d), false);
@@ -610,7 +614,137 @@ function showCoachView(view, byHand = true) {
     el.setAttribute("aria-selected", String(el.dataset.coachView === view));
     if (byHand && el.dataset.coachView === view) { const bar = el.parentElement; bar.scrollTo({ left: el.offsetLeft - (bar.clientWidth - el.offsetWidth) / 2, behavior: "smooth" }); } // keep the chosen part in sight on a phone
   });
-  if (view === "hours") renderMyHours(); // the week planner measures itself, so it draws when it is on screen
+  if (view === "hours" && hoursKind() === "solo") renderMyHours(); // the week planner measures itself, so it draws when it is on screen
+}
+
+// ---------- "My hours": the coach's week, and one place to plan 1:1 hours and group classes ----------
+const hoursKind = () => state.hoursKind || "solo";
+const hhRange = (hours) => { // [9, 10, 11, 17] -> "09:00–12:00 · 17:00–18:00" (each range stays on one line)
+  const out = [];
+  hours.forEach((h) => { const last = out[out.length - 1]; if (last && last[1] === h) last[1] = h + 1; else out.push([h, h + 1]); });
+  const hh = (h) => `${String(h).padStart(2, "0")}:00`;
+  return out.map(([a, b]) => `<span class="nw">${hh(a)}–${hh(b)}</span>`).join(" · ");
+};
+
+// One real week: per day the hours players can book 1:1 and the group classes, with a "+" to add something on that day
+function myWeekHtml(d) {
+  const trainerId = LevelUp.getPlayer().trainerId;
+  const week = Math.min(WEEKS_AHEAD, Math.max(0, state.hoursWeek || 0));
+  const monday = LevelUp.startOfWeek(week);
+  const days = Array.from({ length: 7 }, (_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+  const fmt = (x, o) => x.toLocaleDateString("en-GB", o);
+  const closed = (LevelUp.getOpeningHours() || []).filter((r) => r.trainerId === trainerId && r.kind === "closed");
+  const busy = d.all.filter((b) => ["pending", "confirmed", "awaiting_payment"].includes(b.status));
+  const row = (day) => {
+    const key = LevelUp.dateKey(day);
+    const past = key < d.today;
+    const hours = LevelUp.trainerHours(trainerId, key);
+    const booked = busy.filter((b) => b.date === key).length;
+    const classes = d.classes.filter((c) => c.date === key && c.status === "scheduled").sort((a, b) => a.time.localeCompare(b.time));
+    const off = closed.some((r) => r.date === key && r.start === 0 && r.end === 24) || (!hours.length && closed.some((r) => r.date === key));
+    const solo = hours.length ? `
+          <button type="button" class="mw-item solo" data-week-solo>
+            <span class="ag-kind">1:1</span>${booked ? `<small>${booked} booked</small>` : ""}<span class="mw-text">${hhRange(hours)}</span>
+          </button>`
+      : booked ? `<button type="button" class="mw-item solo" data-week-solo><span class="ag-kind">1:1</span><small>${booked} booked</small></button>` // a session outside the hours of today's roster
+      : off ? `<button type="button" class="mw-item off" data-week-solo><span class="ag-kind">1:1</span><span class="mw-text">Day off</span></button>`
+      : !classes.length ? `<p class="mw-none">Nothing planned</p>` : "";
+    return `
+      <li class="mw-day${key === d.today ? " today" : ""}${past ? " past" : ""}" data-week-day="${key}">
+        <div class="mw-date"><b>${fmt(day, { weekday: "short" })}</b><span>${fmt(day, { day: "numeric", month: "short" })}</span></div>
+        <div class="mw-body">${solo}${classes.map((c) => `
+          <button type="button" class="mw-item group" data-week-class="${c.id}">
+            <span class="ag-kind">Group</span><b class="mw-time">${c.time}</b><small>${c.taken}/${c.capacity}</small><span class="mw-text" data-no-i18n>${esc(c.title)}</span>
+          </button>`).join("")}</div>
+        ${past ? "" : `<button type="button" class="mw-add" data-week-add="${key}" aria-label="Add">＋</button>`}
+      </li>`;
+  };
+  return `
+    <div class="mw-head">
+      <h3 class="panel-sub">My week</h3>
+      <div class="mw-nav">
+        <button type="button" class="week-btn" data-week-nav="-1" ${week <= 0 ? "disabled" : ""} aria-label="Previous week">◀</button>
+        <strong>${week === 0 ? "This week" : week === 1 ? "Next week" : `${fmt(days[0], { day: "numeric", month: "short" })} – ${fmt(days[6], { day: "numeric", month: "short" })}`}</strong>
+        <button type="button" class="week-btn" data-week-nav="1" ${week >= WEEKS_AHEAD ? "disabled" : ""} aria-label="Next week">▶</button>
+      </div>
+      <button type="button" class="btn btn-small btn-primary mw-plan" data-week-add="">＋ Plan something</button>
+    </div>
+    <p class="muted small-text mw-help">What players can book with you. Tap ＋ on a day to add something, tap a group class to see who is coming.</p>
+    <ul class="mw-days">${days.map(row).join("")}</ul>`;
+}
+
+// The two things a coach sets up: when players can book 1:1, and the group classes
+function hoursKindHtml(d) {
+  const kind = hoursKind();
+  const hours = LevelUp.weeklyHoursText(LevelUp.getPlayer().trainerId);
+  const n = d.classSoon.length;
+  const tile = (id, tag, label, note) => `
+    <button type="button" role="tab" class="hk-tile" data-hours-kind="${id}" aria-selected="${kind === id}">
+      <b><span class="kind-tag">${tag}</span> <span>${label}</span></b><small>${note}</small>
+    </button>`;
+  return `
+    ${tile("solo", "1:1", "Personal training", hours ? esc(hours) : "no weekly hours yet: players can't book you")}
+    ${tile("group", "Group", "Group classes", n ? `${n} planned` : "None planned")}`;
+}
+
+// Show the 1:1 hours or the group classes below the week
+function showHoursKind(kind) {
+  state.hoursKind = kind;
+  document.querySelectorAll("[data-hours-pane]").forEach((el) => { el.hidden = el.dataset.hoursPane !== kind; });
+  document.querySelectorAll("#hoursKind [data-hours-kind]").forEach((el) => el.setAttribute("aria-selected", String(el.dataset.hoursKind === kind)));
+  if (kind === "solo") renderMyHours();
+}
+const intoView = (el) => el?.scrollIntoView({ block: "center", behavior: "smooth" });
+
+// One group class with its list of who is coming, in "My hours"
+function openCoachClass(id) {
+  showCoachView("hours");
+  showHoursKind("group");
+  LevelUpClasses.show(id);
+  setTimeout(() => intoView(document.querySelector(`#coachClasses [data-gc="${id}"]`)), 350);
+}
+
+// "Plan something": first what (1:1 or group), the day is already known when it started from a day in the week
+let planDialog = null;
+function openPlan(key = "") {
+  if (!planDialog) {
+    planDialog = document.createElement("dialog");
+    planDialog.className = "auth-dialog plan-dialog";
+    planDialog.setAttribute("aria-labelledby", "planTitle");
+    document.body.appendChild(planDialog);
+    planDialog.addEventListener("click", (event) => {
+      if (event.target === planDialog || event.target.closest("[data-close]")) { planDialog.close(); return; }
+      const pick = event.target.closest("[data-plan]");
+      if (pick) startPlan(pick.dataset.plan, planDialog.dataset.date);
+    });
+  }
+  planDialog.dataset.date = key;
+  const day = key ? LevelUp.parseDate(key) : null;
+  const option = (what, icon, label, note) => `
+    <button type="button" class="plan-option" data-plan="${what}"><i aria-hidden="true">${icon}</i><span><b>${label}</b><small>${note}</small></span></button>`;
+  planDialog.innerHTML = `
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+    <h2 id="planTitle">What do you want to plan?</h2>
+    ${day ? `<p class="plan-day">${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>` : ""}
+    <p class="plan-group"><span class="kind-tag">1:1</span> <span>Personal training</span></p>
+    ${option("weekly", "🔁", "Fixed hours, every week", day ? `Players can book you every ${day.toLocaleDateString("en-GB", { weekday: "long" })}` : "The hours players can book you each week")}
+    ${option("open", "➕", "Extra hours on one day", "Open up one date, on top of your fixed hours")}
+    ${option("closed", "🌴", "Day off", "Close one date, or a few hours of it")}
+    <p class="plan-group"><span class="kind-tag">Group</span> <span>Group training</span></p>
+    ${option("class", "👥", "Group class", "Once or every week: players sign up, you see who is coming")}`;
+  if (!planDialog.open) planDialog.showModal();
+}
+function startPlan(what, key) {
+  planDialog.close();
+  if (what === "class") {
+    showHoursKind("group");
+    LevelUpClasses.create(key ? { date: key } : {});
+    setTimeout(() => { const form = document.querySelector("#coachClasses form.gc-form:not(.gc-edit)"); form?.scrollIntoView({ block: "start", behavior: "smooth" }); form?.elements.title?.focus({ preventScroll: true }); }, 60);
+    return;
+  }
+  state.hoursList = true; // the list has the form with every field; the week planner is one tap away
+  showHoursKind("solo");
+  LevelUpHours.start("profile", { type: what, date: key || "", weekday: key ? LevelUp.parseDate(key).getDay() : undefined });
 }
 
 document.addEventListener("click", (event) => {
@@ -629,12 +763,19 @@ document.addEventListener("click", (event) => {
   }
   const move = event.target.closest("[data-move-booking]");
   if (move) { openMove(move.dataset.moveBooking); return; }
-  const cls = event.target.closest("[data-agenda-class]");
-  if (cls) { // a group class in the agenda: its list of who is coming, in "Group classes"
-    showCoachView("classes");
-    LevelUpClasses.show(cls.dataset.agendaClass);
-    setTimeout(() => document.querySelector(`#coachClasses [data-gc="${cls.dataset.agendaClass}"]`)?.scrollIntoView({ block: "center" }), 350);
+  const cls = event.target.closest("[data-agenda-class], [data-week-class]");
+  if (cls) { openCoachClass(cls.dataset.agendaClass || cls.dataset.weekClass); return; } // its list of who is coming
+  const kind = event.target.closest("[data-hours-kind]");
+  if (kind) { showHoursKind(kind.dataset.hoursKind); return; }
+  const nav = event.target.closest("[data-week-nav]");
+  if (nav) {
+    state.hoursWeek = Math.min(WEEKS_AHEAD, Math.max(0, (state.hoursWeek || 0) + Number(nav.dataset.weekNav)));
+    document.getElementById("myWeek").innerHTML = myWeekHtml(coachData());
+    return;
   }
+  const add = event.target.closest("[data-week-add]");
+  if (add) { openPlan(add.dataset.weekAdd); return; }
+  if (event.target.closest("[data-week-solo]")) { showHoursKind("solo"); intoView(document.getElementById("hoursKind")); }
 });
 LevelUpClasses.onChange((key) => { if (key === "coach") refreshCoachCounts(); });
 
@@ -1200,7 +1341,7 @@ function bindEvents(player) {
   if (LevelUp.isTrainer()) {
     LevelUpClasses.mount(document.getElementById("coachClassesTodo"), { part: "todo" });
     LevelUpClasses.mount(document.getElementById("coachClasses"), { part: "plan" });
-    if (!document.querySelector('[data-coach-pane="hours"]')?.hidden) renderMyHours();
+    if (!document.querySelector('[data-coach-pane="hours"]')?.hidden && hoursKind() === "solo") renderMyHours();
   }
 
   document.getElementById("healthEditBtn")?.addEventListener("click", () => { state.healthEdit = true; render(); document.getElementById("health")?.scrollIntoView({ block: "start" }); });

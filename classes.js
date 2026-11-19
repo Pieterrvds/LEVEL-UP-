@@ -57,6 +57,8 @@ window.LevelUpClasses = (() => {
       paintAll();
       await withRoster(LevelUp.classRoster(id));
     };
+    // open the form for a new class from outside, with the day already filled in (the week in "My hours")
+    st.create = (draft = {}) => { st.creating = true; st.editing = null; st.error = ""; st.draft = draft; paintAll(); };
 
     function classCard(c) {
       const t = LevelUp.trainerById(c.trainerId);
@@ -148,7 +150,7 @@ window.LevelUpClasses = (() => {
           </div>
           <datalist id="gcPresets">${PRESETS.map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
           <div class="field-row four">
-            <label>Date<input type="date" name="date" required value="${c ? c.date : tomorrow()}" min="${c && c.date < LevelUp.dateKey() ? c.date : LevelUp.dateKey()}"></label>
+            <label>Date<input type="date" name="date" required value="${c ? c.date : st.draft?.date || tomorrow()}" min="${c && c.date < LevelUp.dateKey() ? c.date : LevelUp.dateKey()}"></label>
             <label>Start<input type="time" name="time" required value="${c ? c.time : "19:00"}" step="900"></label>
             <label>Duration<select name="minutes">${durations.map((m) => `<option value="${m}" ${m === (c?.minutes || 60) ? "selected" : ""}>${m} min</option>`).join("")}</select></label>
             <label>Places<input type="number" name="capacity" min="${c ? Math.max(2, c.taken) : 2}" max="60" value="${c ? c.capacity : pricing.classCapacity}" required></label>
@@ -247,6 +249,7 @@ window.LevelUpClasses = (() => {
             : r.announced != null ? `Everyone got the news · ${r.announced} notification${r.announced === 1 ? "" : "s"} sent` : "Players can sign up now", icon: "👥", tone: "green" });
         LevelUp.loadPricing();
         st.creating = false;
+        st.draft = null;
         await load();
       } catch (err) {
         st.error = err.message;
@@ -276,7 +279,7 @@ window.LevelUpClasses = (() => {
     el.onclick = async (event) => {
       const t = event.target.closest("button, a");
       if (!t || t.disabled) return;
-      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.editing = null; st.error = ""; paintAll(); return; }
+      if (t.hasAttribute("data-gc-new")) { st.creating = !st.creating; st.editing = null; st.error = ""; st.draft = null; paintAll(); return; }
       if (t.dataset.gcEdit) { st.editing = st.editing === t.dataset.gcEdit ? null : t.dataset.gcEdit; st.creating = false; st.error = ""; paintAll(); return; }
       if (t.hasAttribute("data-gc-past")) { st.showPast = !st.showPast; paintAll(); return; }
       if (t.hasAttribute("data-gc-later")) { st.showLater = !st.showLater; paintAll(); return; }
@@ -337,7 +340,8 @@ window.LevelUpClasses = (() => {
   // For the coach panel: the coach's classes as they are loaded, a way to open one, and a call when they change
   const list = (key = "coach") => states.get(key)?.list || null;
   const show = (id, key = "coach") => states.get(key)?.show?.(id);
+  const create = (draft, key = "coach") => states.get(key)?.create?.(draft);
   const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 
-  return { mount, list, show, onChange, SOON_DAYS };
+  return { mount, list, show, create, onChange, SOON_DAYS };
 })();

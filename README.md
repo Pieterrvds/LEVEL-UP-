@@ -154,22 +154,34 @@ What a trainer sees, built for a quick look on a phone and a full view on a comp
 - **On top, four tiles** that each open the part they count: **To do** (requests, sessions to settle and classes to
   finish, with what waits written out), **Today** (and the next thing coming), **Next 7 days** (how many 1:1 and how
   many group classes) and the money (**To receive**, or **Earned** for the owner).
-- **Five parts, one at a time** (the bar stays in sight while scrolling):
+- **Four parts, one at a time** (the bar stays in sight while scrolling):
   - **To do**: requests (Confirm / Decline) and sessions to settle (Reward / No-show), both marked `1:1`, then the
     **group classes to finish**. "Settled today" folds away. With nothing waiting it says "All done". The panel opens
     here when something waits, otherwise on the agenda.
   - **Agenda**: 1:1 sessions and group classes in **one list, a heading per day** (Today, Tomorrow, then the weekday),
     each row with its hour, a `1:1` or `Group` tag, the name and one button: **Move** for a session, **Open** for a
-    class (that goes to Group classes with its list of who is coming open). Chips filter All / 1:1 / Group classes.
-    Two weeks show; "Later" opens the rest. On a computer the days stand in two columns.
-  - **Group classes**: plan a class and manage the upcoming ones. The **next 14 days** show, later classes fold away
-    behind "Later · n" (a weekly class is otherwise a very long list), past classes behind their own button.
-    On a phone a class card is compact; Change and Cancel show once its list is open.
+    class (that goes to My hours → Group classes with its list of who is coming open). Chips filter All / 1:1 /
+    Group classes. Two weeks show; "Later" opens the rest. On a computer the days stand in two columns.
+  - **My hours**: everything a coach plans, 1:1 and group, in one place (see below).
   - **Earnings**: the tiles and the monthly statement (PDF / CSV).
-  - **My hours**: the trainer's own opening hours (week planner on a computer, list editor on a phone).
 - `classes.js` can mount in parts (`part: "todo"` only the classes to finish, `part: "plan"` the rest; the admin keeps
-  `"all"`), shares its list (`LevelUpClasses.list()`), opens one class (`show(id)`) and tells when it changed
-  (`onChange`), so the tiles, the tab counter and the agenda follow without a reload.
+  `"all"`), shares its list (`LevelUpClasses.list()`), opens one class (`show(id)`), opens the form for a new class
+  with the day filled in (`create({ date })`) and tells when it changed (`onChange`), so the tiles, the tab counter,
+  the agenda and the week follow without a reload.
+
+### My hours: 1:1 hours and group classes together
+The old tabs "Group classes" and "My hours" are one tab now (`myWeekHtml`, `hoursKindHtml`, `openPlan` in `profile.js`):
+- **My week** on top: one real week (this week, next week … four weeks ahead), a row per day on a phone (days that
+  are over hide) and seven columns on a computer. Each day shows the **1:1 hours** players can book (with how many
+  are booked, or "Day off") and the **group classes** (hour, name, places taken). A tap on a class opens its list of
+  who is coming; a tap on the 1:1 hours opens the hours below.
+- **＋ on a day**, or **＋ Plan something**, asks **what** to plan: under `1:1` fixed hours every week, extra hours on
+  one day or a day off; under `Group` a group class. The right form opens with the day already filled in
+  (`LevelUpHours.start(key, { type, date, weekday })` for hours, `LevelUpClasses.create({ date })` for a class).
+- **Set up**: two tiles, **Personal training** (with the weekly hours written out) and **Group classes** (with the
+  number planned). The first shows the hours editor (week planner on a computer, list on a phone), the second
+  everything of the old Group classes tab: new class (once or weekly, with a note for the players), who's coming,
+  tick off, change, cancel, chat, the next 14 days with later and past classes folded away.
 
 ## Group classes
 One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_sessions` and `class_signups`; every

@@ -56,7 +56,8 @@ window.LevelUpHours = (() => {
     const dated = mine.filter((r) => r.date).sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start);
     const editing = mine.find((r) => r.id === view.editId) || null;
     if (!editing) view.editId = null;
-    const type = editing ? (editing.date ? editing.kind : "weekly") : "weekly";
+    const draft = editing ? null : view.draft || null; // a new block that was started from the week ("+" on a day)
+    const type = editing ? (editing.date ? editing.kind : "weekly") : draft?.type || "weekly";
     const today = LevelUp.dateKey();
     const wholeDay = (r) => r.start === 0 && r.end === 24;
 
@@ -117,10 +118,10 @@ window.LevelUpHours = (() => {
             </select>
           </label>
           <label data-for="weekly">Day
-            <select name="weekday">${WEEK_ORDER.map((d) => `<option value="${d}" ${editing?.weekday === d ? "selected" : ""}>${DAY_NAMES[d]}</option>`).join("")}</select>
+            <select name="weekday">${WEEK_ORDER.map((d) => `<option value="${d}" ${(editing ? editing.weekday : draft?.weekday) === d ? "selected" : ""}>${DAY_NAMES[d]}</option>`).join("")}</select>
           </label>
           <label data-for="date">Date
-            <input type="date" name="date" min="${today}" value="${editing?.date || ""}">
+            <input type="date" name="date" min="${today}" value="${editing?.date || draft?.date || ""}">
           </label>
           <label data-for="closed" class="check-label"><input type="checkbox" name="allDay" ${!editing || wholeDay(editing) ? "checked" : ""}> Whole day</label>
           <label data-for="time">From
@@ -187,6 +188,7 @@ window.LevelUpHours = (() => {
     try {
       await LevelUp.saveOpeningHours(entry);
       view.editId = null;
+      view.draft = null;
       LevelUp.toast({ title: "Hours saved", text: `${LevelUp.trainerById(view.trainerId).short}: the schedule is updated`, icon: "🕒", tone: "green" });
       rerender(view);
     } catch (err) {
@@ -203,6 +205,7 @@ window.LevelUpHours = (() => {
     const edit = event.target.closest("[data-hours-edit]");
     if (edit) {
       view.editId = edit.dataset.hoursEdit;
+      view.draft = null;
       rerender(view);
       view.el.querySelector("[data-hours-form]")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       return;
@@ -237,5 +240,17 @@ window.LevelUpHours = (() => {
   const lost = (bookings, trainerId, after) => bookings
     .filter((b) => b.trainerId === trainerId && isUpcoming(b) && covers(rows(), b) && !covers(after, b));
 
-  return { render, lost, lockedMessage, isUpcoming, slotLabel };
+  // Start a new block from outside with the type and the day filled in: { type: "weekly" | "open" | "closed", weekday, date }
+  function start(key, draft) {
+    const view = views[key];
+    if (!view?.el) return;
+    view.editId = null;
+    view.draft = draft;
+    rerender(view);
+    const form = view.el.querySelector("[data-hours-form]");
+    form?.scrollIntoView({ block: "center", behavior: "smooth" });
+    form?.classList.add("hours-form-new");
+  }
+
+  return { render, start, lost, lockedMessage, isUpcoming, slotLabel };
 })();
