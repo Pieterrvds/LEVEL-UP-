@@ -1095,6 +1095,8 @@ function renderDynamicTeam() {
 
 // ---------- High scores: arcade board with a podium, all time or this month ----------
 let hsPeriod = "all";
+const HS_MAX = 200;    // the board lists everyone, up to this many (the server sends no more)
+const HS_VISIBLE = 8;  // rows in sight below the podium; the rest by scrolling
 const HS_MEDALS = ["#ffd23f", "#c9d1d9", "#cd7f32"];
 // Confetti over the number one of the podium: a fixed set of pieces (place, colour, speed, start), so it looks the
 // same on every draw and never jumps. Pure CSS (see .hs-confetti); off with "reduce motion".
@@ -1143,7 +1145,7 @@ function renderHighScores() {
     return;
   }
   const player = LevelUp.getPlayer();
-  const top = rows.filter((r) => r.place <= 25);
+  const top = rows.filter((r) => r.place <= HS_MAX);
   const me = rows.find((r) => r.isMe);
   const level = (r) => LevelUp.progress(r.totalXp).level;
   const score = (r) => r.xp.toLocaleString("en-US");
@@ -1175,7 +1177,8 @@ function renderHighScores() {
         </li>`;
     };
     list.innerHTML = top.slice(3).map(row).join("")
-      + (me && me.place > 25 ? `<li class="hs-gap" aria-hidden="true">···</li>${row(me, 0)}` : "");
+      + (me && me.place > HS_MAX ? `<li class="hs-gap" aria-hidden="true">···</li>${row(me, 0)}` : "");
+    list.classList.toggle("hs-scroll", top.length - 3 > HS_VISIBLE); // more players than fit: the list scrolls
   }
 
   let msg;

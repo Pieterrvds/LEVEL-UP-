@@ -2165,6 +2165,9 @@ textarea { resize: vertical; min-height: 130px; }
 .pl-copy legend { padding: 0 4px; font-size: 0.75rem; color: var(--muted); }
 .pl-copy label { display: flex; align-items: center; gap: 4px; color: var(--text); font-size: 0.8rem; }
 .pl-form .btn-row { margin: 0; }
+.pl-form [hidden] { display: none; }
+.pl-form .form-error { margin: 0; font-size: 0.82rem; }
+.pl-form .form-error:empty { display: none; }
 .pl-ghost.closing { color: #fff; background: rgba(255, 90, 95, 0.35); border-color: var(--red); }
 .hours-editor .small, #hoursPanel .small { font-size: 0.8rem; }
 .my-hours-intro { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
@@ -2369,6 +2372,9 @@ textarea { resize: vertical; min-height: 130px; }
 .hs-board-head { padding: 0 8px 6px; font-family: var(--display); font-size: 0.45rem; text-transform: uppercase; color: var(--muted); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .hs-board-head span:nth-child(n + 3), .hs-lvl, .hs-score { text-align: right; }
 .hs-list { list-style: none; margin: 0; padding: 0; }
+/* more players than fit: eight rows in sight, the rest by scrolling inside the board */
+.hs-list.hs-scroll { max-height: 336px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--gold) transparent; -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(#000 calc(100% - 26px), transparent); -webkit-mask-image: linear-gradient(#000 calc(100% - 26px), transparent); padding-bottom: 28px; }
 .hs-row { padding: 7px 8px; font-family: var(--display); font-size: 0.6rem; color: var(--muted); line-height: 1.9; font-size-adjust: 0.9; font-size-adjust: cap-height 1.24; font-style: italic; font-weight: 800; }
 .hs-row:nth-child(odd) { background: rgba(255, 255, 255, 0.025); }
 .hs-rank { white-space: nowrap; }

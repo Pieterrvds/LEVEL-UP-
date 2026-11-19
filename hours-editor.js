@@ -21,6 +21,26 @@ window.LevelUpHours = (() => {
   // what is given in the hours, and a mark while a new kind of training waits for the admin
   const what = (r) => `${r.activity ? ` <i class="hours-what" data-no-i18n>${esc(r.activity)}</i>` : ""}${r.pending ? ` <span class="hours-wait" title="Waiting for approval">⏳</span>` : ""}`;
   const NEW_KIND = "__new";
+  const PLAIN = "__pt"; // plain personal training (stored as no kind)
+  // The choices for "What do you give?". A new block starts with nothing chosen: the hours can only be saved once
+  // the coach says what he gives. given: what the block has now.
+  function whatOptions(given, fresh) {
+    const kinds = LevelUp.kindChoices();
+    if (given && !kinds.some((k) => k.key === LevelUp.kindKey(given))) kinds.push({ key: LevelUp.kindKey(given), title: given });
+    return `${fresh ? `<option value="" disabled selected hidden>Choose…</option>` : ""}
+      <option value="${PLAIN}" ${!fresh && !given ? "selected" : ""}>Personal training</option>
+      ${kinds.map((k) => `<option value="${esc(k.title)}" ${given && k.key === LevelUp.kindKey(given) ? "selected" : ""} data-no-i18n>${esc(k.title)}${k.pending ? " ⏳" : ""}</option>`).join("")}
+      ${LevelUp.getTrainingKinds() ? `<option value="${NEW_KIND}">＋ A new kind of training…</option>` : ""}`;
+  }
+  // What a form says is given: { activity, fresh } (fresh: a new kind of training), or { error }
+  function readWhat(form) {
+    const v = form.elements.activity.value;
+    if (!v) return { error: "Choose what you give in these hours first." };
+    if (v === PLAIN) return { activity: "" };
+    if (v !== NEW_KIND) return { activity: v };
+    const title = (form.elements.newTitle?.value || "").trim().replace(/\s+/g, " ");
+    return title.length < 2 ? { error: "Give the new training a name." } : { activity: title, fresh: true };
+  }
   const isUpcoming = (b) => ["awaiting_payment", "pending", "confirmed"].includes(b.status) && LevelUp.slotStart(b.date, b.hour) > new Date();
 
   const views = {};   // key -> { el, opts, trainerId, editId }
@@ -63,10 +83,7 @@ window.LevelUpHours = (() => {
     const type = editing ? (editing.date ? editing.kind : "weekly") : draft?.type || "weekly";
     const today = LevelUp.dateKey();
     const wholeDay = (r) => r.start === 0 && r.end === 24;
-    // what can be given in 1:1 hours: every approved training; a name that isn't in the list (any more) stays selectable
-    const given = editing?.activity || draft?.activity || "";
-    const kinds = LevelUp.kindChoices();
-    if (given && !kinds.some((k) => k.key === LevelUp.kindKey(given))) kinds.push({ key: LevelUp.kindKey(given), title: given, pending: Boolean(editing?.pending) });
+    const given = editing?.activity || draft?.activity || ""; // what is given in the block that is being changed
 
     // What players can book in the next 14 days; booked hours marked
     const preview = [];
@@ -138,11 +155,7 @@ window.LevelUpHours = (() => {
             <select name="end">${hourOptions(1, 24, editing && !wholeDay(editing) ? editing.end : 20)}</select>
           </label>
           <label data-for="what">What do you give?
-            <select name="activity">
-              <option value="">Personal training</option>
-              ${kinds.map((k) => `<option value="${esc(k.title)}" ${k.key === LevelUp.kindKey(given) ? "selected" : ""} data-no-i18n>${esc(k.title)}${k.pending ? " ⏳" : ""}</option>`).join("")}
-              ${LevelUp.getTrainingKinds() ? `<option value="${NEW_KIND}">＋ A new kind of training…</option>` : ""}
-            </select>
+            <select name="activity">${whatOptions(given, !editing && !given)}</select>
           </label>
           <div data-for="newkind" class="wide new-kind">
             <label>Name of the training<input type="text" name="newTitle" maxlength="40" placeholder="e.g. Boxing, Yoga, Swimming"></label>
@@ -198,13 +211,15 @@ window.LevelUpHours = (() => {
       end: allDay ? 24 : Number(f.end.value),
       kind: type === "closed" ? "closed" : "open",
       note: type === "weekly" ? "" : f.note.value.trim(),
-      activity: type === "closed" ? "" : f.activity.value.trim()
+      activity: ""
     };
-    const fresh = entry.activity === NEW_KIND; // a new kind of training: its name, and a photo and a few words for the card
-    if (fresh) entry.activity = f.newTitle.value.trim().replace(/\s+/g, " ");
+    // open hours need to say what is given; a new kind of training comes with a photo and a few words for the card
+    const given = type === "closed" ? { activity: "" } : readWhat(form);
+    const fresh = Boolean(given.fresh);
+    entry.activity = given.activity || "";
     const error = form.querySelector(".hours-error");
     if (entry.date === "") { error.textContent = "Pick a date."; return; }
-    if (fresh && entry.activity.length < 2) { error.textContent = "Give the new training a name."; return; }
+    if (given.error) { error.textContent = given.error; form.elements.activity.focus(); return; }
     if (entry.end <= entry.start) { error.textContent = "The end time must be after the start time."; return; }
     const after = [...rows().filter((r) => r.id !== view.editId), { ...entry, id: entry.id || "new" }];
     const lost = lostBookings(view, view.trainerId, after);
@@ -291,5 +306,5 @@ window.LevelUpHours = (() => {
     rerender(view);
   }
 
-  return { render, start, show, lost, lockedMessage, isUpcoming, slotLabel };
+  return { render, start, show, lost, lockedMessage, isUpcoming, slotLabel, whatOptions, readWhat, NEW_KIND };
 })();

@@ -157,30 +157,32 @@ window.LevelUpPlanner = (() => {
     pop.style.top = `${y - box.top + 8}px`;
   }
   const closePopover = () => { const pop = host?.querySelector(".pl-popover"); if (pop) pop.hidden = true; };
-  // the trainings to pick from; a new name from a coach waits for the admin's approval
-  const kindList = () => `<datalist id="plKinds">${LevelUp.kindChoices().filter((k) => !k.pending).map((k) => `<option value="${esc(k.title)}">`).join("")}</datalist>
-        ${LevelUp.isAdmin() ? "" : `<p class="muted small pl-kind-note">A new kind of training is checked by the admin first.</p>`}`;
+  // "What do you give?": hours are only saved with an answer. A new kind from a coach waits for the admin's approval.
+  const whatField = (r) => `
+        <label class="pl-note">What do you give?<select name="activity">${LevelUpHours.whatOptions(r.activity || "", !r.id)}</select></label>
+        <label class="pl-note" data-pl-newkind hidden>Name of the training<input type="text" name="newTitle" maxlength="40" placeholder="e.g. Boxing, Yoga, Swimming"></label>
+        ${LevelUp.isAdmin() ? "" : `<p class="muted small pl-kind-note" data-pl-newkind hidden>The admin checks a new kind of training first.</p>`}`;
   const hourOptions = (from, to, sel) => Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => `<option value="${h}" ${h === sel ? "selected" : ""}>${hh(h)}</option>`).join("");
 
   function editWeekly(r, x, y) {
     const t = LevelUp.trainerById(r.trainerId);
     openPopover(`
-      <form class="pl-form" data-pl-form="weekly" data-id="${r.id}">
+      <form class="pl-form" data-pl-form="weekly" ${r.id ? `data-id="${r.id}"` : ""} data-trainer="${r.trainerId}">
         <p class="pl-form-title" style="color:${t.chartColor}">${esc(t.name)}</p>
         <div class="pl-form-row">
           <label>Day<select name="weekday">${DOW.map((d) => `<option value="${d}" ${d === r.weekday ? "selected" : ""}>${LONG[d]}</option>`).join("")}</select></label>
           <label>From<select name="start">${hourOptions(0, 23, r.start)}</select></label>
           <label>To<select name="end">${hourOptions(1, 24, r.end)}</select></label>
         </div>
-        <label class="pl-note">What is given? (empty = personal training)<input type="text" name="activity" maxlength="40" list="plKinds" placeholder="e.g. boxing, yoga, dance" value="${esc(r.activity || "")}"></label>
-        ${kindList()}
+${whatField(r)}
         <fieldset class="pl-copy"><legend>Copy these hours to</legend>
           ${DOW.filter((d) => d !== r.weekday).map((d) => `<label><input type="checkbox" name="copy" value="${d}"> ${LONG[d].slice(0, 3)}</label>`).join("")}
         </fieldset>
         <div class="btn-row">
-          <button type="submit" class="btn btn-small btn-primary">Save</button>
-          <button type="button" class="btn btn-small btn-danger" data-pl-delete="${r.id}">Delete</button>
+          <button type="submit" class="btn btn-small btn-primary">${r.id ? "Save" : "Add hours"}</button>
+          ${r.id ? `<button type="button" class="btn btn-small btn-danger" data-pl-delete="${r.id}">Delete</button>` : ""}
         </div>
+        <p class="form-error" role="alert"></p>
       </form>`, x, y);
   }
 
@@ -195,13 +197,13 @@ window.LevelUpPlanner = (() => {
           <label>From<select name="start">${hourOptions(0, 23, whole ? 0 : r.start)}</select></label>
           <label>To<select name="end">${hourOptions(1, 24, whole ? 24 : r.end)}</select></label>
         </div>
-        <label class="pl-note">What is given? (extra hours; empty = personal training)<input type="text" name="activity" maxlength="40" list="plKinds" placeholder="e.g. boxing, yoga, dance" value="${esc(r.activity || "")}"></label>
-        ${kindList()}
+<div data-pl-what ${r.kind === "closed" ? "hidden" : ""}>${whatField(r)}</div>
         <label class="pl-note">Note (only you and the trainer see it)<input type="text" name="note" maxlength="80" value="${esc(r.note || "")}"></label>
         <div class="btn-row">
           <button type="submit" class="btn btn-small btn-primary">Save</button>
           ${r.id ? `<button type="button" class="btn btn-small btn-danger" data-pl-delete="${r.id}">Delete</button>` : ""}
         </div>
+        <p class="form-error" role="alert"></p>
       </form>`, x, y);
   }
 
@@ -209,23 +211,35 @@ window.LevelUpPlanner = (() => {
     const f = form.elements;
     const id = form.dataset.id || null;
     const old = rows().find((r) => r.id === id);
+    // open hours need to say what is given
+    const closing = form.dataset.plForm !== "weekly" && f.kind.value === "closed";
+    const given = closing ? { activity: "" } : LevelUpHours.readWhat(form);
+    if (given.error) { form.querySelector(".form-error").textContent = given.error; f.activity.focus(); return; }
+    const told = async () => { // a new kind from a coach: say that it waits for the admin
+      if (!given.fresh) return false;
+      await LevelUp.loadTrainingKinds();
+      const waits = (LevelUp.getTrainingKinds() || []).some((k) => k.status === "pending" && k.key === LevelUp.kindKey(given.activity));
+      if (waits) LevelUp.toast({ title: "Sent for approval", text: "Players see these hours once the admin has approved the new training", icon: "⏳" });
+      rerender();
+      return waits;
+    };
     if (form.dataset.plForm === "weekly") {
-      const entry = { id, trainerId: old.trainerId, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value), activity: f.activity.value.trim() };
+      const entry = { id, trainerId: old?.trainerId || form.dataset.trainer, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value), activity: given.activity };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(entry.trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       const copies = [...form.querySelectorAll("[name=copy]:checked")].map((c) => Number(c.value));
       closePopover();
       if (await save(entry)) {
         for (const d of copies) await save({ trainerId: entry.trainerId, weekday: d, start: entry.start, end: entry.end, activity: entry.activity });
-        LevelUp.toast({ title: "Hours saved", text: copies.length ? `Also copied to ${copies.length} other day${copies.length === 1 ? "" : "s"}` : "The schedule is updated", icon: "🕒", tone: "green" });
+        if (!(await told())) LevelUp.toast({ title: "Hours saved", text: copies.length ? `Also copied to ${copies.length} other day${copies.length === 1 ? "" : "s"}` : "The schedule is updated", icon: "🕒", tone: "green" });
       }
     } else {
       const trainerId = old?.trainerId || form.dataset.trainer;
-      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim(), activity: f.activity.value.trim() };
+      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim(), activity: given.activity };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       closePopover();
-      if (await save(entry)) LevelUp.toast({ title: entry.kind === "closed" ? "Closed" : "Extra hours saved", text: "The schedule is updated", icon: "🕒", tone: "green" });
+      if (await save(entry) && !(await told())) LevelUp.toast({ title: entry.kind === "closed" ? "Closed" : "Extra hours saved", text: "The schedule is updated", icon: "🕒", tone: "green" });
     }
   }
 
@@ -331,9 +345,8 @@ window.LevelUpPlanner = (() => {
         return;
       }
       if (state.mode === "weekly") {
-        if (await save({ trainerId: d.trainerId, weekday: Number(d.col.dataset.dow), start, end })) {
-          LevelUp.toast({ title: "Hours added", text: `${t.short}: every ${LONG[Number(d.col.dataset.dow)]} ${hh(start)}–${hh(end)}`, icon: "🕒", tone: "green" });
-        }
+        // nothing is saved yet: first say what is given in these hours
+        editWeekly({ id: null, trainerId: d.trainerId, weekday: Number(d.col.dataset.dow), start, end, activity: "" }, event.clientX, event.clientY);
       } else {
         editDated({ id: null, trainerId: d.trainerId, date: d.col.dataset.date, kind: "open", start, end, note: "" }, event.clientX, event.clientY);
         host.querySelector("[data-pl-form]").dataset.trainer = d.trainerId;
@@ -371,6 +384,13 @@ window.LevelUpPlanner = (() => {
     if (t.closest("[data-pl-list]")) { opts.onList?.(); }
   });
   document.addEventListener("change", (event) => {
+    const form = event.target.closest("[data-pl-form]");
+    if (form && host?.contains(form)) { // a new kind of training asks its name; closing hours needs no kind
+      const what = form.querySelector("[data-pl-what]");
+      if (what) what.hidden = form.elements.kind.value === "closed";
+      form.querySelectorAll("[data-pl-newkind]").forEach((el) => { el.hidden = form.elements.activity.value !== LevelUpHours.NEW_KIND; });
+      return;
+    }
     const show = event.target.closest("[data-pl-show]");
     if (!show || !host?.contains(show)) return;
     if (show.checked) state.hidden.delete(show.dataset.plShow); else state.hidden.add(show.dataset.plShow);

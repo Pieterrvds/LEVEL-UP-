@@ -2120,7 +2120,7 @@ language sql stable security definer set search_path = public as $$
     exists (select 1 from public.player_likes l where l.from_id = auth.uid() and l.to_id = r.id
             and l.week = date_trunc('week', now() at time zone 'Europe/Brussels')::date)
   from ranked r
-  where r.place <= 25 or r.id = auth.uid()
+  where r.place <= 200 or r.id = auth.uid() -- the board scrolls: everyone who is on it, up to 200
   order by r.place;
 $$;
 
@@ -4210,6 +4210,7 @@ begin
   perform public._settle_player_of_month();
   n := n + public._push_streak_reminders();
   perform public._series_extend();
+  perform public._tidy_old();
   return n;
 end $$;
 
@@ -5559,6 +5560,7 @@ declare
 begin
   if auth.uid() is null or (not admin and mine is null) then return '[]'::jsonb; end if;
   perform public._expire_class_payments();
+  perform public._tidy_old();
   return coalesce((select jsonb_agg(public._class_json(c, auth.uid()) || public._class_money(c.id) || jsonb_build_object(
       'trainerFee', c.trainer_fee, 'finishedAt', c.finished_at, 'payoutAt', c.payout_at,
       'canFinish', c.status = 'scheduled' and now() >= c.starts_at,
@@ -5568,7 +5570,11 @@ begin
                    where g.class_id = c.id and g.refund_status = 'manual'), '[]'::jsonb) else '[]'::jsonb end) order by c.starts_at)
     from public.class_sessions c
     where (admin or c.trainer_id = mine)
-      and c.starts_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 35), 1), 800))), '[]'::jsonb);
+      -- a coach's list goes two weeks back (tidy_days); a class that still has to be finished stays. The admin
+      -- gets what he asks for: the finances need every finished class.
+      and (c.starts_at >= now() - make_interval(days => case when admin then least(greatest(coalesce(p_days, 35), 1), 800)
+                                                              else least(greatest(coalesce(p_days, 35), 1), public._tidy_days()) end)
+           or (c.status = 'scheduled' and c.starts_at < now()))), '[]'::jsonb);
 end $$;
 
 -- ---------------------------------------------------------
@@ -6231,6 +6237,51 @@ revoke execute on function public._trainer_linked() from public, anon, authentic
 drop trigger if exists trainer_linked on public.trainers;
 create trigger trainer_linked after insert or update of email, active on public.trainers
   for each row execute function public._trainer_linked();
+
+-- ---------------------------------------------------------
+-- Tidying up: what is over and carries no money goes away after two weeks
+-- ---------------------------------------------------------
+-- So that no list keeps growing. Once a day (the first time a coach or the admin opens his classes, or with the
+-- reminders), everything older than tidy_days (app_config, 14) of this kind is removed:
+--   · cancelled group classes that never had a payment or a refund on them
+--   · the group chat of a kind of class that had no class for two weeks and has none planned (not the Coaches chat)
+--   · extra hours and days off on a date that is over
+-- A coach's list of past classes also goes no further back than that (class_manage_list).
+-- What is NEVER removed: finished classes and sessions, sign-ups, payments, refunds, payouts, orders, XP: the finances
+-- and every member's history need them. Private conversations stay too.
+insert into public.app_config (key, value) values ('tidy_days', '14'), ('tidied_on', '') on conflict (key) do nothing;
+
+create or replace function public._tidy_days()
+returns integer language sql stable security definer set search_path = public as $$
+  select greatest(coalesce(nullif(regexp_replace(coalesce(public._config('tidy_days'), ''), '\D', '', 'g'), '')::int, 14), 7);
+$$;
+
+create or replace function public._tidy_old(p_force boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  edge timestamptz := now() - make_interval(days => public._tidy_days());
+  n_classes integer;
+  n_chats integer;
+  n_hours integer;
+begin
+  if not p_force and coalesce(public._config('tidied_on'), '') = today::text then return null; end if;
+  update public.app_config set value = today::text where key = 'tidied_on';
+  delete from public.class_sessions c
+   where c.status = 'cancelled' and c.starts_at < edge
+     and not exists (select 1 from public.class_signups g where g.class_id = c.id and (g.pay_status <> 'unpaid' or g.refund_status is not null));
+  get diagnostics n_classes = row_count;
+  delete from public.chat_threads t
+   where t.group_key is not null and t.group_key <> '@coaches' and t.created_at < edge
+     and not exists (select 1 from public.class_sessions c
+                     where public._group_key(c.title) = t.group_key and c.status <> 'cancelled' and c.starts_at > edge);
+  get diagnostics n_chats = row_count;
+  delete from public.trainer_hours where day is not null and day < today - public._tidy_days();
+  get diagnostics n_hours = row_count;
+  return jsonb_build_object('classes', n_classes, 'chats', n_chats, 'hours', n_hours);
+end $$;
+revoke execute on function public._tidy_days() from public, anon, authenticated;
+revoke execute on function public._tidy_old(boolean) from public, anon, authenticated;
 
 -- Members who were here before the welcome existed: once, oldest account first
 do $$ begin perform public._welcome_chat(p.id) from (select id from public.profiles where welcomed_at is null order by created_at) p; end $$;

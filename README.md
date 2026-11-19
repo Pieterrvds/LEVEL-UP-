@@ -186,8 +186,11 @@ The old tabs "Group classes" and "My hours" are one tab now (`renderMyWeek`, `ho
 ### Kinds of training, and the admin's approval of a new one
 A coach doesn't only say *when*, but also *what* he gives:
 - **1:1 hours carry what is given** (`trainer_hours.activity`): the form asks "What do you give?" with every
-  training to pick from ("Personal training" by default, then the trainings that have a card, then the coach's own
-  that still wait) and "＋ A new kind of training…" with a name, a **photo for the card** and a few words. The class
+  training to pick from (Personal training, then the trainings that have a card, then the coach's own that still
+  wait) and "＋ A new kind of training…" with a name, a **photo for the card** and a few words. **The answer is
+  required**: new hours start with nothing chosen and are only saved once the coach says what he gives. In the
+  week planner a dragged block opens that question first; nothing is saved before it is answered
+  (`whatOptions` / `readWhat` in `hours-editor.js`, used by the planner too). The class
   form shows the same photo and text fields as soon as the name of the class isn't a training yet.
 - **Players see which lesson it is** in "Book your trainer": on a computer under the trainer's name on each hour, on a
   phone as a row per trainer and lesson ("Maxim · Boxing"). An hour without a kind says "Personal training".
@@ -450,6 +453,18 @@ chat page of `index.html` on a phone, see "Phones").
 - When someone joins, the team reads one line in the Coaches chat ("👋 … is erbij als coach").
 - Both texts are in `app_config`: `welcome_coach_text` and `coach_join_text` (`{name}` = first name; empty = off).
 
+## Tidying up after two weeks
+So that no list keeps growing, `_tidy_old` (in `schema.sql`) removes once a day what is over and carries no money,
+older than `tidy_days` (`app_config`, 14):
+- cancelled group classes that never had a payment or a refund on them;
+- the group chat of a kind of class that had no class for two weeks and has none planned (never the Coaches chat);
+- extra hours and days off on a date that is over.
+
+A coach's list of past classes also goes no further back than two weeks (a class that still has to be finished
+stays). It runs by itself the first time that day a coach or the admin opens his classes (`class_manage_list`), and
+with the reminders (`push_due_reminders`). **Never removed:** finished classes and sessions, sign-ups, payments,
+refunds, payouts, shop orders, XP and private conversations: the finances and every member's history need them.
+
 ## Bonus XP (admin)
 Admin → Members: **+ XP** next to a member (or "Reward with XP" in their details) gives extra XP with your own reason,
 e.g. for helping LEVEL-UP; a negative number takes XP back (a correction). The player gets a push notification
@@ -629,6 +644,9 @@ The website never sees the Mollie key: payments go through the Supabase Edge Fun
 To turn online payment off again: set `online_payments` back to `off` (everyone pays at the HQ).
 
 ## High scores
+The list below the podium holds **every player on the board** (up to 200; trainers and members who hide themselves
+are not on it). Eight rows are in sight; with more players the list scrolls inside the board (`.hs-list.hs-scroll`).
+
 Under the team cards: an arcade-style board with a podium for the top 3 and 25 players in total, with two tabs:
 **All time** (total XP) and **This month** (XP earned since the 1st of the month, Brussels time; a fresh race every
 month). Equal scores are ordered by who got there first. Your own row is highlighted (also when you're below 25th),
