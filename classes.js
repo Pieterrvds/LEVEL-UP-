@@ -244,7 +244,7 @@ window.LevelUpClasses = (() => {
         const where = form.elements.location, roomBox = form.querySelector(".gc-room");
         const room = (event) => {
           const was = roomBox.hidden;
-          roomBox.hidden = where.value.trim() !== "" && where.value.trim().toLowerCase() !== LevelUp.defaultPlace().toLowerCase();
+          roomBox.hidden = !LevelUp.inRoom(where.value);
           if (event && was && !roomBox.hidden) form.elements.usesRoom.checked = true; // back in the big room: it takes the room again unless unticked
         };
         if (where && roomBox) { where.addEventListener("input", room); room(); }

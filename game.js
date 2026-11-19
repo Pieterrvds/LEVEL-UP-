@@ -1491,6 +1491,8 @@ const LevelUp = (() => {
     const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && hour >= r.start && hour < r.end;
     return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && !r.date && r.weekday === weekday))?.location || defaultPlace();
   }
+  // Is this place the big room itself? (As on the server: empty, the standard place, or how it was written before.)
+  const inRoom = (place) => { const v = String(place || "").trim().toLowerCase(); return !v || v === defaultPlace().toLowerCase() || ["hoogstraat 40, aalst", "hoogstraat 40, 9308 aalst", "level-up hq", "hq"].includes(v); };
   const shortPlace = (place) => String(place || "").split(",")[0].trim(); // "Grote zaal, Hoogstraat 40 …" -> "Grote zaal"
 
   // Weekly hours of a trainer as text, e.g. "Wed 19:00–21:00, Sat 17:00–20:00"
@@ -1554,7 +1556,7 @@ const LevelUp = (() => {
       // the gym room has no place left that hour (a group class or a rental takes it whole, or all places are
       // in use): taken for every trainer. room: true tells it apart from the trainer's own bookings.
       // Only an hour in the big room itself: a trainer who gives that hour at another place is not held back by it.
-      return slots.has(`*|${key}|${hour}`) && hourPlace(trainerId, key, hour).toLowerCase() === defaultPlace().toLowerCase()
+      return slots.has(`*|${key}|${hour}`) && inRoom(hourPlace(trainerId, key, hour))
         ? { id: null, status: "room", mine: false, room: true } : null;
     }
     const { id, status } = slots.get(k);
@@ -4608,7 +4610,7 @@ const LevelUp = (() => {
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
-    trainerById, trainerHours, trainerAvailable, coachLight, setTrainerAvailable, hourActivity, hourPlace, defaultPlace, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, trainerAvailable, coachLight, setTrainerAvailable, hourActivity, hourPlace, defaultPlace, inRoom, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,

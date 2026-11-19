@@ -646,7 +646,9 @@ $$;
 -- a session or a class at another place can overlap with anything.
 create or replace function public._in_room(p_place text)
 returns boolean language sql stable security definer set search_path = public as $$
-  select lower(coalesce(nullif(btrim(p_place), ''), public._default_place())) = lower(public._default_place());
+  select lower(coalesce(nullif(btrim(p_place), ''), public._default_place())) = lower(public._default_place())
+      -- how the same room was written before it had a name: classes planned back then are in it too
+      or lower(btrim(p_place)) in ('hoogstraat 40, aalst', 'hoogstraat 40, 9308 aalst', 'level-up hq', 'hq');
 $$;
 create or replace function public._slot_in_room(p_trainer text, p_day date, p_hour integer)
 returns boolean language sql stable security definer set search_path = public as $$
