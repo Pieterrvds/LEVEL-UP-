@@ -3564,3 +3564,18 @@ input.switch:focus-visible { outline: 3px solid var(--accent); outline-offset: 2
   .schedule-toolbar [data-trainer] > .coach-light { position: absolute; right: 6px; top: 4px; margin: 0; }
 }
 .fy-next .fy-where { display: block; margin-top: 2px; font-size: 0.82rem; }
+/* "For you", a coach: the big switch Active / Away, the whole card is the button */
+.fy-card[hidden] { display: none; }
+.fy-card.fy-coach { padding: 0; background: none; border: 0; box-shadow: none; }
+.coach-switch-big { display: flex; justify-content: space-between; gap: 16px; width: 100%; padding: 16px 18px; background: var(--panel); border: 2px solid var(--gold); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.coach-switch-big.on { border-color: #35e07a; box-shadow: 0 0 18px rgba(53, 224, 122, 0.3); }
+.coach-switch-big .cs-text { gap: 2px; min-width: 0; }
+.coach-switch-big .cs-k { font: italic 800 0.72rem/1.2 var(--display); font-size-adjust: none; letter-spacing: 0.06em; text-transform: uppercase; }
+.coach-switch-big .cs-text b { font-size: 1.35rem; line-height: 1.15; }
+.coach-switch-big.off .cs-text b { color: var(--gold); }
+.coach-switch-big .cs-text small:last-child { font-size: 0.86rem; line-height: 1.35; }
+.coach-switch-big .cs-track { width: 68px; height: 38px; }
+.coach-switch-big .cs-track i { top: 4px; left: 4px; width: 30px; height: 30px; }
+.coach-switch-big.on .cs-track i { transform: translateX(30px); }
+.coach-switch-big:disabled { opacity: 0.6; }
+.fy-pane .fy-coach { grid-column: 1 / -1; }

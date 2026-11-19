@@ -159,11 +159,6 @@
             ${chips ? `<p class="mp-chips">${chips}</p>` : ""}
           </div>
           <div class="mp-actions">
-            ${me && d.trainerId ? `
-              <button type="button" class="coach-switch ${away ? "off" : "on"}" role="switch" aria-checked="${!away}" data-coach-available>
-                <span class="cs-track" aria-hidden="true"><i></i></span>
-                <span class="cs-text"><b>${away ? "Away for now" : "Active"}</b><small>${away ? "Players can't book you" : "Players can book you"}</small></span>
-              </button>` : ""}
             ${me ? `<button type="button" class="btn btn-ghost" data-share-card>Share my card</button>` : `
               ${d.trainerId ? (away ? `<span class="coach-away-note">⏸ <span>Away for now</span></span>` : `<a class="btn btn-primary" href="#book">Book ${esc(first)} ▸</a>`) : ""}
               ${d.linked === false || d.mascot ? "" : `<button type="button" class="btn ${d.trainerId ? "btn-ghost" : "btn-primary"}" data-mp-chat>💬 Chat</button>`}
@@ -192,18 +187,6 @@
         label.classList.remove("busy");
         LevelUp.toast({ title: "Photo not saved", text: err.message, icon: "!" });
       }
-    });
-    hero.querySelector("[data-coach-available]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget;
-      const on = button.getAttribute("aria-checked") !== "true"; // the new state
-      if (!on && !confirm("Set yourself away? Players can't book you until you switch back on. Sessions that are planned stay.")) return;
-      button.disabled = true;
-      try {
-        await LevelUp.setTrainerAvailable(LevelUp.getPlayer().trainerId, on);
-        renderHero(); // the switch and the light follow
-        LevelUp.toast(on ? { title: "You are active", text: "Players can book you again", icon: "▶", tone: "green" } : { title: "You are away", text: "No new bookings until you switch back on", icon: "⏸" });
-      } catch (err) { LevelUp.toast({ title: "Not changed", text: err.message, icon: "!" }); }
-      button.disabled = false;
     });
     hero.querySelector("[data-share-card]")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;

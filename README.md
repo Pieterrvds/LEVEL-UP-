@@ -197,7 +197,8 @@ Every lesson has a place. The standard one is the big room (`app_config` `defaul
   already, those players get "📍 New place for your session".
 
 ### Active or away
-A coach has a **switch at the top of his own page**, before "Share my card": **Active** (players can book him) or
+A coach has a **big switch on "For you"**, right under the greeting (`coachHtml` in `foryou.js`; on a phone that is
+the start page, on a computer the first tab of his account): **Active** (players can book him) or
 **Away for now** (holiday, ill …). `trainers.available`, set with `set_trainer_available` by the coach himself or the
 admin. While he is away:
 - nobody can book him: his hours leave the booking board and the phone list (`trainerHours` returns nothing), "Book …"

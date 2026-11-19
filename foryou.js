@@ -736,7 +736,8 @@
       parts[name] = el;
       return el;
     };
-    host.append(card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
+    host.append(card("coach", "fy-coach"), card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
+    parts.coach.hidden = true; // only a coach has it
     built = true;
     startMascot();
   }
@@ -794,6 +795,8 @@
     }
     const data = LevelUp.getForYou();
     updateHello(player);
+    set("coach", coachHtml(player));
+    parts.coach.hidden = !lastHtml.coach;
     set("next", nextHtml(player));
     set("streak", streakHtml(player));
     set("race", raceHtml(player, data));
@@ -820,7 +823,32 @@
       draw();
     }
   }
+  // A coach: the switch between "active" (players can book you) and "away for now" (holiday, ill …)
+  function coachHtml(player) {
+    if (!player.trainerId || !LevelUp.trainerById(player.trainerId)) return "";
+    const on = LevelUp.trainerAvailable(player.trainerId);
+    return `
+      <button type="button" class="coach-switch coach-switch-big ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-fy-available>
+        <span class="cs-text"><small class="cs-k">${T("Your status as a coach")}</small><b>${T(on ? "Active" : "Away for now")}</b>
+          <small>${T(on ? "Players can book you" : "Players can't book you. Tap to switch back on.")}</small></span>
+        <span class="cs-track" aria-hidden="true"><i></i></span>
+      </button>`;
+  }
+  async function toggleAvailable(button) {
+    const on = button.getAttribute("aria-checked") !== "true"; // the new state
+    if (!on && !confirm(T("Set yourself away? Players can't book you until you switch back on. Sessions that are planned stay."))) return;
+    button.disabled = true;
+    try {
+      await LevelUp.setTrainerAvailable(LevelUp.getPlayer().trainerId, on);
+      LevelUp.toast(on ? { title: "You are active", text: "Players can book you again", icon: "▶", tone: "green" } : { title: "You are away", text: "No new bookings until you switch back on", icon: "⏸" });
+    } catch (err) { LevelUp.toast({ title: "Not changed", text: err.message, icon: "!" }); }
+    button.disabled = false;
+    draw(true);
+  }
+
   function onClick(event) {
+    const avail = event.target.closest("[data-fy-available]");
+    if (avail) { toggleAvailable(avail); return; }
     const check = event.target.closest("[data-fy-checkin]");
     if (check) { checkIn(check); return; }
     const period = event.target.closest("[data-fy-race]");

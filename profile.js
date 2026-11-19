@@ -564,7 +564,7 @@ function renderCoachPanel() {
         <span class="muted" data-no-i18n>${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
         <a class="btn btn-small btn-ghost coach-team-chat" href="chat.html?coach=team">💬 Team chat</a>
       </div>
-      ${LevelUp.trainerAvailable(LevelUp.getPlayer().trainerId) ? "" : `<p class="coach-away-bar">⏸ <span><b>You are away.</b> Players can't book you. Switch yourself back on at the top of this page.</span></p>`}
+      ${LevelUp.trainerAvailable(LevelUp.getPlayer().trainerId) ? "" : `<p class="coach-away-bar">⏸ <span><b>You are away.</b> Players can't book you. Switch yourself back on under "For you".</span></p>`}
       <div class="coach-overview" id="coachOverview">${coachOverviewHtml(d)}</div>
       ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}
       <div class="coach-tabs" id="coachTabs" role="tablist" aria-label="Coach panel">${coachTabsHtml(d)}</div>
