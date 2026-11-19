@@ -183,6 +183,19 @@ The old tabs "Group classes" and "My hours" are one tab now (`renderMyWeek`, `ho
   everything of the old Group classes tab: new class (once or weekly, with a note for the players), who's coming,
   tick off, change, cancel, chat, the next 14 days with later and past classes folded away.
 
+### Where a lesson is given
+Every lesson has a place. The standard one is the big room (`app_config` `default_location`:
+"Grote zaal, Hoogstraat 40, Hofstade (Aalst)"); a coach can name another place.
+- **1:1 hours:** the hours form and the week planner ask **"Where?"**: the standard place, a place this coach used
+  before, or "＋ Another place…" with an address (`trainer_hours.location`, empty = standard, so it follows when the
+  standard address changes). **Group classes** have the same field, filled in with the standard place.
+- **The player sees it** on the booking board (another place than the standard one shows on the hour, the full
+  address as a tooltip), in the phone list (a line per trainer, lesson and place), in the booking window ("Boxing ·
+  📍 …"), in "My sessions" and in the Google Calendar link. A coach sees it in his week, agenda and hours.
+- **Every message says what, with whom, when and where** (`_slot_what`, `_slot_place`): the request for the coach,
+  the confirmation and the reminder for the player. When a coach changes the place of hours that were booked
+  already, those players get "📍 New place for your session".
+
 ### Kinds of training, and the admin's approval of a new one
 A coach doesn't only say *when*, but also *what* he gives:
 - **1:1 hours carry what is given** (`trainer_hours.activity`): the form asks "What do you give?" with every
@@ -208,6 +221,13 @@ A coach doesn't only say *when*, but also *what* he gives:
   `training_kinds` lists the kinds for the forms; `kind_propose` stores the photo and the text of a new one.
 - **Before `schema.sql` is run again** the site keeps working as before: the forms offer no new kind, plain hours and
   classes save as always, and picking a training for 1:1 hours says the database must be updated first.
+
+### The cards of the personal trainings
+Admin → Team shows, below the 1:1 hours, **"Personal trainings on the home page"**: the six cards that are always
+there (CrossFit, Calisthenics, HIIT, Muay Thai, Triathlon, Cycling; their standard photo and text are
+`PERSONAL_TRAININGS` in `game.js`) and every kind a coach gives 1:1. Per card: your own text, your own photo (or back
+to the standard one) and **Hide the card / Show the card again** (`class_kinds.hidden`). The group trainings have the
+same panel below the group classes. `admin_class_kind` stores it; the home page reads it through `class_kinds()`.
 
 ### Admin → Team: the schedule of the whole team
 The admin's Team tab is the coach's "My hours" for every trainer (`renderTeam` in `admin.js`, the week is the shared

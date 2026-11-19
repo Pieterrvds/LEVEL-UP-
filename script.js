@@ -69,27 +69,8 @@ document.addEventListener("click", (event) => {
   const tr = (text) => (window.t ? window.t(text) : text);
   const state = { kind: "all", trainer: "all", open: false };
 
-  // The personal trainings: 1:1 with a coach. stats = strength, endurance, technique (out of 5).
-  const PERSONAL = [
-    { id: "crossfit", title: "CrossFit", badge: "All-round", img: "img/jimsgroepstraining.jpg", stats: [4, 4, 3], trainer: "pieter",
-      about: "Strength, conditioning and skills in one session: barbells, kettlebells, gymnastics and short, hard workouts. Every exercise is scaled to your level.",
-      points: ["Get fit all-round: stronger, fitter and more agile", "Learn the lifts with good technique", "Every session is different"] },
-    { id: "calisthenics", title: "Calisthenics", badge: "Skill", img: "img/calipersonal.jpg", stats: [4, 2, 5], trainer: "pieter",
-      about: "Training with your own body weight: pull-ups, dips, handstands and step by step towards skills like the muscle-up or the front lever.",
-      points: ["Build strength and body control", "Clear steps towards your first skill", "Little equipment needed, so you can keep practising at home"] },
-    { id: "hiit", title: "HIIT", badge: "Intervals", img: "img/HIIT.JPG", stats: [2, 5, 2], trainer: "pieter",
-      about: "Short bursts of hard work with short breaks in between. A lot of result in little time, at a pace that fits you.",
-      points: ["Better condition and fat burning", "Done in under an hour", "No experience needed"] },
-    { id: "muaythai", title: "Muay Thai", badge: "Combat", img: "img/muaythay.jpg", stats: [3, 4, 5], trainer: "pieter",
-      about: "Thai boxing on the pads: punches, kicks, knees and elbows. Technique first, then combinations and conditioning rounds.",
-      points: ["Learn to punch and kick the right way", "A full-body workout that clears your head", "No sparring needed"] },
-    { id: "triathlon", title: "Triathlon", badge: "Endurance", img: "img/filipironmancoach.jpg", pos: "20%", stats: [2, 5, 3], trainer: "filip",
-      about: "Swimming, cycling and running with an Ironman finisher: technique, a plan that builds up and the strength work that keeps you injury-free.",
-      points: ["From your first quarter to the full distance", "A training plan around your week", "Tips on gear, food and race day"] },
-    { id: "cycling", title: "Cycling", badge: "Endurance", img: "img/teammembermaximtrui.jpg", pos: "30%", stats: [3, 5, 2], trainer: "maxim",
-      about: "Faster and longer on the bike: intervals, climbing, position on the bike and the strength training cyclists often skip.",
-      points: ["More power in the legs", "Structure in your rides", "For road, gravel and your first sportive"] }
-  ];
+  // The personal trainings that always have a card (game.js); the admin can give each its own photo and text
+  const PERSONAL = LevelUp.PERSONAL_TRAININGS;
   // A kind of group training without a photo or text of its own gets one that fits its name (game.js)
   const { GROUP_LOOKS, GROUP_DEFAULT } = LevelUp;
 
@@ -105,20 +86,26 @@ document.addEventListener("click", (event) => {
     const kinds = LevelUp.getClassKinds() || [];
     const solo = (title) => (kinds.find((k) => k.key === key(title))?.soloTrainers || []).filter((id) => coach(id));
     // a training a coach gives 1:1 that has no card of its own yet: one card, with the coach's photo if it has none
-    const extra = kinds.filter((k) => solo(k.title).length && k.key !== "personal training" && !PERSONAL.some((p) => key(p.title) === k.key)).map((k) => {
+    const mine = (title) => kinds.find((k) => k.key === key(title)); // the admin's own photo, text and "hidden" for a card
+    const extra = kinds.filter((k) => !k.hidden && solo(k.title).length && k.key !== "personal training" && !PERSONAL.some((p) => key(p.title) === k.key)).map((k) => {
       const look = GROUP_LOOKS.find(([re]) => re.test(k.title));
       const trainers = solo(k.title);
       return { id: `s:${k.key}`, own: true, title: k.title, badge: "1:1", img: k.photoUrl || look?.[1] || coach(trainers[0]).img, pos: k.photoUrl ? "" : look?.[3] || "",
         about: k.description || "One hour 1:1 with your coach, at your level and at your pace.", ownText: Boolean(k.description), trainers, trainer: trainers[0] };
     });
-    const groups = kinds.filter((k) => k.hasClasses !== false).map((k) => {
+    const groups = kinds.filter((k) => k.hasClasses !== false && !k.hidden).map((k) => {
       const look = GROUP_LOOKS.find(([re]) => re.test(k.title));
       const sessions = upcoming.filter((c) => key(c.title) === k.key).sort((a, b) => a.start - b.start);
       const trainers = [...new Set([...sessions.map((c) => c.trainerId), ...(k.trainers || [])])].filter((id) => coach(id));
       return { id: `g:${k.key}`, group: true, title: k.title, badge: "Group", img: k.photoUrl || look?.[1] || GROUP_DEFAULT[0],
         pos: k.photoUrl ? "" : look?.[3] || "", about: k.description || look?.[2] || GROUP_DEFAULT[1], ownText: Boolean(k.description), trainers, sessions };
     });
-    return [...groups, ...extra, ...PERSONAL.map((p) => ({ ...p, trainers: [...new Set([p.trainer, ...solo(p.title)])] }))];
+    const personal = PERSONAL.filter((p) => !mine(p.title)?.hidden).map((p) => {
+      const k = mine(p.title) || {};
+      return { ...p, img: k.photoUrl || p.img, pos: k.photoUrl ? "" : p.pos, about: k.description || p.about, ownText: Boolean(k.description),
+        trainers: [...new Set([p.trainer, ...solo(p.title)])] };
+    });
+    return [...groups, ...extra, ...personal];
   }
   const shown = (list) => list.filter((x) => (state.kind === "all" || (state.kind === "group") === Boolean(x.group))
     && (state.trainer === "all" || x.trainers.includes(state.trainer)));

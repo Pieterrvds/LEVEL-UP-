@@ -19,7 +19,7 @@ window.LevelUpHours = (() => {
     .map((h) => `<option value="${h}" ${h === selected ? "selected" : ""}>${hh(h)}</option>`).join("");
   const slotLabel = (b) => `${LevelUp.parseDate(b.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${hh(b.hour)}`;
   // what is given in the hours, and a mark while a new kind of training waits for the admin
-  const what = (r) => `${r.activity ? ` <i class="hours-what" data-no-i18n>${esc(r.activity)}</i>` : ""}${r.pending ? ` <span class="hours-wait" title="Waiting for approval">⏳</span>` : ""}`;
+  const what = (r) => `${r.activity ? ` <i class="hours-what" data-no-i18n>${esc(r.activity)}</i>` : ""}${r.location ? ` <i class="hours-what" data-no-i18n>📍 ${esc(LevelUp.shortPlace(r.location))}</i>` : ""}${r.pending ? ` <span class="hours-wait" title="Waiting for approval">⏳</span>` : ""}`;
   const NEW_KIND = "__new";
   const PLAIN = "__pt"; // plain personal training (stored as no kind)
   // The choices for "What do you give?". A new block starts with nothing chosen: the hours can only be saved once
@@ -31,6 +31,21 @@ window.LevelUpHours = (() => {
       <option value="${PLAIN}" ${!fresh && !given ? "selected" : ""}>Personal training</option>
       ${kinds.map((k) => `<option value="${esc(k.title)}" ${given && k.key === LevelUp.kindKey(given) ? "selected" : ""} data-no-i18n>${esc(k.title)}${k.pending ? " ⏳" : ""}</option>`).join("")}
       ${LevelUp.getTrainingKinds() ? `<option value="${NEW_KIND}">＋ A new kind of training…</option>` : ""}`;
+  }
+  // "Where?": the standard place (the big room), a place this trainer used before, or another one
+  const OTHER = "__other";
+  function whereOptions(trainerId, given) {
+    const mine = [...new Set(rows().filter((r) => r.trainerId === trainerId && r.location).map((r) => r.location))];
+    if (given && !mine.includes(given)) mine.push(given);
+    return `<option value="" ${given ? "" : "selected"} data-no-i18n>${esc(LevelUp.defaultPlace())}</option>
+      ${mine.map((m) => `<option value="${esc(m)}" ${m === given ? "selected" : ""} data-no-i18n>${esc(m)}</option>`).join("")}
+      <option value="${OTHER}">＋ Another place…</option>`;
+  }
+  function readWhere(form) {
+    const v = form.elements.place.value;
+    if (v !== OTHER) return { location: v };
+    const place = (form.elements.newPlace?.value || "").trim().replace(/\s+/g, " ");
+    return place.length < 3 ? { error: "Say where the lesson is given." } : { location: place };
   }
   // What a form says is given: { activity, fresh } (fresh: a new kind of training), or { error }
   function readWhat(form) {
@@ -157,6 +172,12 @@ window.LevelUpHours = (() => {
           <label data-for="what">What do you give?
             <select name="activity">${whatOptions(given, !editing && !given)}</select>
           </label>
+          <label data-for="what">Where?
+            <select name="place">${whereOptions(trainerId, editing?.location || draft?.location || "")}</select>
+          </label>
+          <label data-for="newplace" class="wide">Address or place (players see it)
+            <input type="text" name="newPlace" maxlength="80" placeholder="e.g. Sportpark Schotte, Aalst">
+          </label>
           <div data-for="newkind" class="wide new-kind">
             <label>Name of the training<input type="text" name="newTitle" maxlength="40" placeholder="e.g. Boxing, Yoga, Swimming"></label>
             <label>Photo for its card (optional)<input type="file" name="newPhoto" accept="image/*"></label>
@@ -191,7 +212,8 @@ window.LevelUpHours = (() => {
       const k = f.dataset.for;
       f.hidden = (k === "weekly" && type !== "weekly") || (k === "date" && type === "weekly")
         || (k === "closed" && type !== "closed") || (k === "time" && allDay) || (k === "what" && type === "closed")
-        || (k === "newkind" && (type === "closed" || form.elements.activity.value !== NEW_KIND));
+        || (k === "newkind" && (type === "closed" || form.elements.activity.value !== NEW_KIND))
+        || (k === "newplace" && (type === "closed" || form.elements.place.value !== OTHER));
     });
   }
 
@@ -217,9 +239,12 @@ window.LevelUpHours = (() => {
     const given = type === "closed" ? { activity: "" } : readWhat(form);
     const fresh = Boolean(given.fresh);
     entry.activity = given.activity || "";
+    const where = type === "closed" ? { location: "" } : readWhere(form);
+    entry.location = where.location || "";
     const error = form.querySelector(".hours-error");
     if (entry.date === "") { error.textContent = "Pick a date."; return; }
     if (given.error) { error.textContent = given.error; form.elements.activity.focus(); return; }
+    if (where.error) { error.textContent = where.error; form.elements.newPlace.focus(); return; }
     if (entry.end <= entry.start) { error.textContent = "The end time must be after the start time."; return; }
     const after = [...rows().filter((r) => r.id !== view.editId), { ...entry, id: entry.id || "new" }];
     const lost = lostBookings(view, view.trainerId, after);
@@ -306,5 +331,5 @@ window.LevelUpHours = (() => {
     rerender(view);
   }
 
-  return { render, start, show, lost, lockedMessage, isUpcoming, slotLabel, whatOptions, readWhat, NEW_KIND };
+  return { render, start, show, lost, lockedMessage, isUpcoming, slotLabel, whatOptions, readWhat, NEW_KIND, whereOptions, readWhere, OTHER };
 })();

@@ -205,6 +205,7 @@ async function render() {
     </section>
 
     <section class="panel admin-panel" id="hoursPanel" data-team-pane="solo"></section>
+    <section class="panel admin-panel" id="adminKindsSolo" data-team-pane="solo"></section>
     <section class="panel admin-panel gc-wrap" id="adminClasses" data-team-pane="group"></section>
     <section class="panel admin-panel" id="adminKinds" data-team-pane="group"></section>
 
@@ -415,31 +416,60 @@ LevelUpClasses.onChange((key) => { // a class was planned, changed or cancelled:
 // ---------- Group trainings on the home page: one card per kind of class, with your own text and photo ----------
 let kindsLoaded = false;
 let kindsError = "";
-function renderKinds() {
-  const box = document.getElementById("adminKinds");
-  if (!box) return;
-  if (!kindsLoaded) { kindsLoaded = true; LevelUp.loadClassKinds().then(renderKinds); }
-  if (box.contains(document.activeElement) && document.activeElement.matches("textarea")) return; // don't redraw while typing
+// The cards under "Choose your training", in two lists: the personal trainings (below the 1:1 hours) and the group
+// trainings (below the group classes). Each card: its own photo and text, or the standard ones; and show or hide.
+function kindCards() {
   const kinds = LevelUp.getClassKinds();
-  box.innerHTML = `
-    <div class="panel-head"><h2>Trainings on the home page</h2></div>
-    <p class="muted">Every kind of training gets its own card under "Choose your training": a group class (by its name) as long as one is planned or was held in the last 30 days, and what a trainer gives 1:1 as long as it is in their hours. Give each one a photo and a few lines; without them it gets a photo and text that fit its name.</p>
-    ${kinds.length ? `<ul class="kind-list">${kinds.map((k) => `
-      <li class="kind-row" data-kind="${esc(k.key)}">
-        <div class="kind-photo">${k.photoUrl ? `<img src="${esc(k.photoUrl)}" alt="">` : `<span>Standard photo</span>`}</div>
+  const key = LevelUp.kindKey;
+  const names = (ids) => [...new Set(ids)].map((id) => LevelUp.trainerById(id)?.short).filter(Boolean).join(", ");
+  const builtin = LevelUp.PERSONAL_TRAININGS.map((p) => {
+    const k = kinds.find((x) => x.key === key(p.title)) || {};
+    return { key: key(p.title), title: p.title, photoUrl: k.photoUrl, description: k.description, hidden: Boolean(k.hidden),
+      stdImg: p.img, stdText: p.about, line: `1:1 · ${names([p.trainer, ...(k.soloTrainers || [])])}` };
+  });
+  const added = kinds.filter((k) => (k.soloTrainers || []).length && k.key !== "personal training" && !builtin.some((b) => b.key === k.key))
+    .map((k) => ({ ...k, hidden: Boolean(k.hidden), stdText: "One hour 1:1 with your coach, at your level and at your pace.", line: `1:1 · ${names(k.soloTrainers)}` }));
+  const solo = [...builtin, ...added];
+  const group = kinds.filter((k) => k.hasClasses !== false && !solo.some((s) => s.key === k.key))
+    .map((k) => ({ ...k, hidden: Boolean(k.hidden), stdText: "", line: `${k.next ? `next: ${fmtDate(k.next)}` : "no date planned"} · ${names(k.trainers || [])}` }));
+  return { solo, group };
+}
+function kindRowHtml(k) {
+  return `
+      <li class="kind-row ${k.hidden ? "kind-hidden" : ""}" data-kind="${esc(k.key)}" data-kind-title="${esc(k.title)}">
+        <div class="kind-photo">${k.photoUrl ? `<img src="${esc(k.photoUrl)}" alt="">` : k.stdImg ? `<img src="${esc(k.stdImg)}" alt=""><span class="kind-photo-tag">Standard</span>` : `<span>Standard photo</span>`}</div>
         <form class="kind-form" data-kind-form="${esc(k.key)}">
-          <p><b>${esc(k.title)}</b> <span class="muted small-text">${k.next ? `next: ${fmtDate(k.next)}` : "no date planned"} · ${(k.trainers || []).map((id) => LevelUp.trainerById(id)?.short).filter(Boolean).join(", ")}</span></p>
-          <label>Text on the card's window <small class="muted">(what is it, for whom, what to bring; 600 characters)</small>
-            <textarea name="description" rows="3" maxlength="600" placeholder="e.g. We run 5 to 8 km at an easy pace, every Wednesday. Everyone welcome.">${esc(k.description || "")}</textarea></label>
+          <p><b>${esc(k.title)}</b> ${k.hidden ? `<span class="status-chip declined">Hidden</span>` : ""} <span class="muted small-text">${esc(k.line)}</span></p>
+          <label>Text on the card's window <small class="muted">(what is it, for whom, what to bring; 600 characters${k.stdText ? "; empty = the standard text" : ""})</small>
+            <textarea name="description" rows="3" maxlength="600" placeholder="${esc(k.stdText || "e.g. We run 5 to 8 km at an easy pace, every Wednesday. Everyone welcome.")}">${esc(k.description || "")}</textarea></label>
           <div class="btn-row">
             <button type="submit" class="btn btn-small btn-primary">Save text</button>
             <label class="btn btn-small btn-ghost">${k.photoUrl ? "Change photo" : "Add your own photo"}<input type="file" accept="image/*" data-kind-photo="${esc(k.key)}" hidden></label>
             ${k.photoUrl ? `<button type="button" class="btn btn-small btn-ghost" data-kind-photo-remove="${esc(k.key)}">Back to the standard photo</button>` : ""}
+            <button type="button" class="btn btn-small btn-ghost" data-kind-hide="${esc(k.key)}" data-hidden="${k.hidden}">${k.hidden ? "Show the card again" : "Hide the card"}</button>
           </div>
         </form>
-      </li>`).join("")}</ul>` : `<p class="muted">No group trainings yet. Plan a class above and its card appears here and on the home page.</p>`}
+      </li>`;
+}
+function renderKinds() {
+  const box = document.getElementById("adminKinds");
+  const soloBox = document.getElementById("adminKindsSolo");
+  if (!box || !soloBox) return;
+  if (!kindsLoaded) { kindsLoaded = true; LevelUp.loadClassKinds().then(renderKinds); }
+  if (root.querySelector(".kind-form textarea:focus")) return; // don't redraw while typing
+  const { solo, group } = kindCards();
+  soloBox.innerHTML = `
+    <div class="panel-head"><h2>Personal trainings on the home page</h2></div>
+    <p class="muted">The 1:1 cards under "Choose your training": the six that are always there, and every kind a trainer gives in his hours. Give a card your own photo and text, or hide it.</p>
+    <ul class="kind-list">${solo.map(kindRowHtml).join("")}</ul>
+    <p class="form-error" role="alert">${esc(kindsError)}</p>`;
+  box.innerHTML = `
+    <div class="panel-head"><h2>Group trainings on the home page</h2></div>
+    <p class="muted">Every kind of group class (by its name) gets its own card under "Choose your training", first in the row, as long as a class of that name is planned or was held in the last 30 days. Give each one a photo and a few lines; without them it gets a photo and text that fit its name.</p>
+    ${group.length ? `<ul class="kind-list">${group.map(kindRowHtml).join("")}</ul>` : `<p class="muted">No group trainings yet. Plan a class above and its card appears here and on the home page.</p>`}
     <p class="form-error" role="alert">${esc(kindsError)}</p>`;
 }
+const kindTitle = (key) => root.querySelector(`.kind-row[data-kind="${CSS.escape(key)}"]`)?.dataset.kindTitle || "";
 root.addEventListener("submit", async (event) => {
   const form = event.target.closest("[data-kind-form]");
   if (!form) return;
@@ -448,7 +478,7 @@ root.addEventListener("submit", async (event) => {
   btn.disabled = true;
   kindsError = "";
   try {
-    await LevelUp.adminClassKind(form.dataset.kindForm, { description: form.elements.description.value });
+    await LevelUp.adminClassKind(form.dataset.kindForm, { description: form.elements.description.value, title: kindTitle(form.dataset.kindForm) });
     LevelUp.toast({ title: "Saved", text: "The home page shows it right away", icon: "✓", tone: "green" });
   } catch (err) { kindsError = err.message; }
   form.querySelector("textarea")?.blur();
@@ -460,17 +490,25 @@ root.addEventListener("change", async (event) => {
   input.closest("label").classList.add("busy");
   kindsError = "";
   try {
-    await LevelUp.uploadKindPhoto(input.dataset.kindPhoto, input.files[0]);
+    await LevelUp.uploadKindPhoto(input.dataset.kindPhoto, input.files[0], kindTitle(input.dataset.kindPhoto));
     LevelUp.toast({ title: "Photo saved", text: "It's on the card on the home page", icon: "📷", tone: "green" });
   } catch (err) { kindsError = err.message; }
   renderKinds();
 });
 root.addEventListener("click", async (event) => {
-  const btn = event.target.closest("[data-kind-photo-remove]");
+  const btn = event.target.closest("[data-kind-photo-remove], [data-kind-hide]");
   if (!btn) return;
   btn.disabled = true;
   kindsError = "";
-  try { await LevelUp.adminClassKind(btn.dataset.kindPhotoRemove, { photoUrl: "" }); } catch (err) { kindsError = err.message; }
+  try {
+    if (btn.dataset.kindHide) {
+      const hide = btn.dataset.hidden !== "true";
+      await LevelUp.adminClassKind(btn.dataset.kindHide, { hidden: hide, title: kindTitle(btn.dataset.kindHide) });
+      LevelUp.toast(hide ? { title: "Card hidden", text: "It no longer shows on the home page", icon: "🙈" } : { title: "Card shown", text: "It is back on the home page", icon: "✓", tone: "green" });
+    } else {
+      await LevelUp.adminClassKind(btn.dataset.kindPhotoRemove, { photoUrl: "" });
+    }
+  } catch (err) { kindsError = err.message; }
   renderKinds();
 });
 

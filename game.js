@@ -584,7 +584,8 @@ const LevelUp = (() => {
     price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
     packs: [{ size: 5, price: 240 }, { size: 10, price: 470 }], trainers: {}, onlinePayments: false,
     classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: [],
-    shipping: null // { on, fee, freeFrom }: sending web shop orders (null = the database doesn't know it yet)
+    shipping: null, // { on, fee, freeFrom }: sending web shop orders (null = the database doesn't know it yet)
+    place: "Grote zaal, Hoogstraat 40, Hofstade (Aalst)" // where a session or a class is given unless the coach names another place
   };
   let trainerCounts = {};     // trainer id -> { sessions, clients, accountXp }
   let leaderboard = [];       // all time: [{ place, name, xp, totalXp, isMe }]
@@ -870,7 +871,7 @@ const LevelUp = (() => {
     emit();
     return classKinds;
   }
-  async function uploadKindPhoto(key, file) {
+  async function uploadKindPhoto(key, file, title = "") {
     if (!player || !sb) throw new Error("Log in first.");
     const blob = await fitPhoto(file);
     const path = `${player.id}/k${Date.now()}.jpg`;
@@ -878,7 +879,7 @@ const LevelUp = (() => {
     if (error) throw new Error(/bucket/i.test(error.message) ? "Photo uploads aren't switched on yet. Try again later." : friendly(error));
     const old = avatarPath(classKinds.find((k) => k.key === key)?.photoUrl);
     try {
-      await adminClassKind(key, { photoUrl: sb.storage.from("avatars").getPublicUrl(path).data.publicUrl });
+      await adminClassKind(key, { photoUrl: sb.storage.from("avatars").getPublicUrl(path).data.publicUrl, ...(title ? { title } : {}) });
     } catch (err) {
       sb.storage.from("avatars").remove([path]).catch(() => {});
       throw err;
@@ -886,9 +887,32 @@ const LevelUp = (() => {
     if (old && old.startsWith(`${player.id}/`)) sb.storage.from("avatars").remove([old]).catch(() => {});
   }
 
+  // The personal trainings that always have a card under "Choose your training": 1:1 with a coach.
+  // stats = strength, endurance, technique (out of 5). The admin can give each its own photo and text, or hide it.
+  const PERSONAL_TRAININGS = [
+    { id: "crossfit", title: "CrossFit", badge: "All-round", img: "img/jimsgroepstraining.jpg", stats: [4, 4, 3], trainer: "pieter",
+      about: "Strength, conditioning and skills in one session: barbells, kettlebells, gymnastics and short, hard workouts. Every exercise is scaled to your level.",
+      points: ["Get fit all-round: stronger, fitter and more agile", "Learn the lifts with good technique", "Every session is different"] },
+    { id: "calisthenics", title: "Calisthenics", badge: "Skill", img: "img/calipersonal.jpg", stats: [4, 2, 5], trainer: "pieter",
+      about: "Training with your own body weight: pull-ups, dips, handstands and step by step towards skills like the muscle-up or the front lever.",
+      points: ["Build strength and body control", "Clear steps towards your first skill", "Little equipment needed, so you can keep practising at home"] },
+    { id: "hiit", title: "HIIT", badge: "Intervals", img: "img/HIIT.JPG", stats: [2, 5, 2], trainer: "pieter",
+      about: "Short bursts of hard work with short breaks in between. A lot of result in little time, at a pace that fits you.",
+      points: ["Better condition and fat burning", "Done in under an hour", "No experience needed"] },
+    { id: "muaythai", title: "Muay Thai", badge: "Combat", img: "img/muaythay.jpg", stats: [3, 4, 5], trainer: "pieter",
+      about: "Thai boxing on the pads: punches, kicks, knees and elbows. Technique first, then combinations and conditioning rounds.",
+      points: ["Learn to punch and kick the right way", "A full-body workout that clears your head", "No sparring needed"] },
+    { id: "triathlon", title: "Triathlon", badge: "Endurance", img: "img/filipironmancoach.jpg", pos: "20%", stats: [2, 5, 3], trainer: "filip",
+      about: "Swimming, cycling and running with an Ironman finisher: technique, a plan that builds up and the strength work that keeps you injury-free.",
+      points: ["From your first quarter to the full distance", "A training plan around your week", "Tips on gear, food and race day"] },
+    { id: "cycling", title: "Cycling", badge: "Endurance", img: "img/teammembermaximtrui.jpg", pos: "30%", stats: [3, 5, 2], trainer: "maxim",
+      about: "Faster and longer on the bike: intervals, climbing, position on the bike and the strength training cyclists often skip.",
+      points: ["More power in the legs", "Structure in your rides", "For road, gravel and your first sportive"] }
+  ];
+
   // ---------- Kinds of training for a trainer and the admin: what can be given 1:1 or in a group ----------
   // The trainings that have a card on the home page from the start (script.js); the others come from the server.
-  const BUILTIN_TRAININGS = ["CrossFit", "Calisthenics", "HIIT", "Muay Thai", "Triathlon", "Cycling"];
+  const BUILTIN_TRAININGS = PERSONAL_TRAININGS.map((p) => p.title);
   const kindKey = (title) => String(title || "").trim().replace(/\s+/g, " ").toLowerCase();
   let trainingKinds = null; // null: not loaded, or a database that doesn't know them yet
   async function loadTrainingKinds() {
@@ -1009,6 +1033,7 @@ const LevelUp = (() => {
         classCapacity: Number(p.classCapacity ?? pricing.classCapacity), classCancelHours: Number(p.classCancelHours ?? pricing.classCancelHours),
         classTrainerFee: Number(p.classTrainerFee ?? pricing.classTrainerFee), tabLimit: Number(p.tabLimit ?? pricing.tabLimit),
         news: (p.news || []).map((n) => ({ ...n, id: Number(n.id) })),
+        place: p.place || pricing.place,
         shipping: p.shipping ? { on: Boolean(p.shipping.on), fee: Number(p.shipping.fee) || 0, freeFrom: p.shipping.freeFrom == null ? null : Number(p.shipping.freeFrom) } : null,
         trainers: Object.fromEntries(Object.entries(p.trainers || {}).map(([id, v]) => [id, Number(v)]))
       };
@@ -1415,6 +1440,16 @@ const LevelUp = (() => {
     return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && r.weekday === weekday))?.activity || "";
   }
 
+  // Where: the standard place, and the place of one open hour (hours on that date win over the weekly ones)
+  const defaultPlace = () => pricing.place || "Grote zaal, Hoogstraat 40, Hofstade (Aalst)";
+  function hourPlace(trainerId, key, hour) {
+    if (!openingHours) return defaultPlace();
+    const weekday = parseDate(key).getDay();
+    const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && r.location && hour >= r.start && hour < r.end;
+    return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && r.weekday === weekday))?.location || defaultPlace();
+  }
+  const shortPlace = (place) => String(place || "").split(",")[0].trim(); // "Grote zaal, Hoogstraat 40 …" -> "Grote zaal"
+
   // Weekly hours of a trainer as text, e.g. "Wed 19:00–21:00, Sat 17:00–20:00"
   function weeklyHoursText(trainerId) {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1439,14 +1474,17 @@ const LevelUp = (() => {
   const OLD_DB = /could not find the function|schema cache|does not exist|isn't set up yet/i; // the server doesn't know a function (yet)
   // activity: what is given in the hours (boxing, yoga …). It is only sent when filled in, so a database
   // that doesn't know the field yet keeps working for plain hours.
-  async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "", activity = "" }) {
+  async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "", activity = "", location = "" }) {
     const what = kind === "closed" ? "" : String(activity || "").trim();
+    let where = kind === "closed" ? "" : String(location || "").trim(); // empty = the standard place
+    if (where.toLowerCase() === defaultPlace().toLowerCase()) where = "";
     try {
       await call("save_trainer_hours", {
         p_id: id, p_trainer: trainerId, p_weekday: weekday, p_day: date,
-        p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note, ...(what ? { p_activity: what } : {})
+        p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note, ...(what ? { p_activity: what } : {}), ...(where ? { p_location: where } : {})
       });
     } catch (err) {
+      if (where && OLD_DB.test(err.message || "")) throw new Error("Another place needs the latest supabase/schema.sql. Choose the standard place for now.");
       if (what && OLD_DB.test(err.message || "")) throw new Error("Saving what you give needs the latest supabase/schema.sql. Choose \"Personal training\" for now.");
       throw err;
     }
@@ -2114,10 +2152,11 @@ const LevelUp = (() => {
     const stamp = (h) => `${String(date).replace(/-/g, "")}T${pad(h)}0000`;
     const params = new URLSearchParams({
       action: "TEMPLATE",
-      text: `LEVEL-UP session with ${trainer.short}`,
+      text: `LEVEL-UP: ${hourActivity(trainerId, date, hour) || "Personal training"} with ${trainer.short}`,
       dates: `${stamp(hour)}/${stamp(hour + 1)}`,
       ctz: "Europe/Brussels",
-      details: `Personal training with ${trainer.name}. Your trainer contacts you about the location.`
+      location: hourPlace(trainerId, date, hour),
+      details: `${hourActivity(trainerId, date, hour) || "Personal training"} with ${trainer.name}.`
     });
     return `https://calendar.google.com/calendar/render?${params}`;
   }
@@ -4523,7 +4562,7 @@ const LevelUp = (() => {
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
-    trainerById, trainerHours, hourActivity, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, hourActivity, hourPlace, defaultPlace, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,
@@ -4542,7 +4581,7 @@ const LevelUp = (() => {
     setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
     getClasses: () => classes, classesOn, roomBlocksOn, classById, classStarted, classFull, classIn, canPayClassOnline, isClassLateCancel, classPayLabel,
     signupClass, cancelClassSignup, classRoster, classMark, classMarkPaid, classFinish, classManageList, classMarkRefunded, classCreate, classUpdate, classCancel, loadClasses,
-    BUILTIN_TRAININGS, kindKey, getTrainingKinds: () => trainingKinds, loadTrainingKinds, kindChoices, kindKnown, proposeKind, adminKindDecide,
+    PERSONAL_TRAININGS, BUILTIN_TRAININGS, kindKey, getTrainingKinds: () => trainingKinds, loadTrainingKinds, kindChoices, kindKnown, proposeKind, adminKindDecide,
     getClassKinds: () => classKinds, loadClassKinds, classPhoto, GROUP_LOOKS, GROUP_DEFAULT, adminClassKind, uploadKindPhoto,
     refreshCoach: async () => { if (isTrainer()) await loadCoachBookings(); emit(); },
     shopItems, loadShopCatalog, loadPricing, shopCheck, tabOrder, tabCancel, openTab, adminShop, adminShopUpdate, tabPaid, packGift, markPackGiftGiven,

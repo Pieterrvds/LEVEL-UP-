@@ -82,7 +82,7 @@ window.LevelUpPlanner = (() => {
           const locked = LevelUpHours.lost(opts.bookings(), t.id, rows().filter((x) => x.id !== r.id)).length;
           return `<div class="pl-bar${locked ? " locked" : ""}" data-id="${r.id}" style="--c:${t.chartColor || t.color};${pos(r)}" title="${esc(t.short)} · ${hh(r.start)}–${hh(r.end)}${locked ? " · booked hours are locked" : ""}">
             ${weekly ? `<span class="pl-grip top" data-grip="top"></span>` : ""}
-            <span class="pl-bar-label"><b>${esc(t.short)}</b> ${hh(r.start)}–${hh(r.end)}${r.activity ? ` · ${esc(r.activity)}` : ""}${r.pending ? " ⏳" : ""}${locked ? " 🔒" : ""}</span>
+            <span class="pl-bar-label"><b>${esc(t.short)}</b> ${hh(r.start)}–${hh(r.end)}${r.activity ? ` · ${esc(r.activity)}` : ""}${r.location ? ` · 📍 ${esc(LevelUp.shortPlace(r.location))}` : ""}${r.pending ? " ⏳" : ""}${locked ? " 🔒" : ""}</span>
             ${weekly ? `<span class="pl-grip bottom" data-grip="bottom"></span>` : ""}
           </div>`;
         }).join("");
@@ -161,7 +161,9 @@ window.LevelUpPlanner = (() => {
   const whatField = (r) => `
         <label class="pl-note">What do you give?<select name="activity">${LevelUpHours.whatOptions(r.activity || "", !r.id)}</select></label>
         <label class="pl-note" data-pl-newkind hidden>Name of the training<input type="text" name="newTitle" maxlength="40" placeholder="e.g. Boxing, Yoga, Swimming"></label>
-        ${LevelUp.isAdmin() ? "" : `<p class="muted small pl-kind-note" data-pl-newkind hidden>The admin checks a new kind of training first.</p>`}`;
+        ${LevelUp.isAdmin() ? "" : `<p class="muted small pl-kind-note" data-pl-newkind hidden>The admin checks a new kind of training first.</p>`}
+        <label class="pl-note">Where?<select name="place">${LevelUpHours.whereOptions(r.trainerId, r.location || "")}</select></label>
+        <label class="pl-note" data-pl-newplace hidden>Address or place (players see it)<input type="text" name="newPlace" maxlength="80" placeholder="e.g. Sportpark Schotte, Aalst"></label>`;
   const hourOptions = (from, to, sel) => Array.from({ length: to - from + 1 }, (_, i) => from + i).map((h) => `<option value="${h}" ${h === sel ? "selected" : ""}>${hh(h)}</option>`).join("");
 
   function editWeekly(r, x, y) {
@@ -215,6 +217,8 @@ ${whatField(r)}
     const closing = form.dataset.plForm !== "weekly" && f.kind.value === "closed";
     const given = closing ? { activity: "" } : LevelUpHours.readWhat(form);
     if (given.error) { form.querySelector(".form-error").textContent = given.error; f.activity.focus(); return; }
+    const where = closing ? { location: "" } : LevelUpHours.readWhere(form);
+    if (where.error) { form.querySelector(".form-error").textContent = where.error; f.newPlace.focus(); return; }
     const told = async () => { // a new kind from a coach: say that it waits for the admin
       if (!given.fresh) return false;
       await LevelUp.loadTrainingKinds();
@@ -224,18 +228,18 @@ ${whatField(r)}
       return waits;
     };
     if (form.dataset.plForm === "weekly") {
-      const entry = { id, trainerId: old?.trainerId || form.dataset.trainer, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value), activity: given.activity };
+      const entry = { id, trainerId: old?.trainerId || form.dataset.trainer, weekday: Number(f.weekday.value), start: Number(f.start.value), end: Number(f.end.value), activity: given.activity, location: where.location };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(entry.trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       const copies = [...form.querySelectorAll("[name=copy]:checked")].map((c) => Number(c.value));
       closePopover();
       if (await save(entry)) {
-        for (const d of copies) await save({ trainerId: entry.trainerId, weekday: d, start: entry.start, end: entry.end, activity: entry.activity });
+        for (const d of copies) await save({ trainerId: entry.trainerId, weekday: d, start: entry.start, end: entry.end, activity: entry.activity, location: entry.location });
         if (!(await told())) LevelUp.toast({ title: "Hours saved", text: copies.length ? `Also copied to ${copies.length} other day${copies.length === 1 ? "" : "s"}` : "The schedule is updated", icon: "🕒", tone: "green" });
       }
     } else {
       const trainerId = old?.trainerId || form.dataset.trainer;
-      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim(), activity: given.activity };
+      const entry = { id, trainerId, date: form.dataset.date, kind: f.kind.value, start: Number(f.start.value), end: Number(f.end.value), note: f.note.value.trim(), activity: given.activity, location: where.location };
       if (entry.end <= entry.start) { alert("The end time must be after the start time."); return; }
       if (!check(trainerId, [...rows().filter((r) => r.id !== id), entry])) return;
       closePopover();
@@ -360,7 +364,7 @@ ${whatField(r)}
       return;
     }
     if (!d.next || (d.next.start === r.start && d.next.end === r.end && d.next.weekday === r.weekday)) { rerender(); return; }
-    const entry = { id: r.id, trainerId: r.trainerId, weekday: d.next.weekday, start: d.next.start, end: d.next.end, activity: r.activity || "" }; // a moved bar keeps what is given
+    const entry = { id: r.id, trainerId: r.trainerId, weekday: d.next.weekday, start: d.next.start, end: d.next.end, activity: r.activity || "", location: r.location || "" }; // a moved bar keeps what is given, and where
     if (!check(r.trainerId, [...rows().filter((x) => x.id !== r.id), entry])) { rerender(); return; }
     if (!(await save(entry))) rerender();
   }
@@ -389,6 +393,7 @@ ${whatField(r)}
       const what = form.querySelector("[data-pl-what]");
       if (what) what.hidden = form.elements.kind.value === "closed";
       form.querySelectorAll("[data-pl-newkind]").forEach((el) => { el.hidden = form.elements.activity.value !== LevelUpHours.NEW_KIND; });
+      form.querySelectorAll("[data-pl-newplace]").forEach((el) => { el.hidden = form.elements.place.value !== LevelUpHours.OTHER; });
       return;
     }
     const show = event.target.closest("[data-pl-show]");

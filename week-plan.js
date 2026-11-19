@@ -22,15 +22,18 @@ window.LevelUpWeek = (() => {
     const out = [];
     LevelUp.trainerHours(trainerId, key).forEach((h) => {
       const activity = LevelUp.hourActivity?.(trainerId, key, h) || "";
+      const place = LevelUp.hourPlace(trainerId, key, h);
       const last = out[out.length - 1];
-      if (last && last.end === h && last.activity === activity) last.end = h + 1;
-      else out.push({ start: h, end: h + 1, activity });
+      if (last && last.end === h && last.activity === activity && last.place === place) last.end = h + 1;
+      else out.push({ start: h, end: h + 1, activity, place });
     });
     return out;
   }
   // (also takes rows of opening hours: they carry start, end and activity too)
+  // another place than the standard one is named: "📍 Park"
+  const placeHtml = (place) => place && place !== LevelUp.defaultPlace() ? ` <i class="mw-place" data-no-i18n>📍 ${esc(LevelUp.shortPlace(place))}</i>` : "";
   const blocksHtml = (list) => list.map((b) =>
-    `<span class="nw">${hh(b.start)}–${hh(b.end)}</span>${b.activity ? ` <i data-no-i18n>${esc(b.activity)}</i>` : ""}`).join(" · ");
+    `<span class="nw">${hh(b.start)}–${hh(b.end)}</span>${b.activity ? ` <i data-no-i18n>${esc(b.activity)}</i>` : ""}${placeHtml(b.place || b.location)}`).join(" · ");
 
   function html(view) {
     const { opts } = view;
@@ -69,7 +72,7 @@ window.LevelUpWeek = (() => {
         const t = LevelUp.trainerById(c.trainerId);
         items.push(`
           <button type="button" class="mw-item group${c.pending ? " wait" : ""}" data-week-class="${c.id}" style="--c:${t?.chartColor || t?.color || "#888"}">
-            <span class="mw-kind">Group</span><b class="mw-time">${c.time}</b>${t ? who(t) : ""}${c.pending ? WAIT : ""}<small>${c.taken}/${c.capacity}</small><span class="mw-text" data-no-i18n>${esc(c.title)}</span>
+            <span class="mw-kind">Group</span><b class="mw-time">${c.time}</b>${t ? who(t) : ""}${c.pending ? WAIT : ""}<small>${c.taken}/${c.capacity}</small><span class="mw-text" data-no-i18n>${esc(c.title)}${placeHtml(c.location)}</span>
           </button>`);
       });
       return `

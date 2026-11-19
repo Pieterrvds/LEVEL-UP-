@@ -372,6 +372,7 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .mw-item.group, .mw-item.group:hover { border-left-color: var(--gold); }
 .mw-item.group .mw-kind { color: var(--gold); }
 .mw-who { font-weight: 700; }
+.mw-place { white-space: nowrap; }
 .mw-text i { font-style: normal; font-weight: 500; color: var(--muted); }
 .mw-team .mw-item, .mw-team .mw-item:hover, .mw-team .mw-item.group, .mw-team .mw-item.group:hover { border-left-color: var(--c); } /* the team: a colour per trainer */
 .mw-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }

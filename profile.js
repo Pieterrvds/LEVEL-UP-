@@ -141,6 +141,7 @@ function renderSessions() {
         <div>
           <p class="session-trainer">${esc(trainer.name)} ${statusChip(b.status)}${b.series ? ` <span class="weekly-chip">🔁 Weekly</span>` : ""}</p>
           <p class="muted">${LevelUp.formatSlot(b.date, b.hour)}${price}${note ? ` · ${note}` : ""}</p>
+          ${b.place ? `<p class="muted session-where"><span ${b.what === "Personal training" ? "" : "data-no-i18n"}>${esc(b.what || "Personal training")}</span> · <span data-no-i18n>📍 ${esc(b.place)}</span></p>` : ""}
           ${b.movedFrom && open ? `<p class="moved-note">📅 <span>Moved by your trainer</span> · <span>was ${esc(b.movedFrom)}</span></p>` : ""}
         </div>
         <div class="session-actions">${side}</div>
@@ -490,6 +491,8 @@ function coachRow(d, b, actions = "") {
 }
 // How a 1:1 session is paid, whether it was moved, and with whom (a duo)
 const soloMeta = (b) => [
+  b.what && b.what !== "Personal training" ? `<span data-no-i18n>${esc(b.what)}</span>` : "",
+  b.place && b.place !== LevelUp.defaultPlace() ? `<span data-no-i18n>📍 ${esc(LevelUp.shortPlace(b.place))}</span>` : "",
   b.movedFrom && b.status === "confirmed" ? `moved, was ${esc(b.movedFrom)}` : "",
   b.kind === "duo" ? `duo with ${esc(b.partner)}` : "",
   LevelUp.payLabel(b) ? esc(LevelUp.payLabel(b)) : b.payMethod === "pack" ? "pack credit" : b.payMethod === "reward" ? "free session 🎁" : ""

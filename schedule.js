@@ -204,14 +204,16 @@ function renderBoard() {
           if (state !== "past") openCount++;
           const label = { free: `Book ${t.short}`, requested: "Requested…", mine: "Confirmed ✓", done: "Done ✓", taken: "Booked", past: "Closed" }[state];
           const what = LevelUp.hourActivity(t.id, day.key, hour); // what this trainer gives in this hour (boxing, yoga …), when set
+          const place = LevelUp.hourPlace(t.id, day.key, hour);     // and where; another place than the standard one shows on the hour
+          const away = place !== LevelUp.defaultPlace() ? ` · <span data-no-i18n>📍 ${esc(LevelUp.shortPlace(place))}</span>` : "";
           return `
             <button type="button" class="slot ${state === "requested" ? "mine requested" : state}" style="--c:${t.color}"
               data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
               ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
-              aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${day.name} ${pad(hour)}:00, ${label}">
+              title="${esc(place)}" aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${esc(place)}, ${day.name} ${pad(hour)}:00, ${label}">
               <span class="slot-time">${pad(hour)}:00</span>
               <span class="slot-name">${esc(t.short)}</span>
-              ${what ? `<span class="slot-what" data-no-i18n>${esc(what)}</span>` : `<span class="slot-what">Personal training</span>`}
+              <span class="slot-what">${what ? `<span data-no-i18n>${esc(what)}</span>` : `<span>Personal training</span>`}${away}</span>
               <span class="slot-state">${state === "free" ? `+${LevelUp.SESSION_XP} XP` : label}</span>
             </button>`;
         }).join("");
@@ -253,23 +255,26 @@ function renderWeekList(days, trainers, now, todayKey) {
   const blocks = days.map((day) => {
     const groups = (activeTrainer === "all" ? LevelUp.groupSessions(day.key) : []).filter((g) => g.end > now);
     const rows = trainers.map((t) => {
-      // one row per trainer and per kind of lesson: "Maxim · Boxing" with its hours
+      // one row per trainer, kind of lesson and place: "Maxim · Boxing · 📍 Big room" with its hours
       const byWhat = new Map();
       LevelUp.trainerHours(t.id, day.key).forEach((hour) => {
         const { state } = slotState(t, day.key, hour, now);
         if (state === "past" || classHour(t.id, day.key, hour)) return;
         const label = { free: `Book ${t.short}`, requested: "Requested", mine: "Confirmed", done: "Done", taken: "Booked" }[state];
         const what = LevelUp.hourActivity(t.id, day.key, hour);
-        byWhat.set(what, (byWhat.get(what) || "") + `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
+        const place = LevelUp.hourPlace(t.id, day.key, hour);
+        const k = `${what}\n${place}`;
+        byWhat.set(k, (byWhat.get(k) || "") + `<button type="button" class="time-chip ${state}" style="--c:${t.color}"
             data-trainer="${t.id}" data-date="${day.key}" data-hour="${hour}"
             ${["free", "mine", "requested"].includes(state) ? "" : "disabled"}
-            aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${day.name} ${pad(hour)}:00, ${label}">${pad(hour)}:00</button>`);
+            aria-label="${esc(t.name)}, ${what ? `${esc(what)}, ` : ""}${esc(place)}, ${day.name} ${pad(hour)}:00, ${label}">${pad(hour)}:00</button>`);
       });
-      return [...byWhat].map(([what, chips]) => `
+      return [...byWhat].map(([k, chips]) => { const [what, place] = k.split("\n"); return `
         <div class="list-row" style="--c:${t.color}">
           <span class="list-trainer"><img src="${t.img}" alt="" data-coach="${t.id}"><b>${esc(t.short)}</b>${what ? `<small class="list-what" data-no-i18n>${esc(what)}</small>` : `<small class="list-what">Personal training</small>`}</span>
+          <p class="list-place" data-no-i18n>📍 ${esc(place)}</p>
           <div class="list-times">${chips}</div>
-        </div>`).join("");
+        </div>`; }).join("");
     }).join("");
     const groupRows = groups.map((g) => `
       <div class="list-row list-group">
@@ -470,6 +475,7 @@ function renderBookingDialog(message = "") {
       </div>
     </div>
     <p class="booking-when">${when}</p>
+    <p class="booking-where"><b>${LevelUp.hourActivity(trainerId, date, hour) ? `<span data-no-i18n>${esc(LevelUp.hourActivity(trainerId, date, hour))}</span>` : "Personal training"}</b> · <span data-no-i18n>📍 ${esc(LevelUp.hourPlace(trainerId, date, hour))}</span></p>
     ${booking?.mine ? "" : player
       ? `<p class="booking-price">1 hour with ${esc(trainer.short)}</p>`
       : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong> · your first session: 1 hour, 1:1 with ${esc(trainer.short)} · after that <strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong></p>`}`;
@@ -640,6 +646,9 @@ const needsPayment = (trainerId, kind) => kind === "duo" || (!usesReward(kind) &
 
 function paymentOptions(trainerId) {
   const online = LevelUp.getPricing().onlinePayments;
+  // where you pay on the day: the place of this session when it isn't the standard one
+  const slotPlace = pendingSlot ? LevelUp.hourPlace(pendingSlot.trainerId, pendingSlot.date, pendingSlot.hour) : LevelUp.defaultPlace();
+  const payAt = slotPlace !== LevelUp.defaultPlace() ? slotPlace : LevelUp.HQ_ADDRESS;
   return `
     <fieldset class="pay-picker" ${needsPayment(trainerId, "solo") ? "" : "hidden"}>
       <legend>Payment</legend>
@@ -647,8 +656,8 @@ function paymentOptions(trainerId) {
         <label class="pay-option"><input type="radio" name="pay" value="online" checked>
           <span><strong>Pay online now</strong> <em class="pay-tag">Recommended</em><small>Bancontact, card or Payconiq · your request goes to the trainer right after paying · money back automatically if it doesn't go ahead</small></span></label>
         <label class="pay-option"><input type="radio" name="pay" value="in_person">
-          <span><strong>Pay at the headquarters</strong><small>${esc(LevelUp.HQ_ADDRESS)} · pay on the day</small></span></label>`
-      : `<p class="pay-note">You pay at the headquarters (${esc(LevelUp.HQ_ADDRESS)}). Online payment is coming soon.</p>
+          <span><strong>Pay at the headquarters</strong><small>${esc(payAt)} · pay on the day</small></span></label>`
+      : `<p class="pay-note">You pay at the headquarters (${esc(payAt)}). Online payment is coming soon.</p>
          <input type="hidden" name="pay" value="in_person">`}
     </fieldset>`;
 }

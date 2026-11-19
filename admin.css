@@ -409,3 +409,8 @@
 .panel-links { display: flex; flex-wrap: wrap; gap: 8px; }
 #deliveryForm { align-items: end; }
 .qr-kinds { margin: 6px 0 10px; padding-left: 18px; display: grid; gap: 4px; }
+
+/* Team: a hidden training card, and the standard photo of a personal training */
+.kind-row.kind-hidden .kind-photo { opacity: 0.45; }
+.kind-photo { position: relative; }
+.kind-photo-tag { position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; font-size: 0.68rem; color: var(--text); background: rgba(0, 0, 0, 0.7); border-radius: 4px; }

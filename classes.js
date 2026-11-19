@@ -166,7 +166,8 @@ window.LevelUpClasses = (() => {
           </div>
           <div class="field-row">
             ${c ? "" : `<label>Repeat<select name="repeatWeeks">${[[1, "Once"], [4, "Every week · 4 weeks"], [8, "Every week · 8 weeks"], [12, "Every week · 12 weeks"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>`}
-            <label>Location<input name="location" maxlength="80" value="${esc(c ? c.location : "Hoogstraat 40, Aalst")}"></label>
+            <label>Where?<input name="location" maxlength="80" list="gcPlaces-${key}" value="${esc(c ? c.location : LevelUp.defaultPlace())}"></label>
+            <datalist id="gcPlaces-${key}">${[...new Set([LevelUp.defaultPlace(), ...(st.list || []).map((x) => x.location).filter(Boolean)])].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
           </div>
           ${admin ? `<div class="field-row">
             <label>Price per player (€)<input type="number" name="price" min="0" max="500" step="0.5" value="${c ? c.price : pricing.classPrice}"></label>

@@ -50,6 +50,7 @@ insert into public.app_config (key, value) values
   ('reward_valid_months', '3'),   -- a free session voucher must be booked within this many months
   ('storage_host', 'zdwlihbsmqiggpyensxc.supabase.co'), -- profile photos must come from this project's Storage
   ('payment_hold_minutes', '20'), -- how long an unpaid online booking holds the hour
+  ('default_location', 'Grote zaal, Hoogstraat 40, Hofstade (Aalst)'), -- where a session or a class is given unless the coach names another place
   ('class_price', '12'),          -- group class: what a player pays per class (euro)
   ('class_trainer_fee', '35'),    -- group class: the trainer's fixed fee per class held
   ('class_xp', '50'),             -- group class: XP for being ticked off as present
@@ -462,6 +463,8 @@ create table if not exists public.trainer_hours (
 create index if not exists trainer_hours_trainer_idx on public.trainer_hours (trainer_id);
 -- What is given in these 1:1 hours (boxing, yoga, dance …). Optional; players see it on the hour they book.
 alter table public.trainer_hours add column if not exists activity text not null default '';
+-- Where these hours are given. Empty = the standard place (app_config default_location: the big room).
+alter table public.trainer_hours add column if not exists location text not null default '';
 
 -- Health questionnaire (PAR-Q style), filled in before the first booking. Health data is
 -- sensitive: only the player, their trainers (for their bookings) and admins can see it.
@@ -623,6 +626,27 @@ returns jsonb language sql stable security definer set search_path = public as $
                           from public.reward_vouchers v where v.user_id = p_user), '[]'::jsonb));
 $$;
 
+-- Where and what: the standard place, and for one hour of a trainer the place and the kind of lesson of the hours
+-- it falls in (hours on that date win over the weekly ones). Used on a booking, in the lists and in every message.
+create or replace function public._default_place()
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce(nullif(btrim(public._config('default_location')), ''), 'Grote zaal, Hoogstraat 40, Hofstade (Aalst)');
+$$;
+create or replace function public._slot_place(p_trainer text, p_day date, p_hour integer)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select nullif(btrim(h.location), '') from public.trainer_hours h
+                   where h.trainer_id = p_trainer and h.kind = 'open' and p_hour >= h.start_hour and p_hour < h.end_hour
+                     and (h.day = p_day or (h.day is null and h.weekday = extract(dow from p_day)))
+                   order by (h.day is not null) desc, h.created_at desc limit 1), public._default_place());
+$$;
+create or replace function public._slot_what(p_trainer text, p_day date, p_hour integer)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select nullif(btrim(h.activity), '') from public.trainer_hours h
+                   where h.trainer_id = p_trainer and h.kind = 'open' and p_hour >= h.start_hour and p_hour < h.end_hour
+                     and (h.day = p_day or (h.day is null and h.weekday = extract(dow from p_day)))
+                   order by (h.day is not null) desc, h.created_at desc limit 1), 'Personal training');
+$$;
+
 create or replace function public._booking_json(b public.bookings)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
@@ -635,6 +659,8 @@ returns jsonb language sql stable security definer set search_path = public as $
                        - make_interval(hours => public._config('free_cancel_hours')::int),
     'name', p.name, 'email', p.email, 'avatar', p.avatar_url, 'userId', b.user_id,
     'trainerEmail', (select t.email from public.trainers t where t.id = b.trainer_id),
+    -- what is given and where (from the trainer's hours; the standard place when nothing else is set)
+    'what', public._slot_what(b.trainer_id, b.day, b.hour), 'place', public._slot_place(b.trainer_id, b.day, b.hour),
     -- part of a weekly session? and did the trainer move it?
     'movedFrom', b.moved_from,
     'series', (select jsonb_build_object('id', s.id, 'weekday', s.weekday, 'hour', s.hour, 'firstDay', s.first_day,
@@ -3174,6 +3200,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                       from (select * from public.news where created_at > now() - interval '14 days' and (expires_at is null or expires_at > now())
                             order by id desc limit 8) n), '[]'::jsonb),
     'hq', 'Hoogstraat 40, 9308 Aalst',
+    'place', public._default_place(), -- where a session or a class is given unless the coach names another place
     'trainers', coalesce((select jsonb_object_agg(tp.trainer_id, tp.price) from public.trainer_pricing tp where tp.price is not null), '{}'::jsonb)
   );
 $$;
@@ -3268,12 +3295,12 @@ begin
 end $$;
 
 -- For the schedule and the hours editors. Notes (can be private) only for the admin and the trainer themselves;
--- what is given in the hours (activity) is for everyone. Hours of a kind that waits for approval: only for
+-- what is given in the hours (activity) and where (location) is for everyone. Hours of a kind that waits for approval: only for
 -- the admin and that trainer ("pending").
 create or replace function public.trainer_hours_list()
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', h.id, 'trainerId', h.trainer_id, 'weekday', h.weekday, 'date', h.day,
-                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'activity', h.activity,
+                    'start', h.start_hour, 'end', h.end_hour, 'kind', h.kind, 'activity', h.activity, 'location', h.location,
                     'pending', not public._kind_ok(h.activity),
                     'note', case when public._can_coach(h.trainer_id) then h.note else '' end)
                   order by h.trainer_id, h.weekday, h.day, h.start_hour), '[]'::jsonb)
@@ -3316,16 +3343,23 @@ end $$;
 -- Add or change a block of hours (admin, or the trainer for their own card).
 -- p_id null = new. Weekly: p_weekday set, p_day null. One date: p_day set, p_weekday null.
 -- p_activity: what is given in these hours (boxing, yoga …), empty for plain personal training.
+-- p_location: where (empty or the standard place = the big room). When the place of hours changes, who booked
+-- in them gets a message with the new place.
 drop function if exists public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text);
+drop function if exists public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text);
 create or replace function public.save_trainer_hours(p_id uuid, p_trainer text, p_weekday integer, p_day date,
                                                      p_start integer, p_end integer, p_kind text default 'open', p_note text default '',
-                                                     p_activity text default '')
+                                                     p_activity text default '', p_location text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   h public.trainer_hours;
   before uuid[] := public._covered_bookings(p_trainer);
   what text := case when p_kind = 'closed' then '' else left(btrim(coalesce(p_activity, '')), 40) end;
+  place text := case when p_kind = 'closed' then '' else left(btrim(coalesce(p_location, '')), 80) end;
+  old_place text;
+  b record;
 begin
+  if lower(place) = lower(public._default_place()) then place := ''; end if; -- the standard place follows app_config
   if auth.uid() is null or not public._can_coach(p_trainer) then raise exception 'Only an admin or the trainer can change these hours.'; end if;
   if not exists (select 1 from public.trainers where id = p_trainer) then raise exception 'Trainer not found.'; end if;
   if (p_weekday is null) = (p_day is null) then raise exception 'Choose a weekday or a date.'; end if;
@@ -3336,15 +3370,28 @@ begin
   if p_day is not null and p_day < (now() at time zone 'Europe/Brussels')::date then raise exception 'Pick today or a date in the future.'; end if;
   perform public._kind_register(what, p_trainer); -- a new kind of training from a coach waits for the admin
   if p_id is null then
-    insert into public.trainer_hours (trainer_id, weekday, day, start_hour, end_hour, kind, note, activity)
-    values (p_trainer, p_weekday, p_day, p_start, p_end, p_kind, left(coalesce(p_note, ''), 80), what) returning * into h;
+    insert into public.trainer_hours (trainer_id, weekday, day, start_hour, end_hour, kind, note, activity, location)
+    values (p_trainer, p_weekday, p_day, p_start, p_end, p_kind, left(coalesce(p_note, ''), 80), what, place) returning * into h;
   else
+    select location into old_place from public.trainer_hours where id = p_id;
     update public.trainer_hours set trainer_id = p_trainer, weekday = p_weekday, day = p_day, start_hour = p_start,
-           end_hour = p_end, kind = p_kind, note = left(coalesce(p_note, ''), 80), activity = what
+           end_hour = p_end, kind = p_kind, note = left(coalesce(p_note, ''), 80), activity = what, location = place
      where id = p_id and trainer_id = p_trainer and public._can_coach(trainer_id) returning * into h;
     if not found then raise exception 'These hours no longer exist.'; end if;
   end if;
   perform public._check_booked_hours(p_trainer, before);
+  -- another place for hours that were booked already: tell those players
+  if p_id is not null and h.kind = 'open' and old_place is distinct from h.location then
+    for b in select k.* from public.bookings k
+             where k.trainer_id = h.trainer_id and k.status in ('pending', 'confirmed') and public._slot_start(k.day, k.hour) > now()
+               and k.hour >= h.start_hour and k.hour < h.end_hour
+               and (k.day = h.day or (h.day is null and extract(dow from k.day) = h.weekday)) loop
+      perform public._push(b.user_id, '📍 New place for your session',
+        public._slot_what(b.trainer_id, b.day, b.hour) || ' · ' || (select split_part(name, ' ', 1) from public.trainers where id = b.trainer_id)
+          || ' · ' || public._slot_label(b.day, b.hour) || ' · 📍 ' || public._slot_place(b.trainer_id, b.day, b.hour),
+        'profile.html#overview', 'place-' || b.id);
+    end loop;
+  end if;
   return to_jsonb(h) || jsonb_build_object('pending', not public._kind_ok(h.activity));
 end $$;
 
@@ -3787,6 +3834,8 @@ declare
   slot text := public._slot_label(b.day, b.hour);
   tag text := 'booking-' || b.id;
   by_player boolean := auth.uid() = b.user_id;
+  what text := public._slot_what(b.trainer_id, b.day, b.hour);   -- what, with whom, when and where: in every message
+  place text := public._slot_place(b.trainer_id, b.day, b.hour);
 begin
   -- a weekly session answered, stopped or planned as a whole sends its own single message
   if coalesce(current_setting('levelup.quiet', true), '') = '1' then
@@ -3812,10 +3861,10 @@ begin
   if was is not distinct from new.status or (tg_op = 'INSERT' and new.status <> 'pending') then return new; end if;
 
   if new.status = 'pending' and (was is null or was = 'awaiting_payment') then
-    perform public._push(coach, 'New session request', client || ' · ' || slot || case when new.kind = 'duo' then ' · duo' else '' end,
-                         'profile.html#coach', tag);
+    perform public._push(coach, 'New session request', client || ' · ' || what || ' · ' || slot || case when new.kind = 'duo' then ' · duo' else '' end
+                         || ' · 📍 ' || place, 'profile.html#coach', tag);
   elsif new.status = 'confirmed' then
-    perform public._push(new.user_id, 'Session confirmed ✓', trainer || ' · ' || slot, 'profile.html#overview', tag);
+    perform public._push(new.user_id, 'Session confirmed ✓', what || ' · ' || trainer || ' · ' || slot || ' · 📍 ' || place, 'profile.html#overview', tag);
   elsif new.status = 'declined' then
     perform public._push(new.user_id, 'Request declined', trainer || ' can''t make ' || slot || '. Pick another hour.', 'index.html#schedule', tag);
   elsif new.status = 'expired' and was = 'pending' then
@@ -4213,7 +4262,8 @@ begin
     for update of k skip locked
   loop
     perform public._push(b.user_id, 'Session ' || case when b.day = today then 'today' else 'tomorrow' end || ' at ' || lpad(b.hour::text, 2, '0') || ':00',
-      'With ' || b.trainer || ' at Hoogstraat 40, Aalst. See you there!', 'profile.html#overview', 'reminder-' || b.id);
+      public._slot_what(b.trainer_id, b.day, b.hour) || ' · ' || b.trainer || ' · 📍 ' || public._slot_place(b.trainer_id, b.day, b.hour) || ' · See you there!',
+      'profile.html#overview', 'reminder-' || b.id);
     update public.bookings set reminder_pushed_at = now() where id = b.id;
     n := n + 1;
   end loop;
@@ -4377,6 +4427,8 @@ alter table public.class_kinds add column if not exists status text not null def
 alter table public.class_kinds add column if not exists proposed_by uuid references public.profiles (id) on delete set null;
 alter table public.class_kinds add column if not exists proposed_trainer text;
 alter table public.class_kinds add column if not exists proposed_at timestamptz;
+-- The admin can hide a card from the home page (the classes and hours themselves stay bookable)
+alter table public.class_kinds add column if not exists hidden boolean not null default false;
 alter table public.class_kinds drop constraint if exists class_kinds_status_check;
 alter table public.class_kinds add constraint class_kinds_status_check check (status in ('pending', 'approved'));
 
@@ -4522,7 +4574,7 @@ begin
   return coalesce((
     select jsonb_agg(jsonb_build_object('key', k.key, 'title', k.title, 'description', k.description, 'photoUrl', k.photo_url,
              'trainers', x.trainers, 'next', x.next_at, 'upcoming', x.upcoming,
-             'hasClasses', x.n > 0, 'soloTrainers', s.solo) order by x.next_at nulls last, k.title)
+             'hasClasses', x.n > 0, 'soloTrainers', s.solo, 'hidden', k.hidden) order by x.next_at nulls last, k.title)
     from public.class_kinds k
     cross join lateral (
       select coalesce(jsonb_agg(distinct c.trainer_id), '[]'::jsonb) as trainers,
@@ -4538,10 +4590,13 @@ begin
       where h.kind = 'open' and h.activity <> '' and public._group_key(h.activity) = k.key
         and (h.day is null or h.day >= (now() at time zone 'Europe/Brussels')::date)
     ) s
-    where k.status = 'approved' and (x.n > 0 or jsonb_array_length(s.solo) > 0)), '[]'::jsonb);
+    -- the personal trainings that always have a card come along too: the admin's own photo and text for them
+    where k.status = 'approved' and (x.n > 0 or jsonb_array_length(s.solo) > 0
+          or k.key in ('crossfit', 'calisthenics', 'hiit', 'muay thai', 'triathlon', 'cycling'))), '[]'::jsonb);
 end $$;
 
--- Admin: the text and the photo of a kind of group training (the photo is a file in the admin's own Storage folder)
+-- Admin: the text and the photo of a kind of training, and whether its card shows (the photo is a file in the admin's
+-- own Storage folder). One of the personal trainings that always have a card gets its row here the first time.
 create or replace function public.admin_class_kind(p_key text, p jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -4549,7 +4604,14 @@ declare
   photo text := nullif(btrim(coalesce(p ->> 'photoUrl', '')), '');
 begin
   if not public.is_admin() then raise exception 'Admin access only.'; end if;
-  if not exists (select 1 from public.class_kinds where key = p_key) then raise exception 'Training not found.'; end if;
+  if not exists (select 1 from public.class_kinds where key = p_key) then
+    if p_key in ('crossfit', 'calisthenics', 'hiit', 'muay thai', 'triathlon', 'cycling')
+       and public._group_key(p ->> 'title') = p_key then
+      insert into public.class_kinds (key, title, status) values (p_key, btrim(p ->> 'title'), 'approved');
+    else
+      raise exception 'Training not found.';
+    end if;
+  end if;
   if p ? 'description' and char_length(about) > 600 then raise exception 'Keep the text under 600 characters.'; end if;
   if p ? 'photoUrl' and photo is not null and photo !~ ('^https://' || replace(public._config('storage_host'), '.', '\.')
                                 || '/storage/v1/object/public/avatars/' || auth.uid()::text || '/[A-Za-z0-9._-]+$') then
@@ -4557,7 +4619,8 @@ begin
   end if;
   update public.class_kinds set
     description = case when p ? 'description' then about else description end,
-    photo_url = case when p ? 'photoUrl' then photo else photo_url end
+    photo_url = case when p ? 'photoUrl' then photo else photo_url end,
+    hidden = case when p ? 'hidden' then coalesce((p ->> 'hidden')::boolean, false) else hidden end
   where key = p_key;
   return public.class_kinds();
 end $$;
@@ -5271,7 +5334,7 @@ declare
   fee numeric := case when admin and nullif(p ->> 'trainerFee', '') is not null then (p ->> 'trainerFee')::numeric
                       else public._config('class_trainer_fee')::numeric end;
   weeks integer := least(greatest(coalesce(nullif(p ->> 'repeatWeeks', '')::int, 1), 1), 12);
-  loc text := left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80);
+  loc text := left(coalesce(nullif(btrim(p ->> 'location'), ''), public._default_place()), 80);
   remark text := left(btrim(coalesce(p ->> 'note', '')), 300);
   series uuid := case when weeks > 1 then gen_random_uuid() end;
   room boolean := coalesce((p ->> 'usesRoom')::boolean, true); -- off for a class outside the gym room
@@ -5414,7 +5477,7 @@ begin
   cap := coalesce(nullif(p ->> 'capacity', '')::int, c.capacity);
   cost := case when admin and nullif(p ->> 'price', '') is not null then (p ->> 'price')::numeric else c.price end;
   fee := case when admin and nullif(p ->> 'trainerFee', '') is not null then (p ->> 'trainerFee')::numeric else c.trainer_fee end;
-  loc := case when p ? 'location' then left(coalesce(nullif(btrim(p ->> 'location'), ''), 'Hoogstraat 40, Aalst'), 80) else c.location end;
+  loc := case when p ? 'location' then left(coalesce(nullif(btrim(p ->> 'location'), ''), public._default_place()), 80) else c.location end;
   remark := case when p ? 'note' then left(btrim(coalesce(p ->> 'note', '')), 300) else c.note end;
   start := (d + tm) at time zone 'Europe/Brussels';
   room := case when p ? 'usesRoom' then coalesce((p ->> 'usesRoom')::boolean, true) else c.uses_room end;
@@ -5765,9 +5828,12 @@ grant execute on function public.push_public_key() to anon, authenticated;
 revoke execute on function public._hours_cover(text, date, integer) from public, anon, authenticated;
 revoke execute on function public._covered_bookings(text) from public, anon, authenticated;
 revoke execute on function public._check_booked_hours(text, uuid[]) from public, anon, authenticated;
-revoke execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text) from public, anon;
+revoke execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text, text) from public, anon;
+revoke execute on function public._default_place() from public, anon, authenticated;
+revoke execute on function public._slot_place(text, date, integer) from public, anon, authenticated;
+revoke execute on function public._slot_what(text, date, integer) from public, anon, authenticated;
 revoke execute on function public.delete_trainer_hours(uuid) from public, anon;
-grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text) to authenticated;
+grant execute on function public.save_trainer_hours(uuid, text, integer, date, integer, integer, text, text, text, text) to authenticated;
 grant execute on function public.delete_trainer_hours(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 revoke execute on function public._book(uuid, text, date, integer, text, text, text, text, uuid) from public, anon, authenticated;
