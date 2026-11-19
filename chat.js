@@ -66,7 +66,7 @@ function listTime(at) {
 
 // The other person's photo: a coach's team photo, else their profile photo or first letter
 function peerAvatar(peer, size = "") {
-  if (peer.group) return `<span class="avatar group-avatar ${size}" aria-hidden="true">👥</span>`;
+  if (peer.group) return `<span class="avatar group-avatar ${peer.team ? "team-avatar" : ""} ${size}" aria-hidden="true">👥</span>`; // team: the coaches' own chat, in gold
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   const photo = peer.avatarUrl || (coach && !coach.dynamic ? coach.img : null); // a coach: the photo of their page, else their card
   if (photo) return `<span class="avatar has-photo ${size}" aria-hidden="true"><img src="${esc(photo)}" alt="" loading="lazy" decoding="async"${coach && size === "head" ? ` data-coach="${esc(coach.id)}"` : ""}></span>`;
@@ -76,7 +76,7 @@ function peerRole(peer) {
   if (peer.group) {
     // one chat per kind of group class; the next class of the group shows when there is one
     const next = peer.next ? new Date(peer.next).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-    return `Group chat · ${peer.members} member${peer.members === 1 ? "" : "s"}${next ? ` · next: ${next}` : ""}`;
+    return `${peer.team ? "Team chat" : "Group chat"} · ${peer.members} member${peer.members === 1 ? "" : "s"}${next ? ` · next: ${next}` : ""}`;
   }
   const coach = peer.trainerId ? LevelUp.trainerById(peer.trainerId) : null;
   return coach?.role || peer.role || "";
@@ -723,7 +723,12 @@ root.addEventListener("keydown", (event) => {
 // Open what the address asks for (a notification, the Chat button of a coach, the back button of the phone)
 async function follow() {
   const r = route();
-  if (r.coach) {
+  if (r.coach === "team") { // the coaches' group chat (the button in the coach panel)
+    await loadList();
+    const team = (state.threads || []).find((x) => x.team);
+    history.replaceState(team ? { t: team.id } : {}, "", address(team ? team.id : ""));
+    if (team) openThread(team.id, { push: false });
+  } else if (r.coach) {
     try {
       const id = await LevelUp.chatOpen(r.coach);
       history.replaceState({ t: id }, "", address(id));

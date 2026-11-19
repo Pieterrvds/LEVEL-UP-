@@ -4613,17 +4613,22 @@ $$;
 
 drop function if exists public._class_chat_member(uuid);
 -- Everyone in a group's chat: signed up (booked or present) for one of its classes in the last class_chat_days
--- (or a coming one), the trainers who give it, and every admin
+-- (or a coming one), the trainers who give it, and every admin.
+-- The key '@coaches' is the team's own chat: every active trainer with an account (a new coach is in it from the
+-- moment their card is linked), and every admin.
 create or replace function public._group_chat_users(p_key text)
 returns setof uuid language sql stable security definer set search_path = public as $$
   select g.user_id from public.class_sessions c join public.class_signups g on g.class_id = c.id
-  where public._group_key(c.title) = p_key and c.status <> 'cancelled' and g.status in ('booked', 'attended')
+  where p_key <> '@coaches' and public._group_key(c.title) = p_key and c.status <> 'cancelled' and g.status in ('booked', 'attended')
     and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
   union
   select public._trainer_user(c.trainer_id) from public.class_sessions c
-  where public._group_key(c.title) = p_key and c.status <> 'cancelled'
+  where p_key <> '@coaches' and public._group_key(c.title) = p_key and c.status <> 'cancelled'
     and c.starts_at > now() - make_interval(days => public._config('class_chat_days')::int)
     and public._trainer_user(c.trainer_id) is not null
+  union
+  select public._trainer_user(t.id) from public.trainers t
+  where p_key = '@coaches' and t.active and public._trainer_user(t.id) is not null
   union
   select p.id from public.profiles p
   where lower(p.email) = any (string_to_array(lower(replace(public._config('admin_emails'), ' ', '')), ','));
@@ -4664,7 +4669,8 @@ returns jsonb language sql stable security definer set search_path = public as $
               'next', (select min(c.starts_at) from public.class_sessions c
                        where public._group_key(c.title) = p_thread.group_key and c.status = 'scheduled' and c.starts_at > now()),
               'muted', coalesce((select r.muted from public.chat_reads r where r.thread_id = p_thread.id and r.user_id = auth.uid()), false),
-              'canDelete', public.is_admin())
+              'team', p_thread.group_key = '@coaches', -- the coaches' own chat
+              'canDelete', public.is_admin() and p_thread.group_key <> '@coaches')
     when p_thread.member_id is not null then
       public._chat_person(case when p_side = 'client' then p_thread.member_id else p_thread.client_id end)
     when p_side = 'client' then
@@ -4923,7 +4929,7 @@ create or replace function public.chat_group_delete(p_thread uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_admin() then raise exception 'Only an admin can delete a group chat.'; end if;
-  delete from public.chat_threads where id = p_thread and group_key is not null;
+  delete from public.chat_threads where id = p_thread and group_key is not null and group_key <> '@coaches'; -- the coaches' chat stays
   if not found then raise exception 'Conversation not found.'; end if;
 end $$;
 
@@ -6104,10 +6110,10 @@ begin
   if not found or pr.welcomed_at is not null or txt = '' then return false; end if;
   select split_part(name, ' ', 1) into coach_name from public.trainers where id = coach and active;
   if not found then return false; end if; -- no head coach (yet): try again at the next run
-  -- coaches, the head coach included, don't get a welcome from the head coach
+  -- a coach gets the welcome for coaches instead (below); the head coach none
   if exists (select 1 from public.trainers t where t.active and t.email is not null and lower(t.email) = lower(pr.email)) then
     update public.profiles set welcomed_at = now() where id = p_user;
-    return false;
+    return public._welcome_coach(p_user);
   end if;
   insert into public.chat_threads (client_id, trainer_id) values (p_user, coach) on conflict do nothing;
   select id into tid from public.chat_threads where client_id = p_user and trainer_id = coach and member_id is null;
@@ -6126,8 +6132,114 @@ begin
 end $$;
 revoke execute on function public._welcome_chat(uuid) from public, anon, authenticated;
 
+-- ---------------------------------------------------------
+-- The coaches: their own group chat, and their own welcome
+-- ---------------------------------------------------------
+-- One group chat for the team ("Coaches", key '@coaches'): every active trainer with an account and every admin are
+-- in it (see _group_chat_users), so a new coach joins by himself. Nobody can delete it.
+insert into public.chat_threads (group_key, group_title) values ('@coaches', 'Coaches') on conflict do nothing;
+
+-- A coach gets a welcome from the head coach that says what a coach can do in the app, instead of the one for
+-- members: at sign-up when their trainer card is already linked, else the moment the card is linked to their account.
+-- The text is in app_config (welcome_coach_text, {name} = first name; empty = no welcome). coach_join_text is the
+-- line the team reads in the Coaches chat when someone joins (empty = none).
+alter table public.profiles add column if not exists coach_welcomed_at timestamptz;
+
+insert into public.app_config (key, value) values ('welcome_coach_text', $welcome$Hey {name}! 👋
+
+Welkom in het team van LEVEL-UP. Vanaf nu ben je coach in de app. Dit kan je ermee doen:
+
+📋 Coachpaneel (Profiel → Coach): wat op je wacht, je agenda en je verdiensten.
+✅ Te doen: een aanvraag bevestigen of weigeren, en na een sessie de XP toekennen of een no-show aanduiden.
+🗓️ Mijn uren: je vaste uren, extra uren en vrije dagen instellen, en kiezen wat je geeft (bv. boksen of yoga).
+👥 Groepslessen: een les plannen (één keer of elke week), zien wie komt, afvinken wie er was, wijzigen of annuleren.
+🆕 Een nieuwe soort les: stel ze voor met een foto en een korte tekst. Ik keur ze eerst goed, daarna zien spelers ze.
+🔁 Een sessie verplaatsen doe je in je Agenda; je klant krijgt dan vanzelf een bericht.
+💬 Chat: met je klanten, in de groepschat van elke les en in de groep "Coaches" met het hele team.
+🔔 Zet je meldingen aan (menu → Meldingen), dan hoor je meteen van een nieuwe aanvraag.
+👤 Mijn pagina: je foto en je tekst, die zien spelers wanneer ze een coach kiezen.
+
+Een vraag, of werkt er iets niet? Stuur het hier of in de groep Coaches.
+
+Pieter$welcome$)
+on conflict (key) do nothing;
+insert into public.app_config (key, value) values ('coach_join_text', '👋 {name} is erbij als coach. Welkom in het team!')
+on conflict (key) do nothing;
+
+-- Send the coach welcome to one coach (once). p_tell: also say it in the Coaches chat. True when a message was sent.
+create or replace function public._welcome_coach(p_user uuid, p_tell boolean default true)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  head text := public._config('owner_trainer_id');
+  head_name text;
+  head_user uuid;
+  txt text := btrim(coalesce(public._config('welcome_coach_text'), ''));
+  joined text := btrim(coalesce(public._config('coach_join_text'), ''));
+  pr public.profiles;
+  first_name text;
+  tid uuid;
+  gid uuid;
+  mid bigint;
+  at timestamptz;
+begin
+  select * into pr from public.profiles where id = p_user;
+  if not found or pr.coach_welcomed_at is not null then return false; end if;
+  if not exists (select 1 from public.trainers t where t.active and t.email is not null and lower(t.email) = lower(pr.email)) then return false; end if;
+  select split_part(name, ' ', 1) into head_name from public.trainers where id = head and active;
+  if not found then return false; end if; -- no head coach (yet): try again at the next run
+  head_user := public._trainer_user(head);
+  update public.profiles set coach_welcomed_at = now(), welcomed_at = coalesce(welcomed_at, now()) where id = p_user;
+  if head_user = p_user or txt = '' then return false; end if; -- the head coach doesn't welcome himself
+  first_name := coalesce(nullif(split_part(btrim(pr.name), ' ', 1), ''), 'coach');
+  insert into public.chat_threads (client_id, trainer_id) values (p_user, head) on conflict do nothing;
+  select id into tid from public.chat_threads where client_id = p_user and trainer_id = head and member_id is null;
+  if tid is null then return false; end if;
+  txt := left(replace(txt, '{name}', first_name), 2000);
+  insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
+  values (tid, head_user, true, txt) returning id, created_at into mid, at;
+  update public.chat_threads set last_at = at, trainer_read_id = greatest(trainer_read_id, mid) where id = tid;
+  insert into public.push_outbox (user_id, title, body, url, tag, send_after)
+  select p_user, '💬 ' || head_name, left(txt, 140), 'chat.html?t=' || tid, 'chat-' || tid, public._after_quiet()
+  where exists (select 1 from public.push_subscriptions where user_id = p_user);
+  -- the team reads in the Coaches chat that someone joined
+  select id into gid from public.chat_threads where group_key = '@coaches';
+  if p_tell and gid is not null and joined <> '' then
+    insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
+    values (gid, head_user, true, left(replace(joined, '{name}', first_name), 2000)) returning id, created_at into mid, at;
+    update public.chat_threads set last_at = at where id = gid;
+    if head_user is not null then
+      insert into public.chat_reads (thread_id, user_id, read_id) values (gid, head_user, mid)
+      on conflict (thread_id, user_id) do update set read_id = greatest(public.chat_reads.read_id, excluded.read_id);
+    end if;
+  end if;
+  return true;
+end $$;
+revoke execute on function public._welcome_coach(uuid, boolean) from public, anon, authenticated;
+
+-- A trainer card that gets linked to an account (or switched on): that coach gets the welcome
+create or replace function public._trainer_linked()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  begin
+    if new.active and new.email is not null then perform public._welcome_coach(public._trainer_user(new.id)); end if;
+  exception when others then
+    null; -- never block a change to a trainer card because of the welcome message
+  end;
+  return new;
+end $$;
+revoke execute on function public._trainer_linked() from public, anon, authenticated;
+drop trigger if exists trainer_linked on public.trainers;
+create trigger trainer_linked after insert or update of email, active on public.trainers
+  for each row execute function public._trainer_linked();
+
 -- Members who were here before the welcome existed: once, oldest account first
 do $$ begin perform public._welcome_chat(p.id) from (select id from public.profiles where welcomed_at is null order by created_at) p; end $$;
+-- Coaches who were here before the coach welcome existed: once, without a line per coach in the Coaches chat
+do $$ begin
+  perform public._welcome_coach(p.id, false)
+  from (select pr.id from public.profiles pr join public.trainers t on t.active and t.email is not null and lower(t.email) = lower(pr.email)
+        where pr.coach_welcomed_at is null order by pr.created_at) p;
+end $$;
 
 -- ---------------------------------------------------------
 -- The head coach's own text ("About Pieter" on his page), written once

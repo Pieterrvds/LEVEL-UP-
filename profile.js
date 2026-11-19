@@ -558,6 +558,7 @@ function renderCoachPanel() {
       <div class="panel-head">
         <h2>Coach panel</h2>
         <span class="muted" data-no-i18n>${esc(LevelUp.trainerById(LevelUp.getPlayer().trainerId).name)}</span>
+        <a class="btn btn-small btn-ghost coach-team-chat" href="chat.html?coach=team">💬 Team chat</a>
       </div>
       <div class="coach-overview" id="coachOverview">${coachOverviewHtml(d)}</div>
       ${LevelUp.pushCalloutHtml("Turn on notifications to hear about new requests right away.")}

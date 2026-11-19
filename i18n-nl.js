@@ -1116,6 +1116,8 @@
     "Not filled in yet.": "Nog niet ingevuld.",
     "Fill in now": "Nu invullen",
     "Update my answers": "Antwoorden aanpassen",
+    "Team chat": "Teamchat",
+    "💬 Team chat": "💬 Teamchat",
     "What do you give?": "Wat geef je?",
     "＋ A new kind of training…": "＋ Een nieuwe soort training…",
     "Name of the training": "Naam van de training",

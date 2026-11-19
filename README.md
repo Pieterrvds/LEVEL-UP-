@@ -436,6 +436,20 @@ chat page of `index.html` on a phone, see "Phones").
   (`{name}` = the member's first name; empty = no welcome); `_welcome_chat` in `supabase/schema.sql`, called from
   the sign-up trigger. Coaches get none. A newest message that is taller than the screen opens at its first line.
 
+### The coaches: their own group chat and their own welcome
+- **"Coaches"** is one group chat for the team (`chat_threads.group_key = '@coaches'`, made by `schema.sql`). In it:
+  every active trainer whose card is linked to an account, and every admin (`_group_chat_users`). Nobody is added by
+  hand: a new coach is in it from the moment their trainer card is linked, and out when the card is switched off.
+  It works like any group chat (notifications, mute) but can't be deleted. The coach panel has a button to it
+  (`chat.html?coach=team`); in the list it has a gold icon and says "Team chat".
+- **A coach gets a welcome for coaches** from the head coach instead of the one for members (`_welcome_coach`): what
+  a coach can do in the app (coach panel, To do, My hours, group classes, a new kind of class and its approval, moving
+  a session, the chats, notifications, their page). It is sent once: at sign-up when the trainer card is already
+  linked, else the moment the card is linked or switched on (trigger `trainer_linked`), and once to the coaches who
+  were there before. The head coach gets none.
+- When someone joins, the team reads one line in the Coaches chat ("👋 … is erbij als coach").
+- Both texts are in `app_config`: `welcome_coach_text` and `coach_join_text` (`{name}` = first name; empty = off).
+
 ## Bonus XP (admin)
 Admin → Members: **+ XP** next to a member (or "Reward with XP" in their details) gives extra XP with your own reason,
 e.g. for helping LEVEL-UP; a negative number takes XP back (a correction). The player gets a push notification

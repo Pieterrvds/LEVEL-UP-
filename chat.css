@@ -168,6 +168,7 @@
 
 /* Group class chats: a group icon, the sender's name above their messages, the coach highlighted */
 .avatar.group-avatar { display: grid; place-items: center; font-size: 1.4rem; background: color-mix(in srgb, var(--accent) 20%, #000); border: 1px solid var(--accent-deep); }
+.avatar.group-avatar.team-avatar { background: color-mix(in srgb, var(--gold) 24%, #000); border-color: var(--gold); } /* the coaches' own chat */
 .chat-from { margin: 6px 0 3px 4px; font-size: 0.75rem; font-weight: 700; color: var(--muted); }
 .chat-msg.coach .chat-from { color: var(--accent); }
 .chat-msg.theirs.coach p { border-color: var(--accent-deep); }
