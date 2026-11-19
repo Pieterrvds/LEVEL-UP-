@@ -4367,6 +4367,9 @@ alter table public.class_kinds add column if not exists proposed_at timestamptz;
 alter table public.class_kinds drop constraint if exists class_kinds_status_check;
 alter table public.class_kinds add constraint class_kinds_status_check check (status in ('pending', 'approved'));
 
+-- A class of a new kind that the coach wanted announced: the news goes out once the admin approves the kind.
+alter table public.class_sessions add column if not exists announce_wait boolean not null default false;
+
 -- Make the kind for a name when it doesn't exist yet. From the admin, or one of the trainings that already have
 -- a card on the home page: approved right away. From a coach: pending, and the admins get a notification.
 create or replace function public._kind_register(p_name text, p_trainer text)
@@ -4452,6 +4455,7 @@ create or replace function public.admin_kind_decide(p_key text, p_approve boolea
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   k public.class_kinds;
+  c public.class_sessions;
   ttl text := nullif(regexp_replace(btrim(coalesce(p_title, '')), '\s+', ' ', 'g'), '');
   new_key text;
 begin
@@ -4474,6 +4478,17 @@ begin
       update public.class_kinds set key = coalesce(new_key, k.key), title = ttl where key = k.key;
     end if;
     update public.class_kinds set status = 'approved' where key = coalesce(new_key, k.key);
+    -- the news the coach asked for when planning goes out now
+    for c in select * from public.class_sessions s
+             where s.announce_wait and s.status = 'scheduled' and s.starts_at > now() and public._group_key(s.title) = coalesce(new_key, k.key) loop
+      perform public._broadcast('class',
+        '📣 ' || c.title || ' · ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'Dy DD Mon') || ' ' || to_char(c.starts_at at time zone 'Europe/Brussels', 'HH24:MI'),
+        case when c.note <> '' then c.note || ' · ' else '' end
+          || 'With ' || (select split_part(name, ' ', 1) from public.trainers where id = c.trainer_id)
+          || case when c.series_id is not null then ' · every week' else '' end || ' · Sign up in the app',
+        'index.html#schedule', 'class-' || c.id, c.starts_at);
+    end loop;
+    update public.class_sessions set announce_wait = false where announce_wait and public._group_key(title) = coalesce(new_key, k.key);
     perform public._push(k.proposed_by, '✅ Approved: ' || coalesce(ttl, k.title), 'Players can see and book it now.', 'profile.html#coach', 'kind-' || k.key);
   else
     delete from public.trainer_hours where activity <> '' and public._group_key(activity) = k.key;
@@ -5299,6 +5314,9 @@ begin
         || 'With ' || (select split_part(name, ' ', 1) from public.trainers where id = trainer)
         || case when jsonb_array_length(made) > 1 then ' · every week' else '' end || ' · Sign up in the app',
       'index.html#schedule', 'class-' || first.id, first.starts_at);
+  end if;
+  if first.id is not null and coalesce((p ->> 'announce')::boolean, true) and not public._kind_ok(ttl) then
+    update public.class_sessions set announce_wait = true where id = first.id; -- announced when the admin approves this new kind
   end if;
   return jsonb_build_object('created', made, 'skipped', skipped, 'announced', reached, 'pending', not public._kind_ok(ttl));
 end $$;

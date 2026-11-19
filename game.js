@@ -892,7 +892,7 @@ const LevelUp = (() => {
   const kindKey = (title) => String(title || "").trim().replace(/\s+/g, " ").toLowerCase();
   let trainingKinds = null; // null: not loaded, or a database that doesn't know them yet
   async function loadTrainingKinds() {
-    try { trainingKinds = (await call("training_kinds")) || []; } catch (err) { trainingKinds = null; console.error("Loading the kinds of training failed:", err); }
+    try { trainingKinds = (await call("training_kinds")) || []; } catch { trainingKinds = null; /* a database from before the kinds of training: the forms do without */ }
     return trainingKinds;
   }
   // The names a trainer can pick: every approved training, and their own that still wait for the admin
@@ -926,7 +926,7 @@ const LevelUp = (() => {
       return r;
     } catch (err) {
       if (path) sb.storage.from("avatars").remove([path]).catch(() => {});
-      if (/could not find the function|schema cache/i.test(err.message || "")) throw new Error("A new kind of training needs the latest supabase/schema.sql.");
+      if (OLD_DB.test(err.message || "")) throw new Error("A new kind of training needs the latest supabase/schema.sql.");
       throw err;
     }
   }
@@ -1436,6 +1436,7 @@ const LevelUp = (() => {
     }
   }
 
+  const OLD_DB = /could not find the function|schema cache|does not exist|isn't set up yet/i; // the server doesn't know a function (yet)
   // activity: what is given in the hours (boxing, yoga …). It is only sent when filled in, so a database
   // that doesn't know the field yet keeps working for plain hours.
   async function saveOpeningHours({ id = null, trainerId, weekday = null, date = null, start, end, kind = "open", note = "", activity = "" }) {
@@ -1446,7 +1447,7 @@ const LevelUp = (() => {
         p_start: Number(start), p_end: Number(end), p_kind: kind, p_note: note, ...(what ? { p_activity: what } : {})
       });
     } catch (err) {
-      if (what && /could not find the function|schema cache/i.test(err.message || "")) throw new Error("Saving what you give needs the latest supabase/schema.sql. Leave that field empty for now.");
+      if (what && OLD_DB.test(err.message || "")) throw new Error("Saving what you give needs the latest supabase/schema.sql. Choose \"Personal training\" for now.");
       throw err;
     }
     if (what && (document.getElementById("classGrid") || document.getElementById("adminKinds"))) await loadClassKinds(); // the cards follow what is given 1:1

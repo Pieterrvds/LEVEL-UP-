@@ -1138,7 +1138,7 @@
     "What is given? (empty = personal training)": "Wat geef je? (leeg = personal training)",
     "What is given? (extra hours; empty = personal training)": "Wat geef je? (extra uren; leeg = personal training)",
     "e.g. boxing, yoga, dance": "bv. boksen, yoga, dans",
-    "Saving what you give needs the latest supabase/schema.sql. Leave that field empty for now.": "Om op te slaan wat je geeft is de nieuwste supabase/schema.sql nodig. Kies voorlopig \"Personal training\".",
+    "Saving what you give needs the latest supabase/schema.sql. Choose \"Personal training\" for now.": "Om op te slaan wat je geeft is de nieuwste supabase/schema.sql nodig. Kies voorlopig \"Personal training\".",
     "A new kind of training needs the latest supabase/schema.sql.": "Voor een nieuwe soort training is de nieuwste supabase/schema.sql nodig.",
     "Only a trainer or an admin can add a kind of training.": "Alleen een trainer of een admin kan een soort training toevoegen.",
     "Give the training a name of 2 to 40 characters.": "Geef de training een naam van 2 tot 40 tekens.",

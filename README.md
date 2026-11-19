@@ -196,12 +196,15 @@ A coach doesn't only say *when*, but also *what* he gives:
 - **A new kind from a coach waits for the admin** (`class_kinds.status = 'pending'`, made by `_kind_register`): the
   admins get a notification, and until it is approved players see nothing of it: not the card, not the hours
   (`trainer_hours_list` leaves them out and `_hours_cover` refuses a booking), not the class (`class_list`,
-  `class_signup`), and the class is not announced. The coach sees it marked ⏳ in his week and on the class card.
+  `class_signup`), and the news about the class waits (`class_sessions.announce_wait`) and goes out at approval.
+  The coach sees it marked ⏳ in his week and on the class card.
   A training that already has a card, and anything the admin makes himself, needs no approval.
 - **Admin → Team → "To approve"** shows each request with its photo, name, coach, text and what was planned with it.
   **Approve**, **Other name…** (approves under a corrected name: the hours, classes and chat follow) or **Decline**
   (with a reason for the coach: the hours and classes planned with it are removed). `admin_kind_decide` does it;
   `training_kinds` lists the kinds for the forms; `kind_propose` stores the photo and the text of a new one.
+- **Before `schema.sql` is run again** the site keeps working as before: the forms offer no new kind, plain hours and
+  classes save as always, and picking a training for 1:1 hours says the database must be updated first.
 
 ### Admin → Team: the schedule of the whole team
 The admin's Team tab is the coach's "My hours" for every trainer (`renderTeam` in `admin.js`, the week is the shared
