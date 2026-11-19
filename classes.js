@@ -240,6 +240,14 @@ window.LevelUpClasses = (() => {
         const lead = form.elements.trainerId;
         const co = () => form.querySelectorAll("[name=coTrainers]").forEach((box) => { box.disabled = box.value === lead.value; if (box.disabled) box.checked = false; box.closest("label").hidden = box.disabled; });
         if (lead && form.querySelector("[name=coTrainers]")) { lead.addEventListener("change", co); co(); }
+        // "needs the whole gym room" only makes sense for a class in the big room itself
+        const where = form.elements.location, roomBox = form.querySelector(".gc-room");
+        const room = (event) => {
+          const was = roomBox.hidden;
+          roomBox.hidden = where.value.trim() !== "" && where.value.trim().toLowerCase() !== LevelUp.defaultPlace().toLowerCase();
+          if (event && was && !roomBox.hidden) form.elements.usesRoom.checked = true; // back in the big room: it takes the room again unless unticked
+        };
+        if (where && roomBox) { where.addEventListener("input", room); room(); }
       });
     }
 

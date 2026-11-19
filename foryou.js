@@ -52,7 +52,7 @@
     el.innerHTML = `
       <p class="fy-k">${T("For you")}</p>
       <h2 class="fy-hi"></h2>
-      <div class="fy-rank"><span class="rank-badge"></span></div>
+      <div class="fy-rank"><span class="rank-badge"></span><span class="fy-status"></span></div>
       <div class="fy-bar" role="progressbar" aria-valuemin="0"><i></i></div>
       <p class="fy-xp"><span data-fy-xp></span><span data-fy-left></span></p>
       <button type="button" class="fy-bubble" hidden aria-hidden="true" tabindex="-1"></button>
@@ -67,6 +67,10 @@
     const badge = el.querySelector(".rank-badge");
     badge.dataset.tier = String(LevelUp.RANKS.indexOf(p.rank));
     badge.textContent = `LVL ${p.level} · ${p.rank.title}`;
+    // a coach: the small switch Active / Away next to his level
+    const status = el.querySelector(".fy-status");
+    const sw = coachHtml(player);
+    if (status.dataset.html !== sw) { status.dataset.html = sw; status.innerHTML = sw; }
     const bar = el.querySelector(".fy-bar");
     bar.setAttribute("aria-valuemax", p.needed);
     bar.setAttribute("aria-valuenow", p.into);
@@ -402,6 +406,11 @@
         fit: () => { const ok = fit(); loop(); return ok; },
         rep: () => { if (!plan.length && !cur) begin("pullup"); },
         cheer: () => begin("muscleup", () => say(["Checked in! That deserves a muscle-up.", "Nice one. See you next week!"])),
+        // a coach switched himself on or off: a muscle-up for "active", a wave for "away", and a word
+        status: (on) => {
+          begin(on ? "muscleup" : "wave");
+          say(on ? ["Active again! Let the bookings come.", "You're back! I kept the rings warm."] : ["Enjoy the break! I'll hold the fort.", "Away for now. I'll keep hanging around."], 350, { ms: 5200 });
+        },
         wake: loop,
         move: (name) => { if (MOVES[name]) begin(name); },   // for a look at one move (LevelUpForYou.move("lsit"))
         say: (help) => say(help ? HELP_LINES : QUOTES, 0, { help: Boolean(help) }),
@@ -464,7 +473,7 @@
         <div class="fy-next"><span class="fy-ico" aria-hidden="true">${free ? "🎁" : "📅"}</span>
           <div><b>${free ? T("A free session is waiting for you") : T("Nothing planned yet")}</b>
           <span>${free ? T("Pick an hour with a coach: this one is on us.")
-            : intro ? T("Pick an hour with a coach. Your first session is {0}.", esc(LevelUp.euro(LevelUp.getPricing().introPrice)))
+            : intro ? (LevelUp.getPricing().introPrice > 0 ? T("Pick an hour with a coach. Your first session is {0}.", esc(LevelUp.euro(LevelUp.getPricing().introPrice))) : T("Pick an hour with a coach. Your first session is free."))
             : T("Pick an hour with a coach or join a group class.")} <strong class="fy-plus">+${LevelUp.SESSION_XP} XP</strong></span></div></div>
         <div class="fy-acts">
           <a class="btn btn-small btn-primary" href="${link("schedule")}">${T("▶ Book a session")}</a>
@@ -737,8 +746,8 @@
       return el;
     };
     host.append(card("next"), card("streak"), card("race", "fy-race-card"), card("goals"), card("picks", "fy-wide"), card("club", "fy-club"));
-    parts.coach = null; // only a coach gets this card, right under the greeting (see draw)
-    delete lastHtml.coach;
+    parts.status = null; // a coach on a phone gets a slim card with his switch, right under the greeting (see draw)
+    delete lastHtml.status;
     built = true;
     startMascot();
   }
@@ -796,14 +805,14 @@
     }
     const data = LevelUp.getForYou();
     updateHello(player);
-    const coachCard = coachHtml(player);
-    if (coachCard && !parts.coach) {
-      parts.coach = document.createElement("section");
-      parts.coach.className = "fy-card fy-coach";
-      parts.hello.after(parts.coach);
+    const statusCard = coachHtml(player, true);
+    if (statusCard && !parts.status) {
+      parts.status = document.createElement("section");
+      parts.status.className = "fy-card fy-status-card";
+      parts.hello.after(parts.status);
     }
-    if (!coachCard && parts.coach) { parts.coach.remove(); parts.coach = null; delete lastHtml.coach; }
-    if (coachCard) set("coach", coachCard);
+    if (!statusCard && parts.status) { parts.status.remove(); parts.status = null; delete lastHtml.status; }
+    if (statusCard) set("status", statusCard);
     set("next", nextHtml(player));
     set("streak", streakHtml(player));
     set("race", raceHtml(player, data));
@@ -831,15 +840,19 @@
     }
   }
   // A coach: the switch between "active" (players can book you) and "away for now" (holiday, ill …)
-  function coachHtml(player) {
+  // In two shapes: a small switch next to his level (a computer) and a slim card of its own (a phone).
+  function coachHtml(player, slim = false) {
     if (!player.trainerId || !LevelUp.trainerById(player.trainerId)) return "";
     const on = LevelUp.trainerAvailable(player.trainerId);
-    return `
-      <button type="button" class="coach-switch coach-switch-big ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-fy-available>
-        <span class="cs-text"><small class="cs-k">${T("Your status as a coach")}</small><b>${T(on ? "Active" : "Away for now")}</b>
-          <small>${T(on ? "Players can book you" : "Players can't book you. Tap to switch back on.")}</small></span>
-        <span class="cs-track" aria-hidden="true"><i></i></span>
-      </button>`;
+    const label = `aria-label="${esc(T("Your status as a coach"))}: ${esc(T(on ? "Active" : "Away for now"))}"`;
+    if (slim) {
+      return `<button type="button" class="coach-switch coach-switch-slim ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-fy-available ${label}>
+        <span class="cs-text"><b>${T(on ? "Active" : "Away for now")}</b><small>${T(on ? "Players can book you" : "Players can't book you")}</small></span>
+        <span class="cs-track" aria-hidden="true"><i></i></span></button>`;
+    }
+    return `<button type="button" class="coach-switch coach-switch-mini ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-fy-available
+      title="${esc(T(on ? "Players can book you" : "Players can't book you"))}" ${label}>
+      <span class="cs-track" aria-hidden="true"><i></i></span><b>${T(on ? "Active" : "Away")}</b></button>`;
   }
   async function toggleAvailable(button) {
     const on = button.getAttribute("aria-checked") !== "true"; // the new state
@@ -851,6 +864,7 @@
     } catch (err) { LevelUp.toast({ title: "Not changed", text: err.message, icon: "!" }); }
     button.disabled = false;
     draw(true);
+    if (LevelUp.trainerAvailable(LevelUp.getPlayer().trainerId) === on) mascot?.status(on); // the mascot has something to say about it
   }
 
   function onClick(event) {

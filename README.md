@@ -197,9 +197,10 @@ Every lesson has a place. The standard one is the big room (`app_config` `defaul
   already, those players get "📍 New place for your session".
 
 ### Active or away
-A coach has a **big switch on "For you"**, right under the greeting (`coachHtml` in `foryou.js`; on a phone that is
-the start page, on a computer the first tab of his account): **Active** (players can book him) or
-**Away for now** (holiday, ill …). `trainers.available`, set with `set_trainer_available` by the coach himself or the
+A coach has a **switch on "For you"** (`coachHtml` in `foryou.js`): on a phone (the start page) a slim card of its
+own right under the greeting, on a computer (the first tab of his account) a small switch next to his level:
+**Active** (players can book him) or **Away** (holiday, ill …). The mascot reacts when he flips it: a muscle-up and "Active again!" or a wave and
+"Enjoy the break!" (`mascot.status`). `trainers.available`, set with `set_trainer_available` by the coach himself or the
 admin. While he is away:
 - nobody can book him: his hours leave the booking board and the phone list (`trainerHours` returns nothing), "Book …"
   does nothing, and the server refuses a booking too (`_book`). Sessions and classes that are planned stay.
@@ -220,6 +221,11 @@ session, active or away), that coach gets the notification "LEVEL-UP changed you
 (`_coach_changed` again, the admin's branch). A trainer who is put on a class as a second trainer hears it too
 (`_tell_co`). And a **trainer application** tells the admins at once ("New trainer application", it opens
 Admin → Overview), and the applicant hears the answer (`_application_push`).
+
+### Level 3: the coach cards sort themselves
+The cards under "Meet the team" are ordered by `sortTeam` in `schedule.js`, every time the data changes: coaches who
+are **active** first, the **highest level and XP** in front, who is **away** at the back (just before the "coach
+wanted" card). Nobody has to look for who can take them. The swipe row on a phone copies the new order.
 
 ### Kinds of training, and the admin's approval of a new one
 A coach doesn't only say *when*, but also *what* he gives:
@@ -297,6 +303,13 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
   the places. Admin → Group classes → **Group trainings on the home page**: your own text (600 characters) and
   photo per kind (`admin_class_kind`); without them it gets a photo and text that fit its name (`GROUP_LOOKS` in
   `script.js`; `img/socialrunclub.jpg` is a free photo from Unsplash by Joshua Tsu).
+- **Photos of the cards.** Every training card except boxing, Muay Thai and the social run uses a free photo from
+  Unsplash (`img/trainings/`, downloaded from `images.unsplash.com`), by: `crossfit.jpg` Victor Freitas,
+  `calisthenics.jpg` Anastase Maragos, `hiit.jpg` Karsten Winegeart, `triathlon.jpg` louis tricot, `cycling.jpg`
+  Coen van de Broek, `rings.jpg` Moment PTP, `spinning.jpg` Redd Francisco, `hyrox.jpg` Grace Anne Bobadilla,
+  `group.jpg` (bootcamp, and any class without a look of its own) Geert Pieters, `mobility.jpg` Alonso Reyes,
+  `yoga.jpg` bruce mars. `GROUP_LOOKS` in `game.js` picks the photo by the name of the class; the admin's own
+  photo for a card (Admin → Team) still wins.
 - **Filters and the info window:** above the cards: All · Group classes · Personal training, and per trainer.
   A tap on a card opens a window with more about that training (text, price, XP, the coach, and for a group
   training the coming dates with Sign up); the button on a card still books straight away. The personal
@@ -341,7 +354,7 @@ One trainer, several players (HIIT, CrossFit WOD, bootcamp …). Tables `class_s
 ## A first booking, step by step
 A visitor taps an hour and sees one window that carries them through: **1 Account → 2 Health check → 3 Request**
 (the row of steps at the top, `stepsHtml` in `schedule.js`; members who booked before don't get the steps).
-- The price a newcomer pays comes first ("€30 · your first session … · after that €50").
+- The price a newcomer pays comes first ("Free · your first session … · after that €50").
 - "Create account" opens the account window: first name, e-mail, password. The choice "player or trainer" only shows
   after the small link "Are you a personal trainer? Apply as a coach".
 - **The chosen hour is kept** on the device (`localStorage` `levelup.slot`, three days). After the confirmation e-mail
@@ -441,8 +454,12 @@ The log-in form has "Resend the confirmation email"; send limits show a clear me
 
 ## The gym room: places and rentals
 There is one room (12 m × 12 m), and the app now knows it. Rules, all checked on the server:
-- **Places.** A 1:1 session takes one place, whoever the coach is. The room has `room_places` places (2 to start
-  with; Admin → Gym room → Room settings). When they are all taken, that hour shows as taken for every coach and
+- **Only the big room counts.** These rules are about the standard place itself (`default_location`, the big room).
+  A 1:1 hour or a group class that a coach gives **at another place** (his hours or the class name another place)
+  takes nothing of the room and is never held back by it: it can overlap with anything (`_in_room`,
+  `_slot_in_room`). The same trainer still can't be in two places at once.
+- **Places.** A 1:1 session takes one place, whoever the coach is. The room has `room_places` places: **3 personal
+  trainers at the same hour** (it was 2; changed once by `schema.sql`, Admin → Gym room → Room settings sets it). When they are all taken, that hour shows as taken for every coach and
   `book_session` answers "The gym is full at that time". Hours that already had more sessions stay as they are.
 - **Group classes.** A class in the room takes all of it: no other class, 1:1 session or rental at that time, and
   the other way round a class can't be planned (or moved) on top of them; the message says what is in the way.
@@ -647,7 +664,7 @@ The numbers are rows in `app_config`: `free_cancel_hours`, `reward_window_days`,
 | What | Client pays | Trainer gets | Venue keeps |
 |---|---|---|---|
 | 1:1 session | €50 (or the trainer's own price) | €45 (or the trainer's own fee) | the rest (€5) |
-| First session (a player's very first booking) | €30 | full fee (€45) | €30 − fee: you cover the discount (−€15) |
+| First session (a player's very first booking) | free (`intro_price` 0) | full fee (€45) | you cover it (−€45); nothing to pay, so no payment step and nothing "to collect" |
 | Duo (2 people, 1 trainer, 1 hour) | €80 in total | €50 | €30 |
 | Pack credit (5 for €240, 10 for €470) | €48 / €47 per session, paid up front | full fee (€45) | the rest (€3 / €2) |
 Sessions with Pieter (the owner) keep the full price. Price, fee, how the price was set (standard, intro, pack or duo)

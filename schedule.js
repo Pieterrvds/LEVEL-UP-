@@ -478,7 +478,7 @@ function renderBookingDialog(message = "") {
     <p class="booking-where"><b>${LevelUp.hourActivity(trainerId, date, hour) ? `<span data-no-i18n>${esc(LevelUp.hourActivity(trainerId, date, hour))}</span>` : "Personal training"}</b> · <span data-no-i18n>📍 ${esc(LevelUp.hourPlace(trainerId, date, hour))}</span></p>
     ${booking?.mine ? "" : player
       ? `<p class="booking-price">1 hour with ${esc(trainer.short)}</p>`
-      : `<p class="booking-price"><strong>${LevelUp.euro(LevelUp.getPricing().introPrice)}</strong> · your first session: 1 hour, 1:1 with ${esc(trainer.short)} · after that <strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong></p>`}`;
+      : `<p class="booking-price"><strong>${LevelUp.getPricing().introPrice > 0 ? LevelUp.euro(LevelUp.getPricing().introPrice) : "Free"}</strong> · your first session: 1 hour, 1:1 with ${esc(trainer.short)} · after that <strong>${LevelUp.euro(LevelUp.priceFor(trainerId))}</strong></p>`}`;
 
   // Your own booking: offer to cancel
   if (booking?.mine) {
@@ -622,7 +622,7 @@ function bookingOptions(trainerId) {
   const euro = LevelUp.euro;
   const soloText = {
     pack: `1 pack credit <small>${solo.credits} left</small>`,
-    intro: `${euro(solo.price)} <small>first session, normally ${euro(solo.normal)}</small>`,
+    intro: `${solo.price > 0 ? euro(solo.price) : "Free"} <small>first session, normally ${euro(solo.normal)}</small>`,
     standard: euro(solo.price)
   }[solo.type];
   const vouchers = LevelUp.availableVouchers();
@@ -642,7 +642,7 @@ function bookingOptions(trainerId) {
 
 // A free session voucher or a pack credit covers a 1:1 session; everything else is paid online (preferred) or at the HQ
 const usesReward = (kind) => kind === "solo" && Boolean(document.querySelector('#bookingForm [name="useReward"]')?.checked);
-const needsPayment = (trainerId, kind) => kind === "duo" || (!usesReward(kind) && LevelUp.quote(trainerId, "solo").type !== "pack");
+const needsPayment = (trainerId, kind) => kind === "duo" || (!usesReward(kind) && LevelUp.quote(trainerId, "solo").type !== "pack" && LevelUp.quote(trainerId, "solo").price > 0); // a free first session: nothing to pay
 
 function paymentOptions(trainerId) {
   const online = LevelUp.getPricing().onlinePayments;
@@ -744,6 +744,8 @@ function showBooked(booked) {
       ? "Paid with <strong>1 pack credit</strong>. A declined request gives it back."
       : booked?.priceType === "reward"
       ? "This is your <strong>free session</strong> 🎁. A declined request gives it back."
+      : booked?.priceType === "intro" && !(Number(booked.price) > 0)
+      ? "<strong>Your first session is free.</strong> <span>Nothing to pay.</span>"
       : `<span>Price:</span> <strong>${esc(LevelUp.priceLabel(booked || { price: LevelUp.priceFor(trainer.id) }))}</strong>. <span>${LevelUp.getPricing().onlinePayments ? `You pay on the spot (${esc(LevelUp.HQ_ADDRESS)}) or online from your profile.` : `You pay on the spot: ${esc(LevelUp.HQ_ADDRESS)}.`}</span>`} <span>Free cancellation up to ${LevelUp.FREE_CANCEL_HOURS} hours before.</span></p>
     <div class="booking-reward"><span class="xp-chip">+${LevelUp.SESSION_XP} XP</span><span>after the session, when ${esc(trainer.short)} rewards it</span></div>
     ${LevelUp.pushCalloutHtml(`Get a notification as soon as ${trainer.short} confirms.`)}
@@ -1064,6 +1066,25 @@ function renderTeamSpots() {
     el.classList.toggle("few", n > 0 && n <= 3);
     el.textContent = n === 0 ? "Fully booked this week" : n <= 3 ? `Only ${n} spot${n === 1 ? "" : "s"} left this week` : `${n} open hours this week`;
   });
+  sortTeam();
+}
+
+// Level 3: the cards sort themselves, so nobody has to look for who can take them. Active coaches first, the
+// highest level and XP in front; who is away for now goes to the back (before the "coach wanted" card).
+function sortTeam() {
+  const grid = document.querySelector("#team .team-grid");
+  if (!grid || !LevelUp.isReady()) return;
+  const recruit = [...grid.children].find((c) => c.classList.contains("team-card-recruit") && c.dataset.loopClone !== "1") || null;
+  const cards = [...grid.children].filter((c) => c.dataset.loopClone !== "1" && c.id.startsWith("team-") && LevelUp.trainerById(c.id.slice(5)));
+  const rank = (card) => {
+    const id = card.id.slice(5);
+    const s = LevelUp.trainerStats(id);
+    return [LevelUp.trainerAvailable(id) ? 1 : 0, s.level, s.into];
+  };
+  const sorted = cards.map((card, i) => ({ card, i, r: rank(card) }))
+    .sort((a, b) => b.r[0] - a.r[0] || b.r[1] - a.r[1] || b.r[2] - a.r[2] || a.i - b.i).map((x) => x.card);
+  if (sorted.every((card, i) => card === cards[i])) return; // already in order: leave the row (and its swipe) alone
+  sorted.forEach((card) => grid.insertBefore(card, recruit));
 }
 
 function renderTrainerStats() {
@@ -1276,7 +1297,7 @@ function renderPriceList() {
   const euro = LevelUp.euro;
   const best = [...p.packs].sort((a, b) => a.price / a.size - b.price / b.size)[0];
   el.innerHTML = [
-    { tag: "First session", price: euro(p.introPrice), note: "Try any trainer, 1:1", featured: true },
+    { tag: "First session", price: p.introPrice > 0 ? euro(p.introPrice) : "Free", note: "Try any trainer, 1:1", featured: true },
     { tag: "1:1 session", price: euro(p.price), note: "1 hour with your trainer" },
     { tag: "Duo session", price: euro(p.duoPrice), note: "Train with a friend, 1 hour" },
     best && { tag: `${best.size}-session pack`, price: euro(best.price), note: `${euro(best.price / best.size)} per session` }

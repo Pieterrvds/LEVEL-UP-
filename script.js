@@ -199,7 +199,7 @@ document.addEventListener("click", (event) => {
         <ul class="training-facts">
           ${x.group
             ? `${first ? `<li><b>${first.minutes} min</b><span>per class</span></li><li><b>${first.price > 0 ? euro(first.price) : "Free"}</b><span>per person</span></li><li><b>+${first.xp} XP</b><span>each time you're there</span></li>` : `<li><b>+50 XP</b><span>each time you're there</span></li>`}`
-            : `<li><b>60 min</b><span>1:1 with your coach</span></li>${price ? `<li><b>${euro(price)}</b><span>per session</span></li>` : ""}${pricing?.introPrice ? `<li><b>${euro(pricing.introPrice)}</b><span>your first session</span></li>` : ""}<li><b>+75 XP</b><span>per session</span></li>`}
+            : `<li><b>60 min</b><span>1:1 with your coach</span></li>${price ? `<li><b>${euro(price)}</b><span>per session</span></li>` : ""}${pricing ? `<li><b>${pricing.introPrice > 0 ? euro(pricing.introPrice) : "Free"}</b><span>your first session</span></li>` : ""}<li><b>+75 XP</b><span>per session</span></li>`}
         </ul>
         ${who.length ? `<div class="training-coaches">${who.map((t) => `
           <button type="button" class="training-coach" data-profile-trainer="${esc(t.id)}">
@@ -786,7 +786,7 @@ function renderFaq() {
     ["How do I book a session?",
       `Create your free profile, pick a trainer and a time in the <a href="#schedule" class="text-link">schedule</a> and send the request. Your trainer confirms it and you get a message. You can book up to ${LevelUp.BOOKING_WEEKS_AHEAD} weeks ahead and at least ${LevelUp.BOOKING_NOTICE_HOURS} hours before the start.`],
     ["What does it cost?",
-      `Your first session is ${euro(pr.introPrice)}. After that a 1:1 hour is ${euro(pr.price)}, and a duo session is ${euro(pr.duoPrice)} for the two of you.${packs ? ` With a session pack it's cheaper: ${packs}.` : ""}`],
+      `Your first session is ${pr.introPrice > 0 ? euro(pr.introPrice) : "free"}. After that a 1:1 hour is ${euro(pr.price)}, and a duo session is ${euro(pr.duoPrice)} for the two of you.${packs ? ` With a session pack it's cheaper: ${packs}.` : ""}`],
     ["I've never trained before. Is this for me?",
       "Yes. Sessions are one-on-one (or with one friend), so your trainer works at your level. Before your first session you fill in a short health check, so your trainer knows what to take into account."],
     ["How do group classes work?",

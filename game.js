@@ -581,7 +581,7 @@ const LevelUp = (() => {
   let coachEarnings = null;   // { earned, paid, owed, expected, sessions, fee, isOwner }
   // Public price list (the server's app_config decides; these are the fallbacks)
   let pricing = {
-    price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 30, duoPrice: 80,
+    price: SESSION_PRICE, fee: TRAINER_FEE, introPrice: 0, duoPrice: 80,
     packs: [{ size: 5, price: 240 }, { size: 10, price: 470 }], trainers: {}, onlinePayments: false,
     classPrice: 12, classXp: 50, classCapacity: 12, classCancelHours: 4, classTrainerFee: 35, tabLimit: 30, news: [],
     shipping: null, // { on, fee, freeFrom }: sending web shop orders (null = the database doesn't know it yet)
@@ -847,14 +847,20 @@ const LevelUp = (() => {
   // A kind of group training without a photo or text of its own gets one that fits its name
   const GROUP_LOOKS = [
     [/run|loop|jog/i, "img/socialrunclub.jpg", "Run together at a pace where you can still talk. Everyone is welcome, from your first kilometres to your next race. We start and finish together."],
-    [/ring|gymnast|turn/i, "img/pulluptraining.jpg", "Gymnastics on the rings in a small group: support, swings, pulls and step by step towards your first skills. Strength, control and shoulders that can take a lot.", "12%"],
-    [/calisthenic|pull|street/i, "img/calipersonal.jpg", ""],
-    [/hiit|interval|tabata/i, "img/HIIT.JPG", ""],
-    [/muay|box|kick/i, "img/muaythay.jpg", ""],
-    [/spin|cycl|fiets|bike/i, "img/highlights/cycling.jpg", ""],
-    [/hyrox|crossfit|wod|bootcamp|kettlebell/i, "img/jimsgroepstraining.jpg", ""]
+    [/ring|gymnast|turn/i, "img/trainings/rings.jpg", "Gymnastics on the rings in a small group: support, swings, pulls and step by step towards your first skills. Strength, control and shoulders that can take a lot."],
+    [/calisthenic|pull|street/i, "img/trainings/calisthenics.jpg", ""],
+    [/hiit|interval|tabata/i, "img/trainings/hiit.jpg", ""],
+    [/muay|box|boks|kick/i, "img/muaythay.jpg", ""],
+    [/spin/i, "img/trainings/spinning.jpg", ""],
+    [/cycl|fiets|bike|wielren/i, "img/trainings/cycling.jpg", ""],
+    [/triat|swim|zwem/i, "img/trainings/triathlon.jpg", ""],
+    [/hyrox|sled/i, "img/trainings/hyrox.jpg", ""],
+    [/crossfit|wod|kettlebell|kracht|strength/i, "img/trainings/crossfit.jpg", ""],
+    [/mobil|stretch|lenig/i, "img/trainings/mobility.jpg", ""],
+    [/yoga|pilates/i, "img/trainings/yoga.jpg", ""],
+    [/bootcamp|circuit/i, "img/trainings/group.jpg", ""]
   ];
-  const GROUP_DEFAULT = ["img/grouptrainingsessie.jpg", "Train together in a small group with a coach: the same quality as a personal training, with the energy of the group."];
+  const GROUP_DEFAULT = ["img/trainings/group.jpg", "Train together in a small group with a coach: the same quality as a personal training, with the energy of the group."];
   let classKinds = [];
   // The photo for a group class by its name: the admin's own photo for that kind, else one that fits the name
   const classPhoto = (title) => {
@@ -890,22 +896,22 @@ const LevelUp = (() => {
   // The personal trainings that always have a card under "Choose your training": 1:1 with a coach.
   // stats = strength, endurance, technique (out of 5). The admin can give each its own photo and text, or hide it.
   const PERSONAL_TRAININGS = [
-    { id: "crossfit", title: "CrossFit", badge: "All-round", img: "img/jimsgroepstraining.jpg", stats: [4, 4, 3], trainer: "pieter",
+    { id: "crossfit", title: "CrossFit", badge: "All-round", img: "img/trainings/crossfit.jpg", stats: [4, 4, 3], trainer: "pieter",
       about: "Strength, conditioning and skills in one session: barbells, kettlebells, gymnastics and short, hard workouts. Every exercise is scaled to your level.",
       points: ["Get fit all-round: stronger, fitter and more agile", "Learn the lifts with good technique", "Every session is different"] },
-    { id: "calisthenics", title: "Calisthenics", badge: "Skill", img: "img/calipersonal.jpg", stats: [4, 2, 5], trainer: "pieter",
+    { id: "calisthenics", title: "Calisthenics", badge: "Skill", img: "img/trainings/calisthenics.jpg", stats: [4, 2, 5], trainer: "pieter",
       about: "Training with your own body weight: pull-ups, dips, handstands and step by step towards skills like the muscle-up or the front lever.",
       points: ["Build strength and body control", "Clear steps towards your first skill", "Little equipment needed, so you can keep practising at home"] },
-    { id: "hiit", title: "HIIT", badge: "Intervals", img: "img/HIIT.JPG", stats: [2, 5, 2], trainer: "pieter",
+    { id: "hiit", title: "HIIT", badge: "Intervals", img: "img/trainings/hiit.jpg", stats: [2, 5, 2], trainer: "pieter",
       about: "Short bursts of hard work with short breaks in between. A lot of result in little time, at a pace that fits you.",
       points: ["Better condition and fat burning", "Done in under an hour", "No experience needed"] },
     { id: "muaythai", title: "Muay Thai", badge: "Combat", img: "img/muaythay.jpg", stats: [3, 4, 5], trainer: "pieter",
       about: "Thai boxing on the pads: punches, kicks, knees and elbows. Technique first, then combinations and conditioning rounds.",
       points: ["Learn to punch and kick the right way", "A full-body workout that clears your head", "No sparring needed"] },
-    { id: "triathlon", title: "Triathlon", badge: "Endurance", img: "img/filipironmancoach.jpg", pos: "20%", stats: [2, 5, 3], trainer: "filip",
+    { id: "triathlon", title: "Triathlon", badge: "Endurance", img: "img/trainings/triathlon.jpg", stats: [2, 5, 3], trainer: "filip",
       about: "Swimming, cycling and running with an Ironman finisher: technique, a plan that builds up and the strength work that keeps you injury-free.",
       points: ["From your first quarter to the full distance", "A training plan around your week", "Tips on gear, food and race day"] },
-    { id: "cycling", title: "Cycling", badge: "Endurance", img: "img/teammembermaximtrui.jpg", pos: "30%", stats: [3, 5, 2], trainer: "maxim",
+    { id: "cycling", title: "Cycling", badge: "Endurance", img: "img/trainings/cycling.jpg", stats: [3, 5, 2], trainer: "maxim",
       about: "Faster and longer on the bike: intervals, climbing, position on the bike and the strength training cyclists often skip.",
       points: ["More power in the legs", "Structure in your rides", "For road, gravel and your first sportive"] }
   ];
@@ -1093,7 +1099,7 @@ const LevelUp = (() => {
   function priceLabel(b) {
     if (b.priceType === "reward") return "free session 🎁";
     if (b.priceType === "pack") return "pack credit";
-    if (b.priceType === "intro") return `${euro(b.price)} first session`;
+    if (b.priceType === "intro") return Number(b.price) > 0 ? `${euro(b.price)} first session` : "free first session";
     if (b.kind === "duo") return `${euro(b.price)} duo${b.partner ? ` with ${b.partner}` : ""}`;
     return euro(b.price ?? SESSION_PRICE);
   }
@@ -1481,8 +1487,9 @@ const LevelUp = (() => {
   function hourPlace(trainerId, key, hour) {
     if (!openingHours) return defaultPlace();
     const weekday = parseDate(key).getDay();
-    const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && r.location && hour >= r.start && hour < r.end;
-    return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && r.weekday === weekday))?.location || defaultPlace();
+    // the hours this hour falls in (hours on that date win over the weekly ones, as on the server), then their place
+    const hit = (r) => r.trainerId === trainerId && r.kind === "open" && !r.pending && hour >= r.start && hour < r.end;
+    return (openingHours.find((r) => hit(r) && r.date === key) || openingHours.find((r) => hit(r) && !r.date && r.weekday === weekday))?.location || defaultPlace();
   }
   const shortPlace = (place) => String(place || "").split(",")[0].trim(); // "Grote zaal, Hoogstraat 40 …" -> "Grote zaal"
 
@@ -1546,7 +1553,9 @@ const LevelUp = (() => {
     if (!slots.has(k)) {
       // the gym room has no place left that hour (a group class or a rental takes it whole, or all places are
       // in use): taken for every trainer. room: true tells it apart from the trainer's own bookings.
-      return slots.has(`*|${key}|${hour}`) ? { id: null, status: "room", mine: false, room: true } : null;
+      // Only an hour in the big room itself: a trainer who gives that hour at another place is not held back by it.
+      return slots.has(`*|${key}|${hour}`) && hourPlace(trainerId, key, hour).toLowerCase() === defaultPlace().toLowerCase()
+        ? { id: null, status: "room", mine: false, room: true } : null;
     }
     const { id, status } = slots.get(k);
     return { id, status, mine: Boolean(id) };
@@ -1946,6 +1955,7 @@ const LevelUp = (() => {
   function payLabel(b) {
     if (b.payMethod === "pack") return "";
     if (b.payMethod === "reward") return "";
+    if (b.payStatus === "n/a") return ""; // nothing to pay: a free first session
     if (b.refundStatus === "manual") return "Refund at the HQ";
     if (b.refundStatus === "due" || b.refundStatus === "processing") return "Refund on its way";
     if (b.payStatus === "refunded") return "Refunded";
@@ -2588,7 +2598,7 @@ const LevelUp = (() => {
   const BOOT_TIPS = [
     "Every 20 sessions = a free 1:1 session 🎁",
     "Cancel for free up to 24 hours before your session",
-    "Your first session is only €30",
+    "Your first session is free",
     "Train with a friend: a duo session is €80 for the two of you",
     "Reach Champion and Legend for a free session",
     "Turn on notifications: hear it when your trainer confirms",

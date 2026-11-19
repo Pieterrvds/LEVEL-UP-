@@ -508,3 +508,4 @@ details.application-panel[open] summary { margin-bottom: 16px; }
 .gc-co small { flex-basis: 100%; }
 .gc-from-hours { margin: 0; padding: 8px 12px; font-size: 0.9rem; background: color-mix(in srgb, var(--gold) 12%, transparent); border: 1px solid var(--gold); border-radius: 10px; }
 .gc-co label[hidden] { display: none; }
+.gc-room[hidden] { display: none; }
