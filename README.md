@@ -503,6 +503,19 @@ chat page of `index.html` on a phone, see "Phones").
   A coach can only chat once their card is linked to an account (trainer application approved with "link to an
   existing card", or `trainers.email` set); until then the button says they aren't on the chat yet.
 - **Coaches** see the conversations their clients started; admins can't read other people's chats.
+- **Archive and delete (your own list):** the **⋯** button in the header of an open conversation (`menuHtml` in
+  `chat.js`) has **Archive** and, for a private conversation, **Delete chat**. Both only change the list of the person
+  who taps; the state is kept per person in `chat_reads` (`archived`, `hidden`, `cleared_id`).
+  - *Archive* (`chat_archive`): the chat moves behind the line "Archived n" at the bottom of the list ("Back to my
+    chats" in the same menu takes it back). A private chat comes back by itself with the next message, so no client
+    is missed. A group chat stays away, and gives no notifications and no unread count on the chat icon, until you
+    take it back or write in it yourself.
+  - *Delete chat* (`chat_delete`, private conversations only): it leaves your list and its messages are gone for you
+    (`cleared_id`); the other person keeps theirs. Starting a chat with that person again (the coach under "Start a
+    chat", or the search box) opens the same conversation, empty. If the other person writes, it comes back with
+    only the new messages. Messages that both sides deleted are really removed from the database.
+  - The trigger `chat_message_wakes` on `chat_messages` does the waking, so it also holds for the welcome messages.
+  - A group chat can't be deleted for yourself; only the admin's 🗑 deletes a group chat for everyone.
 - **Search a member:** the search box at the top of the chat finds players and trainers by name (2+ letters; name,
   photo and role only, never emails). A trainer opens the usual coach chat; a trainer who looks up a player opens
   (or starts) the coach chat with them; two members get a private chat of their own (`member_id`), never a second one.

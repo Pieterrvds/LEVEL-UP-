@@ -22,6 +22,7 @@ const state = {
   error: "",
   listTimer: null,
   threadTimer: null,
+  showArchived: false, // the list of conversations you put away is open
   search: "",         // the member search box
   results: null,      // chat_search rows (null = searching)
   searchSeq: 0
@@ -130,7 +131,7 @@ function renderList() {
   if (!box) return;
   if (state.threads === null) { box.innerHTML = `<p class="chat-empty muted">Loading…</p>`; return; }
   if (state.search.trim().length >= 2) { box.innerHTML = searchHtml(); return; }
-  const rows = state.threads.map((t) => `
+  const rowHtml = (t) => `
     <a href="?t=${esc(t.id)}" class="chat-row ${state.active?.id === t.id ? "active" : ""} ${t.unread ? "unread" : ""}" data-thread="${esc(t.id)}">
       ${peerAvatar(t)}
       <span class="chat-row-main">
@@ -140,8 +141,30 @@ function renderList() {
           : `<em>${esc(peerRole(t))}</em>`}</span>
       </span>
       ${t.unread ? `<span class="chat-row-badge">${t.unread > 9 ? "9+" : t.unread}</span>` : ""}
-    </a>`).join("");
-  box.innerHTML = LevelUp.pushCalloutHtml("Get a notification on this phone when a message comes in.") + botRowHtml() + rows + startHtml();
+    </a>`;
+  const rows = state.threads.filter((t) => !t.archived).map(rowHtml).join("");
+  // what you put away: one line at the bottom that opens the list (open by itself while you are in one of them)
+  const away = state.threads.filter((t) => t.archived);
+  const open = state.showArchived || away.some((t) => t.id === state.active?.id);
+  const archive = !away.length ? "" : `
+    <div class="chat-archive">
+      <button type="button" class="chat-archive-toggle" data-chat-archived aria-expanded="${open}"><span aria-hidden="true">🗄</span> <span>Archived</span> <b>${away.length}</b><i aria-hidden="true">${open ? "▾" : "▸"}</i></button>
+      ${open ? away.map(rowHtml).join("") : ""}
+    </div>`;
+  box.innerHTML = LevelUp.pushCalloutHtml("Get a notification on this phone when a message comes in.") + botRowHtml() + rows + startHtml() + archive;
+}
+
+// The "more" menu of an open conversation: put it away (or back) and, for a private one, delete it for yourself
+function menuHtml(t) {
+  return `
+    <button type="button" role="menuitem" data-chat-archive><span aria-hidden="true">${t.archived ? "↩" : "🗄"}</span> <span>${t.archived ? "Back to my chats" : "Archive"}</span></button>
+    ${t.group ? "" : `<button type="button" role="menuitem" class="danger" data-chat-remove><span aria-hidden="true">🗑</span> <span>Delete chat</span></button>`}`;
+}
+function closeMenu() {
+  const menu = root.querySelector(".chat-menu");
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  root.querySelector("[data-chat-menu]")?.setAttribute("aria-expanded", "false");
 }
 
 // Members found by name: tap one to open (or start) the conversation
@@ -238,6 +261,10 @@ function renderThread() {
         ${t.group ? `<button type="button" class="chat-tool ${t.muted ? "off" : ""}" data-chat-mute title="${t.muted ? "Notifications are off for this group. Tap to turn them on." : "Turn off notifications for this group"}" aria-pressed="${Boolean(t.muted)}" aria-label="${t.muted ? "Turn on notifications for this group" : "Turn off notifications for this group"}">${t.muted ? "🔕" : "🔔"}</button>
         ${t.canDelete ? `<button type="button" class="chat-tool" data-chat-delete title="Delete this group chat" aria-label="Delete this group chat">🗑</button>` : ""}
         <a href="index.html#schedule" class="btn btn-small btn-ghost chat-book">Classes</a>` : ""}
+        <span class="chat-more">
+          <button type="button" class="chat-tool" data-chat-menu aria-haspopup="menu" aria-expanded="false" title="More" aria-label="More">⋯</button>
+          <span class="chat-menu" role="menu" hidden>${menuHtml(t)}</span>
+        </span>
       </header>
       <div class="chat-messages" id="chatMessages" data-no-i18n></div>
       <form class="chat-compose" id="chatCompose">
@@ -700,6 +727,52 @@ root.addEventListener("click", async (event) => {
     }
     return;
   }
+  // The list of what you put away opens and closes
+  if (event.target.closest("[data-chat-archived]")) {
+    const away = (state.threads || []).some((t) => t.archived && t.id === state.active?.id);
+    state.showArchived = away ? true : !state.showArchived; // it stays open while you are in one of them
+    renderList();
+    return;
+  }
+  // The "more" menu of the open conversation
+  const more = event.target.closest("[data-chat-menu]");
+  if (more) {
+    const menu = root.querySelector(".chat-menu");
+    menu.hidden = !menu.hidden;
+    more.setAttribute("aria-expanded", String(!menu.hidden));
+    return;
+  }
+  if (event.target.closest("[data-chat-archive]") && state.active) {
+    const t = state.active, on = !t.archived;
+    closeMenu();
+    try {
+      await LevelUp.chatArchive(t.id, on);
+      t.archived = on;
+      const row = state.threads?.find((r) => r.id === t.id);
+      if (row) row.archived = on;
+      LevelUp.toast(on
+        ? { title: "Archived", text: t.group ? "It stays quiet until you take it back." : "It comes back when there is a new message.", icon: "🗄", tone: "green" }
+        : { title: "Back in your chats", text: "", icon: "↩", tone: "green" });
+      if (on) { state.showArchived = false; closeThread(); } // away: back to the list
+      else { root.querySelector(".chat-menu").innerHTML = menuHtml(t); loadList(); }
+      LevelUp.refreshChatUnread();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  if (event.target.closest("[data-chat-remove]") && state.active) {
+    const t = state.active;
+    closeMenu();
+    if (!confirm(LevelUp_t("Delete this chat? The messages are gone for you; the other person keeps theirs. A new chat with this person starts empty."))) return;
+    try {
+      await LevelUp.chatDelete(t.id);
+      state.threads = (state.threads || []).filter((r) => r.id !== t.id);
+      LevelUp.toast({ title: "Chat deleted", text: "", icon: "🗑", tone: "green" });
+      closeThread();
+      LevelUp.refreshChatUnread();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  if (!event.target.closest(".chat-more")) closeMenu(); // a tap anywhere else closes the menu
   // Group chat: only an admin can delete it (with all its messages)
   const del = event.target.closest("[data-chat-delete]");
   if (del && state.active) {
@@ -720,6 +793,7 @@ root.addEventListener("input", (event) => {
 });
 root.addEventListener("keydown", (event) => {
   if (event.target.id === "chatSearch" && event.key === "Escape") clearSearch();
+  if (event.key === "Escape") closeMenu();
 });
 
 // Open what the address asks for (a notification, the Chat button of a coach, the back button of the phone)

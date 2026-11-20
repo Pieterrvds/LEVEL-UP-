@@ -4805,6 +4805,13 @@ create table if not exists public.chat_reads (
   primary key (thread_id, user_id)
 );
 alter table public.chat_reads add column if not exists muted boolean not null default false;  -- no notifications for this group
+-- What one person did with a conversation in their own list (the other side keeps theirs):
+-- archived = put away (a private chat comes back with the next message; a group chat stays away, and quiet, until
+-- you take it back); hidden + cleared_id = deleted for you: out of your list, and messages up to cleared_id are gone
+-- for you. Opening a chat with that person again shows the same conversation, empty.
+alter table public.chat_reads add column if not exists archived boolean not null default false;
+alter table public.chat_reads add column if not exists hidden boolean not null default false;
+alter table public.chat_reads add column if not exists cleared_id bigint not null default 0;
 -- A heart on a chat message (from someone else in that conversation). It only counts: no notification, no celebration.
 create table if not exists public.chat_message_likes (
   message_id bigint not null references public.chat_messages (id) on delete cascade,
@@ -4948,6 +4955,7 @@ begin
   select coalesce(jsonb_agg(row order by (row ->> 'lastAt') desc), '[]'::jsonb) into out from (
     select public._chat_peer(th, s.side) || jsonb_build_object(
       'id', th.id, 'side', s.side, 'direct', th.member_id is not null, 'lastAt', th.last_at,
+      'archived', coalesce(st.archived, false),
       'lastBody', case when s.side = 'group' and m.body is not null and m.sender_id is distinct from auth.uid()
                        then coalesce(split_part(m.sender_name, ' ', 1) || ': ', '') || m.body else m.body end,
       'lastMine', case when s.side = 'group' then m.sender_id = auth.uid() else m.from_trainer = (s.side = 'trainer') end,
@@ -4963,10 +4971,12 @@ begin
     from public.chat_threads th
     cross join lateral (select case when th.group_key is not null then 'group'
                                     when th.client_id = auth.uid() then 'client' else 'trainer' end as side) s
+    left join public.chat_reads st on st.thread_id = th.id and st.user_id = auth.uid()
     left join lateral (select x.body, x.from_trainer, x.sender_id, p.name as sender_name from public.chat_messages x
                        left join public.profiles p on p.id = x.sender_id
-                       where x.thread_id = th.id order by x.id desc limit 1) m on true
-    where (th.client_id = auth.uid() or th.member_id = auth.uid()
+                       where x.thread_id = th.id and x.id > coalesce(st.cleared_id, 0) order by x.id desc limit 1) m on true
+    where not coalesce(st.hidden, false)   -- you deleted it: gone from your list until there is a new message
+      and (th.client_id = auth.uid() or th.member_id = auth.uid()
            or (me_trainer is not null and th.member_id is null and th.group_key is null and th.trainer_id = me_trainer)
            or (th.group_key is not null and public._group_chat_member(th.group_key)))
       and (s.side in ('client', 'group') or m.body is not null)   -- the other side only sees it once there is a message
@@ -4987,6 +4997,7 @@ begin
   insert into public.chat_threads (client_id, trainer_id) values (auth.uid(), p_trainer)
   on conflict (client_id, trainer_id) do nothing;
   select id into tid from public.chat_threads where client_id = auth.uid() and trainer_id = p_trainer;
+  update public.chat_reads set hidden = false where thread_id = tid and user_id = auth.uid() and hidden; -- deleted before: back, empty
   return tid;
 end $$;
 
@@ -5034,6 +5045,7 @@ begin
     insert into public.chat_threads (client_id, trainer_id) values (p_user, me_trainer)
     on conflict (client_id, trainer_id) do nothing;
     select id into tid from public.chat_threads where client_id = p_user and trainer_id = me_trainer;
+    update public.chat_reads set hidden = false where thread_id = tid and user_id = me and hidden;
     return tid;
   end if;
   select id into tid from public.chat_threads
@@ -5046,6 +5058,7 @@ begin
       where member_id is not null and least(client_id, member_id) = least(me, p_user) and greatest(client_id, member_id) = greatest(me, p_user);
     end if;
   end if;
+  update public.chat_reads set hidden = false where thread_id = tid and user_id = me and hidden;
   return tid;
 end $$;
 
@@ -5057,10 +5070,12 @@ declare
   side text;
   msgs jsonb;
   top bigint;
+  st public.chat_reads;
 begin
   select * into th from public.chat_threads where id = p_thread;
   side := case when found then public._chat_side(th) end;
   if side is null then raise exception 'Conversation not found.'; end if;
+  select * into st from public.chat_reads where thread_id = th.id and user_id = auth.uid(); -- what you deleted stays gone
   select coalesce(jsonb_agg(jsonb_build_object('id', x.id,
                                                'mine', case when side = 'group' then x.sender_id = auth.uid() else x.from_trainer = (side = 'trainer') end,
                                                'name', case when side = 'group' then coalesce(
@@ -5074,7 +5089,7 @@ begin
                                                'body', x.body, 'at', x.created_at) order by x.id), '[]'::jsonb),
          max(x.id)
     into msgs, top
-  from (select * from public.chat_messages where thread_id = th.id and id > coalesce(p_after, 0)
+  from (select * from public.chat_messages where thread_id = th.id and id > greatest(coalesce(p_after, 0), coalesce(st.cleared_id, 0))
         order by id desc limit 200) x;
   if top is not null then
     if side = 'group' then
@@ -5085,6 +5100,7 @@ begin
   end if;
   return public._chat_peer(th, side) || jsonb_build_object(
     'id', th.id, 'side', side, 'direct', th.member_id is not null, 'messages', msgs,
+    'archived', coalesce(st.archived, false),
     -- every message in this conversation that has hearts, so an open chat keeps its counts up to date
     'hearts', coalesce((select jsonb_agg(jsonb_build_object('id', h.message_id, 'n', h.n, 'mine', h.mine))
                         from (select l.message_id, count(*) as n, bool_or(l.user_id = auth.uid()) as mine
@@ -5147,7 +5163,7 @@ begin
                          'chat.html?t=' || th.id, 'chat-' || th.id)
     from public._group_chat_users(th.group_key) u(id)
     where u.id is not null and u.id <> auth.uid()
-      and not exists (select 1 from public.chat_reads r where r.thread_id = th.id and r.user_id = u.id and r.muted);
+      and not exists (select 1 from public.chat_reads r where r.thread_id = th.id and r.user_id = u.id and (r.muted or r.archived));
     return jsonb_build_object('id', new_id, 'mine', true, 'body', msg, 'at', at);
   end if;
   insert into public.chat_messages (thread_id, sender_id, from_trainer, body)
@@ -5187,6 +5203,63 @@ begin
   if not found then raise exception 'Conversation not found.'; end if;
 end $$;
 
+-- Put one of your conversations away (or take it back). Only your own list changes.
+create or replace function public.chat_archive(p_thread uuid, p_on boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare th public.chat_threads;
+begin
+  select * into th from public.chat_threads where id = p_thread;
+  if not found or public._chat_side(th) is null then raise exception 'Conversation not found.'; end if;
+  insert into public.chat_reads (thread_id, user_id, archived) values (th.id, auth.uid(), coalesce(p_on, true))
+  on conflict (thread_id, user_id) do update set archived = excluded.archived;
+end $$;
+
+-- Delete a private conversation for yourself: it leaves your list and its messages are gone for you. The other
+-- person keeps theirs. A new chat with that person starts empty. Messages both sides deleted are really removed.
+create or replace function public.chat_delete(p_thread uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  th public.chat_threads;
+  side text;
+  top bigint;
+  other uuid;
+begin
+  select * into th from public.chat_threads where id = p_thread;
+  side := case when found then public._chat_side(th) end;
+  if side is null then raise exception 'Conversation not found.'; end if;
+  if side = 'group' then raise exception 'A group chat can''t be deleted for yourself: archive it.'; end if;
+  select coalesce(max(id), 0) into top from public.chat_messages where thread_id = th.id;
+  insert into public.chat_reads (thread_id, user_id, hidden, archived, cleared_id) values (th.id, auth.uid(), true, false, top)
+  on conflict (thread_id, user_id) do update set hidden = true, archived = false, cleared_id = greatest(public.chat_reads.cleared_id, excluded.cleared_id);
+  if side = 'client' then update public.chat_threads set client_read_id = greatest(client_read_id, top) where id = th.id;
+  else update public.chat_threads set trainer_read_id = greatest(trainer_read_id, top) where id = th.id; end if;
+  other := case when side = 'client' then coalesce(th.member_id, public._trainer_user(th.trainer_id)) else th.client_id end;
+  delete from public.chat_messages m
+  where m.thread_id = th.id
+    and m.id <= least(top, coalesce((select r.cleared_id from public.chat_reads r where r.thread_id = th.id and r.user_id = other), 0));
+end $$;
+
+-- A new message wakes the conversation: a private chat that was deleted or archived is back in both lists;
+-- in a group chat only the writer's own archive ends (the others keep it away until they take it back).
+create or replace function public._chat_message_wakes()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from public.chat_threads t where t.id = new.thread_id and t.group_key is null) then
+    update public.chat_reads set hidden = false, archived = false where thread_id = new.thread_id and (hidden or archived);
+  else
+    update public.chat_reads set archived = false where thread_id = new.thread_id and user_id = new.sender_id and archived;
+  end if;
+  return new;
+end $$;
+drop trigger if exists chat_message_wakes on public.chat_messages;
+create trigger chat_message_wakes after insert on public.chat_messages
+for each row execute function public._chat_message_wakes();
+revoke execute on function public._chat_message_wakes() from public, anon, authenticated;
+revoke execute on function public.chat_archive(uuid, boolean) from public, anon;
+revoke execute on function public.chat_delete(uuid) from public, anon;
+grant execute on function public.chat_archive(uuid, boolean) to authenticated;
+grant execute on function public.chat_delete(uuid) to authenticated;
+
 -- For the chat icon: unread messages in total and the newest one (to pop up a notice on the page)
 create or replace function public.chat_unread()
 returns jsonb language plpgsql stable security definer set search_path = public as $$
@@ -5217,7 +5290,7 @@ begin
     join public.chat_messages m on m.thread_id = t.id
     left join public.profiles p on p.id = m.sender_id
     where t.group_key is not null and public._group_chat_member(t.group_key)
-      and not exists (select 1 from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid() and r.muted)
+      and not exists (select 1 from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid() and (r.muted or r.archived))
       and m.sender_id is distinct from auth.uid()
       and m.id > coalesce((select r.read_id from public.chat_reads r where r.thread_id = t.id and r.user_id = auth.uid()), 0)
   )

@@ -220,3 +220,21 @@ button.chat-heart:hover > span, button.chat-heart:focus-visible > span { opacity
 .chat-bot-note { margin: 0; padding: 6px 14px 0; font-size: 0.72rem; line-height: 1.4; text-align: center; color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); }
 .chat-bot-note + .chat-compose { border-top: 0; padding-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .chat-msg.typing i { animation: none; } }
+
+/* An open conversation: the "more" menu (archive, delete for yourself) */
+.chat-more { position: relative; flex: none; display: block; }
+.chat-menu { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; min-width: 210px; display: grid; padding: 6px;
+  background: var(--panel-2); border: 1px solid var(--frame); border-radius: 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); }
+.chat-menu[hidden] { display: none; }
+.chat-menu button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; font: inherit; font-weight: 600; text-align: left;
+  color: var(--text); background: none; border: 0; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.chat-menu button:hover, .chat-menu button:focus-visible { background: var(--panel); }
+.chat-menu button.danger { color: var(--red); }
+/* The list: what you put away, behind one line at the bottom */
+.chat-archive { margin-top: 8px; border-top: 1px solid var(--line); }
+.chat-archive-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 8px 14px; font: inherit; font-weight: 600;
+  color: var(--muted); background: none; border: 0; cursor: pointer; text-align: left; }
+.chat-archive-toggle:hover { color: var(--text); }
+.chat-archive-toggle b { min-width: 22px; padding: 1px 6px; font-size: 0.78rem; text-align: center; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; }
+.chat-archive-toggle i { margin-left: auto; font-style: normal; }
+.chat-archive .chat-row { opacity: 0.85; }

@@ -2880,6 +2880,15 @@ const LevelUp = (() => {
   const chatMute = (id, on) => call("chat_mute", { p_thread: id, p_on: Boolean(on) });
   const chatLike = (messageId) => call("chat_like", { p_message: Number(messageId) });
   const chatGroupDelete = (id) => call("chat_group_delete", { p_thread: id });
+  // Your own list: put a conversation away (or back), or delete a private one for yourself
+  const chatOwn = async (fn, args) => {
+    try { await call(fn, args); } catch (err) {
+      if (OLD_DB.test(err.message || "")) throw new Error("Archiving and deleting chats needs the latest supabase/schema.sql.");
+      throw err;
+    }
+  };
+  const chatArchive = (id, on) => chatOwn("chat_archive", { p_thread: id, p_on: Boolean(on) });
+  const chatDelete = (id) => chatOwn("chat_delete", { p_thread: id });
   const chatOpen = (trainerId) => call("chat_open", { p_trainer: trainerId });
   const chatSearch = (query) => call("chat_search", { p_query: query });
   const chatOpenUser = (userId) => call("chat_open_user", { p_user: userId });
@@ -4647,7 +4656,7 @@ const LevelUp = (() => {
     HEALTH_QUESTIONS, healthValid, healthYes, healthFormHtml, saveHealthForm, healthFlagHtml,
     startPayment, canPayOnline, payLabel, markPaidInPerson, payInPersonInstead, markRefunded, HQ_ADDRESS, FREE_CANCEL_HOURS, REWARD_WINDOW_DAYS, isLateCancel, markNoShow, canSettle, hasStarted, euro, getCoachEarnings: () => coachEarnings, markPayout, coachStatement,
     applyAsTrainer, reviewApplication, loadTrainerList,
-    chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
+    chatList, chatThread, chatSend, chatMute, chatLike, chatGroupDelete, chatArchive, chatDelete, adminShopSale, adminAnnounce, adminDeleteNews, setPushNews, getNews: () => pricing.news, openNews, chatOpen, chatSearch, chatOpenUser, refreshChatUnread, openChatWith, CHAT_ICON, getChatUnread: () => chatUnread,
     setChatActive: (id) => { chatActiveThread = id; },
     openAuth, toast, loadAssistant, hasAssistant, askAssistant, clearAssistant, assistantGo, mascotFace, adminAssistant, adminAssistantSave, adminAssistantGapDone, adminMascot, adminMascotSet, adminMascotPost, adminMascotClear, ASSISTANT_ID, getAssistant: () => assistant,
     setView, goView, gotoChat, getView: () => view, viewSliding: () => Boolean(slide),
