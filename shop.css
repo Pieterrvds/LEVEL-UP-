@@ -458,7 +458,7 @@ body.no-scroll { overflow: hidden; }
 .shop-search input::-webkit-search-cancel-button { filter: invert(1); }
 .shop-sort { margin: 0; }
 .shop-sort select { height: 46px; padding: 0 34px 0 12px; font: 500 0.92rem var(--sans); text-transform: none; color: var(--text); background-color: var(--inset); border: 1px solid var(--line); border-radius: 10px; }
-.filter-tabs { overflow-x: auto; scrollbar-width: none; border-radius: 10px; }
+.filter-tabs { overflow-x: auto; overflow-y: hidden; overscroll-behavior-y: none; scrollbar-width: none; border-radius: 10px; }
 .filter-tabs::-webkit-scrollbar { display: none; }
 .filter-tabs button { flex: none; white-space: nowrap; }
 .shop-count { margin: 12px 0 18px; font-size: 0.85rem; min-height: 1.3em; }
