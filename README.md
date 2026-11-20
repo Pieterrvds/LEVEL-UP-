@@ -227,6 +227,14 @@ The cards under "Meet the team" are ordered by `sortTeam` in `schedule.js`, ever
 are **active** first, the **highest level and XP** in front, who is **away** at the back (just before the "coach
 wanted" card). Nobody has to look for who can take them. The swipe row on a phone copies the new order.
 
+### Level 2 and booking: what can be booked now comes first
+The same idea as the coach cards, without the level. In "Choose your training" (`script.js`, `activeFirst`) the cards
+of which at least one coach is active come first; a training of which every coach is away goes to the back (the usual
+order stays within each part). On a card the active coaches stand first in "Coached by", and the trainer filter above
+the cards lists active trainers first. Above the booking schedule (`byActive` in `schedule.js`) the filter is "All",
+then the active trainers, then who is away; the board and the phone list use the same order. An away trainer has no
+hours on the board, so when one trainer is active the schedule shows his hours and nobody else's.
+
 ### Kinds of training, and the admin's approval of a new one
 A coach doesn't only say *when*, but also *what* he gives:
 - **1:1 hours carry what is given** (`trainer_hours.activity`): the form asks "What do you give?" with every

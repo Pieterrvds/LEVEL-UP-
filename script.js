@@ -79,6 +79,10 @@ document.addEventListener("click", (event) => {
   // a coach's face with his light: green = takes bookings, grey = away for now
   const faces = (ids) => ids.map((id) => coach(id)).filter(Boolean).map((t) => `<span class="coach-face ${LevelUp.trainerAvailable(t.id) ? "" : "away"}"><img data-coach="${esc(t.id)}" src="${esc(t.img)}" alt="" loading="lazy">${LevelUp.coachLight(t.id)}</span>`).join("");
   const ready = (ids) => ids.filter((id) => LevelUp.trainerAvailable(id)); // the coaches of a card who take bookings now
+  // Who takes bookings now comes first (the order stays as it was otherwise): the coaches on a card, the trainers
+  // in the filter, and the cards themselves: a training of which every coach is away goes to the back
+  const activeFirst = (list, on) => list.map((x, i) => [x, i]).sort((a, b) => Number(on(b[0])) - Number(on(a[0])) || a[1] - b[1]).map((x) => x[0]);
+  const bookable = (x) => !x.trainers.length || ready(x.trainers).length > 0;
   const when = (c) => `${c.day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${c.time}`;
 
   // Everything that can be on a card: the group trainings first
@@ -113,7 +117,8 @@ document.addEventListener("click", (event) => {
     && (state.trainer === "all" || x.trainers.includes(state.trainer)));
 
   function card(x) {
-    const who = names(x.trainers);
+    const coaches = activeFirst(x.trainers, (id) => LevelUp.trainerAvailable(id));
+    const who = names(coaches);
     const next = x.sessions?.[0];
     return `
       <article class="class-card ${x.group ? "class-card-kind" : ""}" data-training="${esc(x.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(x.title)}: ${esc(tr("more info"))}">
@@ -125,7 +130,7 @@ document.addEventListener("click", (event) => {
               : `<span>New dates coming soon</span>`}</p>`
             : x.stats ? `<ul class="class-stats">${["STR", "END", "TEC"].map((label, i) => `<li><span>${label}</span><i class="pips" style="--v:${x.stats[i]}" aria-label="${x.stats[i]} of 5"></i></li>`).join("")}</ul>`
             : `<p class="class-next"><span>Personal training · 1:1</span></p>`}
-          ${who.length ? `<div class="class-coach"><span class="coach-faces">${faces(x.trainers)}</span><span>Coached by <strong data-no-i18n>${esc(who.join(", ").replace(/, ([^,]*)$/, " & $1"))}</strong></span></div>` : ""}
+          ${who.length ? `<div class="class-coach"><span class="coach-faces">${faces(coaches)}</span><span>Coached by <strong data-no-i18n>${esc(who.join(", ").replace(/, ([^,]*)$/, " & $1"))}</strong></span></div>` : ""}
           <div class="class-actions">
             ${x.group
               ? `<button type="button" class="btn btn-small btn-primary" data-training-open="${esc(x.id)}">${next ? "Sign up ▶" : "More info ▶"}</button>`
@@ -138,7 +143,7 @@ document.addEventListener("click", (event) => {
   }
 
   function renderFilters(list) {
-    const withTraining = LevelUp.TRAINERS.filter((t) => list.some((x) => x.trainers.includes(t.id)));
+    const withTraining = activeFirst(LevelUp.TRAINERS.filter((t) => list.some((x) => x.trainers.includes(t.id))), (t) => LevelUp.trainerAvailable(t.id));
     if (state.trainer !== "all" && !withTraining.some((t) => t.id === state.trainer)) state.trainer = "all";
     const tab = (group, id, label, extra = "") => `<button type="button" role="tab" data-class-${group}="${esc(id)}" aria-selected="${state[group] === id}">${extra}${label}</button>`;
     filters.innerHTML = `
@@ -154,7 +159,7 @@ document.addEventListener("click", (event) => {
   function render() {
     const list = items();
     renderFilters(list);
-    const cards = shown(list);
+    const cards = activeFirst(shown(list), bookable);
     const html = cards.map(card).join("");
     if (html !== lastHtml) { lastHtml = html; grid.innerHTML = html; } // only when something changed: the swipe row keeps its place
     empty.hidden = cards.length > 0;

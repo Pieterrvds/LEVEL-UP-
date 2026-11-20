@@ -96,8 +96,10 @@ function rentalBlock(r, hour, past) {
 }
 
 // ---------- Trainer filter ----------
+// Who takes bookings now comes first, in the filter and on the board; who is away goes to the back
+const byActive = (list) => [...list].sort((a, b) => Number(LevelUp.trainerAvailable(b.id)) - Number(LevelUp.trainerAvailable(a.id)));
 function renderFilter() {
-  const tabs = [{ id: "all", short: "All trainers" }, ...TRAINERS];
+  const tabs = [{ id: "all", short: "All trainers" }, ...byActive(TRAINERS)];
   // The coach's photo with a ring in their colour (the colour of their hours on the board) and their name;
   // on phones the photo is bigger and the name sits under it
   trainerFilter.innerHTML = tabs.map((t) => `
@@ -154,7 +156,7 @@ function renderBoard() {
   }
   const days = weekDays(weekOffset);
   if (activeTrainer !== "all" && !TRAINERS.some((t) => t.id === activeTrainer)) activeTrainer = "all";
-  const trainers = TRAINERS.filter((t) => activeTrainer === "all" || t.id === activeTrainer);
+  const trainers = byActive(TRAINERS).filter((t) => activeTrainer === "all" || t.id === activeTrainer);
   const hours = boardHours(days, trainers);
   const player = LevelUp.getPlayer();
   const now = new Date();
