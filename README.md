@@ -263,7 +263,13 @@ same panel below the group classes. `admin_class_kind` stores it; the home page 
 ### Admin → Team: the whole team in one place
 The admin's Team tab (`renderTeam` in `admin.js`) has a bar with five views (`TEAM_VIEWS`, `showTeamKind`); new kinds
 of training that wait for approval stay on top of all of them.
-- **Team** (opens first): one card per trainer (`renderTeamMembers`). On it: the **Active / Away switch** (the admin
+- **Team** (opens first): one card per trainer (`renderTeamMembers`). Next to the title under the name stands
+  **✎ Edit** (`state.teamEdit`): a small form to change the trainer's **name**, the **title under the name** (what the
+  trainer typed as "coaching title" when applying), **what he coaches** (the small labels on his card, with commas) and
+  a few lines **about** him. It saves through `admin_trainer_update` (admin only; sets `trainers.edited_at`), and
+  `trainer_list` then says `edited`: the home page card (`syncTeamCards` in `schedule.js`), the booking window, the
+  chat and the coach's own page all follow at once. For the first three trainers the texts in the code stand until the
+  admin changes their card; a title left unchanged keeps the page's own line ("Head coach · Founder"). On the card: the **Active / Away switch** (the admin
   can set it for any trainer), his numbers and occupancy, his **1:1 lessons** (per kind: the hours he gives it in and
   the place when it is not the standard one) and his **group classes** (per name: how many are planned, the next one,
   who gives it with him). Per lesson: **Hours** or **Classes** (jumps to that view on that trainer or class),

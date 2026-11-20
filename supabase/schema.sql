@@ -3182,15 +3182,40 @@ end $$;
 -- Every active trainer for the website (never emails)
 -- avatar_url: the profile photo of the coach's own account. One photo per coach: the one they put on their page
 -- is also the one on their coach card, in the calendar and in the chat (the site falls back to the card's own photo).
-drop function if exists public.trainer_list(); -- the columns changed (avatar_url, available)
+-- edited: the admin changed this card's name, title, specialties or text (Admin → Team); the website then shows
+-- what is stored here, also for the first trainers whose texts are in the code.
+alter table public.trainers add column if not exists edited_at timestamptz;
+drop function if exists public.trainer_list(); -- the columns changed (avatar_url, available, edited)
 create or replace function public.trainer_list()
-returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean, avatar_url text, available boolean)
+returns table (id text, name text, role text, bio text, specialties text, color text, chart_color text, linked boolean, avatar_url text, available boolean, edited boolean)
 language sql stable security definer set search_path = public as $$
   select t.id, t.name, t.role, t.bio, t.specialties, t.color, t.chart_color, t.email is not null,
          (select p.avatar_url from public.profiles p where t.email is not null and lower(p.email) = lower(t.email) limit 1),
-         t.available
+         t.available, t.edited_at is not null
   from public.trainers t where t.active order by t.created_at, t.id;
 $$;
+
+-- The admin changes what a trainer's card says: name, coaching title, what he coaches, a few lines about him
+create or replace function public.admin_trainer_update(p_trainer text, p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  t public.trainers;
+  nm text := left(btrim(coalesce(p ->> 'name', '')), 60);
+begin
+  if not public.is_admin() then raise exception 'Admin access only.'; end if;
+  if p ? 'name' and char_length(nm) < 2 then raise exception 'Give the trainer a name (2 to 60 characters).'; end if;
+  update public.trainers set
+    name = case when p ? 'name' then nm else name end,
+    role = case when p ? 'role' then nullif(left(btrim(coalesce(p ->> 'role', '')), 60), '') else role end,
+    specialties = case when p ? 'specialties' then nullif(left(btrim(coalesce(p ->> 'specialties', '')), 200), '') else specialties end,
+    bio = case when p ? 'bio' then nullif(left(btrim(coalesce(p ->> 'bio', '')), 600), '') else bio end,
+    edited_at = now()
+  where id = p_trainer returning * into t;
+  if not found then raise exception 'Unknown trainer.'; end if;
+  return jsonb_build_object('id', t.id, 'name', t.name, 'role', t.role, 'specialties', t.specialties, 'bio', t.bio);
+end $$;
+revoke execute on function public.admin_trainer_update(text, jsonb) from public, anon;
+grant execute on function public.admin_trainer_update(text, jsonb) to authenticated;
 
 -- Pending applications, for the admin pop-up
 create or replace function public.admin_inbox()

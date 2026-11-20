@@ -467,3 +467,9 @@
 .coach-log img, .cl-noimg { width: 40px; height: 40px; object-fit: cover; object-position: center 20%; border-radius: 50%; background: var(--panel); }
 .coach-log p { margin: 0 0 2px; overflow-wrap: anywhere; }
 .coach-log .status-chip { margin-left: 4px; }
+.tm-edit { margin-left: 6px; font-size: 0.8rem; white-space: nowrap; color: var(--muted); }
+.tm-edit:hover, .tm-edit[aria-expanded="true"] { color: var(--text); }
+.tm-edit-form { display: grid; gap: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--text); border-radius: 10px; }
+.tm-edit-form label { display: grid; gap: 4px; font-size: 0.85rem; }
+.tm-edit-form small { font: 400 0.8rem/1.3 var(--sans); text-transform: none; letter-spacing: 0; }
+.tm-edit-form .form-error:empty { display: none; }

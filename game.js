@@ -43,6 +43,7 @@ const LevelUp = (() => {
       name: "Pieter Van den Spiegel",
       short: "Pieter",
       role: "Head coach",
+      specialties: "CrossFit, Calisthenics, HIIT, Muay Thai",
       img: "img/pf.jpg",
       color: "#ff7eb6",
       chartColor: "#d55181",
@@ -54,6 +55,7 @@ const LevelUp = (() => {
       name: "Filip De Meyst",
       short: "Filip",
       role: "Triathlon coach",
+      specialties: "Triathlon, Group training",
       img: "img/filipironmancoach.jpg",
       color: "#4fc3f7",
       chartColor: "#3987e5",
@@ -65,6 +67,7 @@ const LevelUp = (() => {
       name: "Maxim Buyl",
       short: "Maxim",
       role: "Cycling coach",
+      specialties: "Cycling, Group training",
       img: "img/teammembermaximtshirt.jpg",
       color: "#ffd23f",
       chartColor: "#c98500",
@@ -1175,6 +1178,16 @@ const LevelUp = (() => {
           known.available = r.available !== false; // false: the coach set himself away
           known.defaultImg = known.defaultImg || known.img;
           known.img = r.avatar_url || known.defaultImg; // the photo the coach put on their own page wins
+          // the texts of the card: a trainer added later always follows the database; one of the first three only
+          // once the admin changed his card (Admin → Team), until then the texts in the code stand
+          if (known.dynamic || r.edited) {
+            known.edited = Boolean(r.edited);
+            known.codeRole = known.codeRole ?? known.role; // what the code itself says (the card in the page may say a little more)
+            if (r.name) { known.name = r.name; known.short = String(r.name).trim().split(/\s+/)[0]; }
+            known.role = r.role || (known.dynamic ? "Personal trainer" : known.codeRole);
+            known.bio = r.bio || "";
+            known.specialties = r.specialties || "";
+          }
           return;
         }
         TRAINERS.push({
@@ -1471,6 +1484,17 @@ const LevelUp = (() => {
     const on = trainerAvailable(trainerId);
     return `<span class="coach-light ${on ? "on" : "off"}" title="${on ? "Active: takes bookings" : "Away for now"}">${withText ? `<b>${on ? "Active" : "Away for now"}</b>` : ""}</span>`;
   };
+  // Admin: change what a trainer's card says ({ name, role, specialties, bio })
+  async function adminTrainerUpdate(trainerId, fields) {
+    try {
+      await call("admin_trainer_update", { p_trainer: trainerId, p: fields });
+    } catch (err) {
+      if (OLD_DB.test(err.message || "")) throw new Error("Changing a trainer's card needs the latest supabase/schema.sql.");
+      throw err;
+    }
+    await loadTrainerList();
+    emit();
+  }
   async function setTrainerAvailable(trainerId, on) {
     try {
       await call("set_trainer_available", { p_trainer: trainerId, p_on: Boolean(on) });
@@ -4610,7 +4634,7 @@ const LevelUp = (() => {
     getPlayer, isAdmin, adminData, likeHtml, giveLike, celebrateNow, celebrateLocal, loadCelebrate, themeAccent, mascotLook, dressMascot, setBirthday, holdCelebrations, openProfile,
     adminRoom, adminRentalAdd, adminRentalCancel, adminRentalPaid, adminRoomSettings, publicProfile, memberLink, likeMember, photoLike, photoComment, photoCommentDelete, photoCommentLike, addPhoto, addPost, deletePhoto, setProfile, getLeaderboard: (period = "all") => period === "month" ? leaderboardMonth : leaderboard, getPlayerOfMonth: () => playerOfMonth, getReviews: () => reviews, submitReview, deleteMyReview, adminReviews, adminSetReview, adminAddReview, adminReviewPhoto, adminGrantXp, shareCard, drawPlayerCard, showPromotion, loadLeaderboard, setLeaderboardVisibility, signUp, logIn, logOut, deleteProfile, requestPasswordReset, updatePassword,
     saveBodyStats, updateBodyStats, recordPurchase, checkIn, loadForYou, getForYou: () => forYou,
-    trainerById, trainerHours, trainerAvailable, coachLight, setTrainerAvailable, hourActivity, hourPlace, defaultPlace, inRoom, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
+    trainerById, trainerHours, trainerAvailable, coachLight, setTrainerAvailable, adminTrainerUpdate, hourActivity, hourPlace, defaultPlace, inRoom, shortPlace, weeklyHoursText, saveOpeningHours, deleteOpeningHours, getOpeningHours: () => openingHours, groupSessions, findBooking, slotBlocker, googleCalendarLink,
     bookSession, cancelBooking, playerBookings, trainerStats, stopSeries, moveBooking, seriesText, seriesUntil, oneRowPerSeries, WEEKDAYS,
     isTrainer, respondBooking, rewardSession, getCoachBookings: () => coachBookings, showCoachInbox,
     SESSION_PRICE, TRAINER_FEE, getPricing: () => pricing, priceFor, quote, priceLabel, packCredits, openPackRequest,

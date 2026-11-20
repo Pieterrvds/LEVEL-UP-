@@ -20,7 +20,8 @@ const state = {
   folds: {}, // long panels that open on a click (reviews, messages): key -> open
   fin: { mode: "month", offset: 0, statementMonth: null },
   teamKind: "members", // Team tab: "members" (everyone and what they give), "week", "solo" (1:1 hours), "group" (classes) or "log"
-  teamCard: "" // Team tab: the lesson whose card (photo and text) is open, as "<trainer>|<key>"
+  teamCard: "", // Team tab: the lesson whose card (photo and text) is open, as "<trainer>|<key>"
+  teamEdit: "" // Team tab: the trainer whose name and title are being changed
 };
 let data = null;
 const tips = new Map();
@@ -468,6 +469,22 @@ function renderTeamLog() {
       </li>`; }).join("")}</ul>` : `<p class="coach-empty">No changes by the coaches yet. When a coach changes his hours or a class, you see it here and you get a notification.</p>`}`;
 }
 
+// The admin changes what a trainer's card says (name, title, what he coaches, a few lines about him)
+root.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-team-edit-form]");
+  if (!form) return;
+  event.preventDefault();
+  const btn = form.querySelector("[type=submit]");
+  btn.disabled = true;
+  try {
+    await LevelUp.adminTrainerUpdate(form.dataset.teamEditForm, { name: form.elements.name.value, role: form.elements.role.value, specialties: form.elements.specialties.value, bio: form.elements.bio.value });
+    state.teamEdit = "";
+    document.activeElement?.blur();
+    LevelUp.toast({ title: "Saved", text: "The card shows it right away", icon: "✓", tone: "green" });
+    renderTeamMembers();
+  } catch (err) { btn.disabled = false; form.querySelector(".form-error").textContent = err.message; }
+});
+
 // The team, one card per trainer: active or away, his numbers, his 1:1 lessons with their hours and his group classes.
 // Every lesson has its card (photo and text on the home page) one tap away.
 function hoursLine(h) {
@@ -528,7 +545,7 @@ function lessonHtml(t, item, kind) {
 function renderTeamMembers() {
   const el = document.getElementById("teamMembers");
   if (!el) return;
-  if (el.querySelector("textarea:focus")) return; // don't redraw while typing
+  if (el.querySelector("textarea:focus, .tm-edit-form input:focus")) return; // don't redraw while typing
   const cards = kindCards();
   const unread = coachLog.unread;
   el.innerHTML = `
@@ -551,12 +568,21 @@ function renderTeamMembers() {
           <span class="coach-face"><img src="${t.img}" alt="">${LevelUp.coachLight(t.id)}</span>
           <div>
             <h3>${esc(t.name)}</h3>
-            <p class="muted">${esc(t.role)}</p>
+            <p class="muted">${esc(t.role)} <button type="button" class="link-btn tm-edit" data-team-edit="${t.id}" aria-expanded="${state.teamEdit === t.id}">✎ Edit</button></p>
             <span class="rank-badge" data-tier="${RANKS.indexOf(s.rank)}">LVL ${s.level} · ${s.rank.title}</span>
           </div>
           <button type="button" class="coach-switch ${on ? "on" : "off"}" role="switch" aria-checked="${on}" data-team-available="${t.id}" title="Active: players can book. Away: no new bookings, what is planned stays.">
             <span class="cs-track"><i></i></span><span class="cs-text"><b>${on ? "Active" : "Away"}</b></span></button>
         </div>
+        ${state.teamEdit === t.id ? `
+        <form class="tm-edit-form" data-team-edit-form="${t.id}">
+          <label>Name <small class="muted">on the card, in the schedule and in messages</small><input name="name" required minlength="2" maxlength="60" value="${esc(t.name)}"></label>
+          <label>Title under the name <small class="muted">e.g. Boxing coach</small><input name="role" maxlength="60" value="${esc(t.role === "Personal trainer" && t.dynamic ? "" : t.role || "")}" placeholder="Personal trainer"></label>
+          <label>Coaches <small class="muted">the small labels on the card, with commas</small><input name="specialties" maxlength="200" value="${esc(t.specialties || "")}" placeholder="e.g. Boxing, conditioning"></label>
+          <label>About <small class="muted">optional, on the coach's own page</small><textarea name="bio" rows="3" maxlength="600">${esc(t.bio || "")}</textarea></label>
+          <p class="form-error" role="alert"></p>
+          <div class="btn-row"><button type="submit" class="btn btn-small btn-primary">Save</button><button type="button" class="btn btn-small btn-ghost" data-team-edit="${t.id}">Cancel</button></div>
+        </form>` : ""}
         <div class="trainer-admin-stats">
           <div><span class="kpi-label">Sessions</span><strong>${s.sessions}</strong></div>
           <div><span class="kpi-label">Players</span><strong>${s.clients}</strong></div>
@@ -585,9 +611,10 @@ function renderTeamMembers() {
     <p class="form-error" role="alert">${esc(kindsError)}</p>`;
 }
 root.addEventListener("click", async (event) => {
-  const el = event.target.closest("[data-team-available], [data-team-hours], [data-team-class], [data-team-card], [data-team-plan], [data-team-to-group], [data-team-delete], [data-team-drop]");
+  const el = event.target.closest("[data-team-available], [data-team-hours], [data-team-class], [data-team-card], [data-team-plan], [data-team-to-group], [data-team-delete], [data-team-drop], [data-team-edit]");
   if (!el) return;
   const d = el.dataset;
+  if (d.teamEdit) { state.teamEdit = state.teamEdit === d.teamEdit ? "" : d.teamEdit; document.activeElement?.blur(); renderTeamMembers(); return; }
   if (d.teamHours) return teamOpenHours(d.teamHours);
   if (d.teamClass) return teamOpenClass(d.teamClass);
   if (d.teamPlan) return teamPlan(d.teamPlan, { trainerId: d.trainer });

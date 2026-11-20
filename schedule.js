@@ -1066,7 +1066,33 @@ function renderTeamSpots() {
     el.classList.toggle("few", n > 0 && n <= 3);
     el.textContent = n === 0 ? "Fully booked this week" : n <= 3 ? `Only ${n} spot${n === 1 ? "" : "s"} left this week` : `${n} open hours this week`;
   });
+  syncTeamCards();
   sortTeam();
+}
+
+// The texts on a coach card follow the trainer: a card that was built earlier (or stands in the page itself) takes
+// the name, title and specialties the admin gave it in Admin → Team.
+function syncTeamCards() {
+  document.querySelectorAll('#team .team-grid > .team-card[id^="team-"]').forEach((card) => {
+    const t = LevelUp.trainerById(card.id.slice(5));
+    if (!t || !(t.dynamic || t.edited)) return; // one of the first trainers, never changed: the page's own texts stand
+    const chips = String(t.specialties || "").split(/[,·]/).map((x) => x.trim()).filter(Boolean).slice(0, 4);
+    const sig = JSON.stringify([t.name, t.role, chips]);
+    if (card.dataset.texts === sig) return;
+    card.dataset.texts = sig;
+    const role = card.querySelector(".team-role"), name = card.querySelector(".team-body h3"), list = card.querySelector(".team-chips");
+    if (role) {
+      role.dataset.own = role.dataset.own ?? role.textContent; // the title is unchanged: the page's own line stands ("Head coach · Founder")
+      role.textContent = !t.dynamic && t.role === t.codeRole ? role.dataset.own : t.role;
+    }
+    if (name) name.textContent = t.name;
+    card.querySelector("img.team-photo")?.setAttribute("alt", t.name);
+    if (list && !chips.length) list.remove();
+    else if (list) list.innerHTML = chips.map((c) => `<li>${esc(c)}</li>`).join("");
+    else if (name && chips.length) name.insertAdjacentHTML("afterend", `<ul class="team-chips">${chips.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`);
+    const book = card.querySelector("[data-book-trainer]");
+    if (book) book.textContent = `Book ${t.short}`;
+  });
 }
 
 // Level 3: the cards sort themselves, so nobody has to look for who can take them. Active coaches first, the
