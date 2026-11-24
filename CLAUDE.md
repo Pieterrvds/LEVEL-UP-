@@ -14,6 +14,7 @@ Lees dit eerst, daarna `README.md` (daar staat elke functie in detail). Dit best
 - Pieter start de voorkant opnieuw, licht en rustig, op dezelfde Supabase. Dat project staat in een eigen repository, `Pieterrvds/level-up-movement` (React, Vite, Tailwind), live op https://pieterrvds.github.io/level-up-movement/. Het heeft zijn eigen `CLAUDE.md` (afspraken, stijlregels, stand van zaken) en `HERSTART.md` (blauwdruk en bouwvolgorde). Gaat de vraag over de nieuwe app, werk dan in die repository.
 - Deze repository blijft de oude site én de databank: `supabase/schema.sql` en de Edge Functions gelden voor beide. De nieuwe app gebruikt `game.js` hier als naslag voor hoe elke databankfunctie aangeroepen wordt. De oude site blijft live en krijgt nog fouten opgelost tot de nieuwe klaar is.
 - De oude en de nieuwe site staan op hetzelfde domein en delen dus de login van Supabase: wie op de ene inlogt, is het ook op de andere.
+- Meldingen: de server schrijft ze in het Engels voor beide sites. De nieuwe app vertaalt ze met `public/push-nl.js`, een kopie van `i18n-nl.js` uit deze repository. Komt er hier een nieuwe meldingstekst bij (een regel in `i18n-nl.js`), kopieer het bestand dan ook naar de nieuwe repository. Elke site heeft haar eigen abonnement op meldingen: wie ze op beide aanzet, krijgt elke melding twee keer.
 - `movement/index.html` verwijst het tijdelijke voorbeeldadres door naar de nieuwe site; verder staat er niets van het nieuwe project in deze repository.
 
 ## Kaart van de code
