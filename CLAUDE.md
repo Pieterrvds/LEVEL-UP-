@@ -11,9 +11,10 @@ Lees dit eerst, daarna `README.md` (daar staat elke functie in detail). Dit best
 
 ## Het nieuwe project: LEVEL-UP movement
 
-- Pieter start de voorkant opnieuw, licht en rustig, op dezelfde Supabase. Dat project staat in `movement-src/` (bron: React, Vite, Tailwind) en wordt gebouwd naar `movement/` (live op https://pieterrvds.github.io/LEVEL-UP-/movement/). Het heeft zijn eigen `movement-src/CLAUDE.md` (afspraken, stijlregels, stand van zaken) en `movement-src/HERSTART.md` (blauwdruk en bouwvolgorde): lees die als de vraag over de nieuwe app gaat.
-- De twee mappen staan los van de oude site: geen gedeelde bestanden, en de afspraken hieronder over `?v=…` en `sw.js` gelden er niet. De oude site blijft live en krijgt nog fouten opgelost tot de nieuwe klaar is.
-- GitHub liet niet toe dat de sessie zelf een nieuwe repository aanmaakte. Zodra Pieter een lege repository `level-up-movement` maakt en de Claude-app toegang geeft, verhuist het project daarheen (stappen in `movement-src/README.md`).
+- Pieter start de voorkant opnieuw, licht en rustig, op dezelfde Supabase. Dat project staat in een eigen repository, `Pieterrvds/level-up-movement` (React, Vite, Tailwind), live op https://pieterrvds.github.io/level-up-movement/. Het heeft zijn eigen `CLAUDE.md` (afspraken, stijlregels, stand van zaken) en `HERSTART.md` (blauwdruk en bouwvolgorde). Gaat de vraag over de nieuwe app, werk dan in die repository.
+- Deze repository blijft de oude site én de databank: `supabase/schema.sql` en de Edge Functions gelden voor beide. De nieuwe app gebruikt `game.js` hier als naslag voor hoe elke databankfunctie aangeroepen wordt. De oude site blijft live en krijgt nog fouten opgelost tot de nieuwe klaar is.
+- De oude en de nieuwe site staan op hetzelfde domein en delen dus de login van Supabase: wie op de ene inlogt, is het ook op de andere.
+- `movement/index.html` verwijst het tijdelijke voorbeeldadres door naar de nieuwe site; verder staat er niets van het nieuwe project in deze repository.
 
 ## Kaart van de code
 
