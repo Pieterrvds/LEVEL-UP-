@@ -9,6 +9,12 @@ Lees dit eerst, daarna `README.md` (daar staat elke functie in detail). Dit best
 - Statische site in gewone HTML, CSS en JavaScript, zonder build-stap en zonder framework. De server is Supabase (project `zdwlihbsmqiggpyensxc`): databank, login, opslag en drie Edge Functions.
 - Installeerbaar als app (`manifest.webmanifest`, `sw.js`).
 
+## Het nieuwe project: LEVEL-UP movement
+
+- Pieter start de voorkant opnieuw, licht en rustig, op dezelfde Supabase. Dat project staat in `movement-src/` (bron: React, Vite, Tailwind) en wordt gebouwd naar `movement/` (live op https://pieterrvds.github.io/LEVEL-UP-/movement/). Het heeft zijn eigen `movement-src/CLAUDE.md` (afspraken, stijlregels, stand van zaken) en `movement-src/HERSTART.md` (blauwdruk en bouwvolgorde): lees die als de vraag over de nieuwe app gaat.
+- De twee mappen staan los van de oude site: geen gedeelde bestanden, en de afspraken hieronder over `?v=…` en `sw.js` gelden er niet. De oude site blijft live en krijgt nog fouten opgelost tot de nieuwe klaar is.
+- GitHub liet niet toe dat de sessie zelf een nieuwe repository aanmaakte. Zodra Pieter een lege repository `level-up-movement` maakt en de Claude-app toegang geeft, verhuist het project daarheen (stappen in `movement-src/README.md`).
+
 ## Kaart van de code
 
 - `index.html` (home, "Voor jou", boeken, klassement), `profile.html` (eigen pagina, 4 tabs), `member.html` (pagina van iemand anders), `chat.html`, `shop.html`, `admin.html` (alleen Engels), `privacy.html`.

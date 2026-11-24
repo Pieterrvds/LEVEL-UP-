@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* The whole look of LEVEL-UP movement lives in these tokens. Screens only use these names (bg-canvas, text-ink,
+   bg-accent …), never a colour of their own. Rules: see CLAUDE.md, "Stijlregels". */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-canvas: #f5f6f2; /* the page */
+  --color-surface: #ffffff; /* cards */
+  --color-sunken: #eceee8; /* inputs' rest state, segmented tabs, quiet tiles */
+  --color-line: #e1e5de; /* hairlines */
+
+  --color-ink: #13211b; /* text */
+  --color-muted: #5a6760; /* second line, labels */
+  --color-faint: #8a958f; /* placeholders, disabled */
+
+  --color-brand: #12261d; /* the main button */
+  --color-accent: #1fb877; /* the LEVEL-UP green: progress, "active", the one highlight per screen */
+  --color-accent-soft: #e1f5ea;
+  --color-accent-ink: #0a6540; /* green text on a light ground */
+
+  --color-warn: #a35a06;
+  --color-warn-soft: #fbefd9;
+  --color-danger: #b9342a;
+  --color-danger-soft: #fbe8e6;
+
+  --radius-card: 1rem; /* 16px: cards, sheets */
+  --radius-field: 0.75rem; /* 12px: inputs, tiles */
+
+  --shadow-card: 0 1px 2px rgb(19 33 27 / 0.04), 0 6px 20px rgb(19 33 27 / 0.05);
+  --shadow-float: 0 12px 40px rgb(19 33 27 / 0.16);
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1, h2, h3 { letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid var(--color-accent-ink); outline-offset: 2px; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  dialog { padding: 0; border: 0; color: inherit; }
+  dialog::backdrop { background: rgb(19 33 27 / 0.42); }
+}
+
+/* A row that only slides sideways (tabs, chips): never up and down, no scrollbar */
+@utility slide-x {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-y: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
